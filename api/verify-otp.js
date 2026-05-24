@@ -1,9 +1,16 @@
 import { Redis } from "@upstash/redis";
+import { otpStore, OTP_TTL_MS } from "./_otpStore.js";
 
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
-});
+const useRedisV = Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+let redis = null;
+if (useRedisV) {
+  try {
+    redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN });
+  } catch (e) {
+    console.error("[verify-otp] Failed to init Redis, falling back to in-memory store:", e);
+    redis = null;
+  }
+}
 
 const ALLOWED_EMAILS = [
   process.env.ADMIN_EMAIL_1,
@@ -26,31 +33,34 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // Redis-ൽ നിന്ന് OTP എടുക്കുന്നു
-    const stored = await redis.get(`otp:${normalised}`);
+    // Try Redis first, otherwise fall back to in-memory store
+    const key = `otp:${normalised}`;
+    let stored = null;
+    if (redis) {
+      try {
+        stored = await redis.get(key);
+      } catch (e) {
+        console.error('[verify-otp] Redis read failed, falling back to in-memory', e);
+        stored = null;
+      }
+    }
+
+    if (!stored) {
+      const entry = otpStore.get(normalised);
+      if (entry && entry.code) stored = entry.code;
+    }
 
     if (!stored) {
       return res.status(401).json({ error: "No OTP found. Please request a new one." });
     }
 
-    let payload;
-    try {
-      payload = JSON.parse(stored);
-    } catch (_) {
-      payload = { code: stored };
-    }
-
-    if (String(payload.code).trim() !== String(code).trim()) {
+    if (String(stored).trim() !== String(code).trim()) {
       return res.status(401).json({ error: "Incorrect code. Try again." });
     }
 
-    if (payload.expiresAt && Number(payload.expiresAt) <= Date.now()) {
-      await redis.del(`otp:${normalised}`);
-      return res.status(401).json({ error: "OTP expired. Please request a new one." });
-    }
-
-    // OTP delete ചെയ്യുന്നു — reuse ആകില്ല
-    await redis.del(`otp:${normalised}`);
+    // OTP delete — remove from both stores
+    try { if (redis) await redis.del(key); } catch (e) { console.error('[verify-otp] Redis del failed', e); }
+    try { otpStore.delete(normalised); } catch (_) {}
 
     const sessionToken = Buffer.from(
       JSON.stringify({ email: normalised, ts: Date.now() })

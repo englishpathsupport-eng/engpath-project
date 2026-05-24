@@ -4,10 +4,16 @@
 import { Redis } from "@upstash/redis";
 import { Resend } from "resend";
 
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
-});
+const useRedis = Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+let redis = null;
+if (useRedis) {
+  try {
+    redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN });
+  } catch (e) {
+    console.error("[send-otp] Failed to init Redis, falling back to in-memory store:", e);
+    redis = null;
+  }
+}
 
 const ALLOWED_EMAILS = [
   process.env.ADMIN_EMAIL_1,
@@ -40,12 +46,28 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true });
     }
 
-    const existing = await redis.get(`otp:${normalised}`);
-    if (existing) {
-      const stored = JSON.parse(existing);
-      const expiresAt = Number(stored.expiresAt || 0);
-      if (expiresAt > Date.now()) {
-        const age = OTP_TTL_SECONDS * 1000 - (expiresAt - Date.now());
+    const key = `otp:${normalised}`;
+    // existing check (Redis preferred)
+    if (redis) {
+      try {
+        const existing = await redis.get(key);
+        if (existing) {
+          const ttl = await redis.ttl(key);
+          const age = OTP_TTL_SECONDS - Math.max(ttl, 0);
+          if (age < 60) {
+            return res.status(429).json({ error: `Please wait ${60 - Math.floor(age)}s before requesting a new code.` });
+          }
+        }
+      } catch (e) {
+        console.error('[send-otp] Redis read failed, falling back to in-memory check', e);
+        // fall through to in-memory check below
+      }
+    }
+
+    if (!redis) {
+      const existing = otpStore.get(normalised);
+      if (existing && existing.expiresAt > Date.now()) {
+        const age = OTP_TTL_MS - (existing.expiresAt - Date.now());
         if (age < 60_000) {
           return res.status(429).json({ error: `Please wait ${60 - Math.floor(age/1000)}s before requesting a new code.` });
         }
@@ -53,8 +75,16 @@ export default async function handler(req, res) {
     }
 
     const code = generate6Digit();
-    const payload = JSON.stringify({ code, expiresAt: Date.now() + OTP_TTL_SECONDS * 1000 });
-    await redis.set(`otp:${normalised}`, payload, { ex: OTP_TTL_SECONDS });
+    if (redis) {
+      try {
+        await redis.set(key, code, { ex: OTP_TTL_SECONDS });
+      } catch (e) {
+        console.error('[send-otp] Redis set failed, saving in-memory instead', e);
+        otpStore.set(normalised, { code, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 });
+      }
+    } else {
+      otpStore.set(normalised, { code, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 });
+    }
 
     const resend = new Resend(process.env.RESEND_API_KEY);
     const { error: sendError } = await resend.emails.send({
