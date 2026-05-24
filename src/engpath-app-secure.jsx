@@ -7688,7 +7688,6 @@ function reducer(state, action) {
     case "ADD_TOAST":   return { ...state, toasts: [...state.toasts, { id: Date.now(), ...action.payload }] };
     case "REM_TOAST":   return { ...state, toasts: state.toasts.filter(t => t.id !== action.payload) };
     case "INC_USE":     return { ...state, dailyUsage: { ...state.dailyUsage, [action.key]: (state.dailyUsage[action.key] || 0) + 1 } };
-    case "SET_USER_LEVEL": return { ...state, user: { ...state.user, level: action.payload } };
     case "LOGIN": {
       // isNew=true only on fresh signup → show upgrade; login → go home
       const isNew = action.payload.isNew === true;
@@ -9855,7 +9854,6 @@ export default function App() {
       `}</style>
 
       <div style={{
-        height:         "100vh",
         height:         "100dvh",
         display:        "flex",
         flexDirection:  "column",

@@ -1,13 +1,20 @@
 // /api/send-otp.js  —  Vercel Serverless Function
 // Generates a 6-digit OTP and emails it via Resend API.
 
+import { Redis } from "@upstash/redis";
 import { Resend } from "resend";
-import { otpStore, OTP_TTL_MS } from "./_otpStore.js";
+
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+});
 
 const ALLOWED_EMAILS = [
   process.env.ADMIN_EMAIL_1,
   process.env.ADMIN_EMAIL_2,
 ].filter(Boolean).map(e => e.toLowerCase().trim());
+
+const OTP_TTL_SECONDS = 10 * 60; // 10 minutes
 
 function generate6Digit() {
   return String(Math.floor(100000 + Math.random() * 900000));
@@ -33,17 +40,21 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true });
     }
 
-    // Rate-limit: block resend within first 60 s of an existing valid OTP
-    const existing = otpStore.get(normalised);
-    if (existing && existing.expiresAt > Date.now()) {
-      const age = OTP_TTL_MS - (existing.expiresAt - Date.now());
-      if (age < 60_000) {
-        return res.status(429).json({ error: `Please wait ${60 - Math.floor(age/1000)}s before requesting a new code.` });
+    const existing = await redis.get(`otp:${normalised}`);
+    if (existing) {
+      const stored = JSON.parse(existing);
+      const expiresAt = Number(stored.expiresAt || 0);
+      if (expiresAt > Date.now()) {
+        const age = OTP_TTL_SECONDS * 1000 - (expiresAt - Date.now());
+        if (age < 60_000) {
+          return res.status(429).json({ error: `Please wait ${60 - Math.floor(age/1000)}s before requesting a new code.` });
+        }
       }
     }
 
     const code = generate6Digit();
-    otpStore.set(normalised, { code, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 });
+    const payload = JSON.stringify({ code, expiresAt: Date.now() + OTP_TTL_SECONDS * 1000 });
+    await redis.set(`otp:${normalised}`, payload, { ex: OTP_TTL_SECONDS });
 
     const resend = new Resend(process.env.RESEND_API_KEY);
     const { error: sendError } = await resend.emails.send({

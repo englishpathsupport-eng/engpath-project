@@ -33,8 +33,20 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: "No OTP found. Please request a new one." });
     }
 
-    if (String(stored) !== String(code).trim()) {
+    let payload;
+    try {
+      payload = JSON.parse(stored);
+    } catch (_) {
+      payload = { code: stored };
+    }
+
+    if (String(payload.code).trim() !== String(code).trim()) {
       return res.status(401).json({ error: "Incorrect code. Try again." });
+    }
+
+    if (payload.expiresAt && Number(payload.expiresAt) <= Date.now()) {
+      await redis.del(`otp:${normalised}`);
+      return res.status(401).json({ error: "OTP expired. Please request a new one." });
     }
 
     // OTP delete ചെയ്യുന്നു — reuse ആകില്ല
