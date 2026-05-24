@@ -1,5 +1,4 @@
 import React from 'react';
-import ReactDOM from 'react-dom/client';
 import { useState, useEffect, useRef, useReducer, useCallback, useMemo, memo } from "react";
 
 /* ═══ Audio Unlock ═══ */
@@ -11,18 +10,20 @@ import { useState, useEffect, useRef, useReducer, useCallback, useMemo, memo } f
  */
 let _audioUnlocked = false;
 /* ─ window._safeSpeak: reliable one-shot TTS for Android ─ */
-window._safeSpeak = function(text, lang, rate) {
-  const synth = window.speechSynthesis;
-  if (!synth || !text) return;
-  try { synth.cancel(); } catch(_) {}
-  setTimeout(function() {
+if (typeof window !== "undefined") {
+  window._safeSpeak = function(text, lang, rate) {
+    const synth = window.speechSynthesis;
+    if (!synth || !text) return;
+    try { synth.cancel(); } catch(_) {}
+    setTimeout(function() {
     try { if (synth.paused) synth.resume(); } catch(_) {}
     const u = new SpeechSynthesisUtterance(text.trim().slice(0, 200));
     u.lang = lang || "en-US"; u.rate = rate || 0.9;
     try { const vv=synth.getVoices(); const v=vv.find(x=>x.lang.startsWith(u.lang)); if(v) u.voice=v; } catch(_){}
     synth.speak(u);
-  }, 90);
-};
+    }, 90);
+  };
+}
 
 function unlockAudio() {
   if (_audioUnlocked) return;
@@ -616,18 +617,14 @@ function useVoiceChat({ lang = "en-US", onTranscript, enabled = true } = {}) {
  * In production, NEVER call Anthropic directly from the browser.
  * Replace the fetch calls below with your backend endpoints:
  *   fetch("/api/ai/chat", { method:"POST", body:... })
- * The "anthropic-dangerous-direct-browser-access" header is ONLY
- * for development/sandbox use.
+ * The backend proxy now supports Gemini AI Studio.
  */
 
-const MODEL = "claude-sonnet-4-20250514";
-const API   = "https://api.anthropic.com/v1/messages";
+const MODEL = "gemini-1.5-pro";
+const API   = "/api/ai";
 
 const HEADERS = {
-  "Content-Type":   "application/json",
-  "anthropic-version": "2023-06-01",
-  // REMOVE in production - use backend proxy instead:
-  "anthropic-dangerous-direct-browser-access": "true",
+  "Content-Type": "application/json",
 };
 
 async function callClaude(system, prompt, maxTokens = 600) {
@@ -646,14 +643,12 @@ async function callClaude(system, prompt, maxTokens = 600) {
       }),
     });
     if (res.status === 429) {
-      await new Promise(r => setTimeout(r, 2500));
-      try {
-        const r2 = await fetch(AI_URL, { method:"POST", headers:AI_HEADERS, body: JSON.stringify(body) });
-        if (r2.ok) { const d2 = await r2.json(); return d2.content?.[0]?.text?.trim() ?? ""; }
-      } catch(_) {}
       return "";
     }
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} ${body}`);
+    }
     const data = await res.json();
     const text = data.content?.[0]?.text?.trim() ?? "";
     return text;
@@ -677,14 +672,12 @@ async function streamClaude(system, messages, maxTokens = 500) {
       body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, system, messages }),
     });
     if (res.status === 429) {
-      await new Promise(r => setTimeout(r, 2500));
-      try {
-        const r2 = await fetch(AI_URL, { method:"POST", headers:AI_HEADERS, body: JSON.stringify(body) });
-        if (r2.ok) { const d2 = await r2.json(); return d2.content?.[0]?.text?.trim() || "Sorry, please try again."; }
-      } catch(_) {}
       return "The AI is busy right now. Please try again in a moment.";
     }
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} ${body}`);
+    }
     const data = await res.json();
     return data.content?.[0]?.text?.trim() || "Sorry, I received an empty response. Please try again.";
   } catch (err) {
@@ -4982,7 +4975,7 @@ const Conversation = memo(function Conversation({ state, dispatch }) {
         <div style={{ padding: "14px 16px", background: "var(--red-soft)", border: "1px solid var(--red-border)", borderRadius: 12, fontSize: 13, color: "var(--red)", marginBottom: 14 }}>
           ⚠ {error}
           <button onClick={() => startConvo(topic)} style={{ marginLeft: 10, background: "none", border: "none", cursor: "pointer", color: "var(--accent)", fontWeight: 700, fontSize: 12 }}>
-            Retry >
+            Retry {'>'}
           </button>
         </div>
       )}
@@ -5733,7 +5726,7 @@ const Dictionary = memo(function Dictionary({ state, dispatch }) {
                 </div>
                 {result.examples.map((ex, i) => (
                   <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "flex-start" }}>
-                    <span style={{ color: "var(--accent)", flexShrink: 0, marginTop: 1 }}>></span>
+                    <span style={{ color: "var(--accent)", flexShrink: 0, marginTop: 1 }}>{'>'}</span>
                     <span style={{ fontSize: 13, color: "var(--text-2)", fontStyle: "italic", flex: 1 }}>"{ex}"</span>
                     <button
                       onClick={() => tts.speak(ex, { lang: state.settings.accent, rate: 0.88 })}
@@ -7911,7 +7904,7 @@ const LevelTest = memo(function LevelTest({ state, dispatch }) {
           style={{ width:"100%", padding:"14px", borderRadius:14, background:"linear-gradient(135deg,var(--accent),var(--blue))",
             border:"none", cursor:"pointer", fontSize:15, fontWeight:800, color:"#fff",
             boxShadow:"0 4px 20px rgba(108,99,255,.35)" }}>
-          Start Test >
+          Start Test {'>'}
         </button>
       </div>
     </div>
@@ -9085,7 +9078,7 @@ const UpgradePage = memo(function UpgradePage({ dispatch, state }) {
               setStep("payment");
             }}
             style={{ width:"100%", padding:"14px", borderRadius:14, background:"#fff", border:"none", cursor:"pointer", fontSize:15, fontWeight:800, color:"var(--accent)", boxShadow:"0 4px 16px rgba(0,0,0,.2)", marginBottom:8 }}>
-            Choose {plans[planSel]?.label || "Plan"} - See Payment Details >
+            Choose {plans[planSel]?.label || "Plan"} - See Payment Details {'>'}
           </button>
           <div style={{ textAlign:"center", fontSize:11, color:"rgba(255,255,255,.7)" }}>Pay then WhatsApp screenshot, Admin activates</div>
         </div>
