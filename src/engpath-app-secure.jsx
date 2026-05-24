@@ -1,3 +1,5 @@
+import React from 'react';
+import ReactDOM from 'react-dom/client';
 import { useState, useEffect, useRef, useReducer, useCallback, useMemo, memo } from "react";
 
 /* ═══ Audio Unlock ═══ */
