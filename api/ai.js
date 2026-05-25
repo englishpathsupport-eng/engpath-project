@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const model = "gemini-2.0-flash";
+    const model = "gemini-2.0-flash-lite";
     const messages = Array.isArray(body.messages) ? [...body.messages] : [];
     if (body.system) {
       messages.unshift({ role: "user", content: body.system });
@@ -37,8 +37,6 @@ export default async function handler(req, res) {
     };
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${aiStudioKey}`;
-    console.log("[api/ai] Calling Gemini URL:", url.replace(aiStudioKey, "REDACTED"));
-    console.log("[api/ai] Request body:", JSON.stringify(aiBody));
 
     const aiRes = await fetch(url, {
       method: "POST",
@@ -47,8 +45,6 @@ export default async function handler(req, res) {
     });
 
     const data = await aiRes.json();
-    console.log("[api/ai] Gemini response status:", aiRes.status);
-    console.log("[api/ai] Gemini response:", JSON.stringify(data));
 
     if (!aiRes.ok) {
       console.error("[api/ai] Gemini error", aiRes.status, JSON.stringify(data));
@@ -61,7 +57,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error("[api/ai] Unexpected error:", err.message, err.stack);
+    console.error("[api/ai] Unexpected error:", err.message);
     res.status(500).json({ error: "Server error: " + err.message });
   }
 }
