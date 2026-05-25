@@ -1,13 +1,13 @@
 import { Resend } from "resend";
-import { getAllowedAdminEmails } from "./_config.js";
-import { isRedisConfigured } from "./_redis.js";
-import { parseJsonBody, setCors } from "./_request.js";
+import { getAllowedAdminEmails } from "../lib/config.js";
+import { isRedisConfigured } from "../lib/redis.js";
+import { parseJsonBody, setCors } from "../lib/request.js";
 import {
   OTP_TTL_SECONDS,
   getOtp,
   saveOtp,
   secondsUntilResendAllowed,
-} from "./_otp.js";
+} from "../lib/otp.js";
 
 const ALLOWED_EMAILS = getAllowedAdminEmails();
 
@@ -112,7 +112,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ success: true });
   } catch (err) {
-    console.error("[send-otp] Error:", err);
+    console.error("[send-otp] Error:", err?.message || err);
 
     if (err?.message === "REDIS_NOT_CONFIGURED") {
       return serviceError(
@@ -122,9 +122,13 @@ export default async function handler(req, res) {
       );
     }
 
+    const debug =
+      process.env.OTP_DEBUG === "true" ? { detail: String(err?.message || err) } : {};
+
     return res.status(500).json({
-      error: "Server error",
-      code: "INTERNAL",
+      error: "Could not save OTP. Check Redis credentials on Vercel.",
+      code: "REDIS_ERROR",
+      ...debug,
     });
   }
 }

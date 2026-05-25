@@ -1,6 +1,6 @@
-import { getAllowedAdminEmails } from "./_config.js";
-import { redis, isRedisConfigured } from "./_redis.js";
-import { extractOtpCode, otpKey } from "./_otp.js";
+import { getAllowedAdminEmails } from "../lib/config.js";
+import { getRedis, isRedisConfigured } from "../lib/redis.js";
+import { extractOtpCode, otpKey } from "../lib/otp.js";
 
 const ALLOWED_EMAILS = getAllowedAdminEmails();
 
@@ -30,6 +30,7 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: "Forbidden" });
   }
 
+  const redis = getRedis();
   const key = otpKey(normalised);
   const stored = await redis.get(key);
   const otp = extractOtpCode(stored);
