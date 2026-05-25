@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const model = body.model || "gemini-1.5-flash";
+    const model = body.model || "gemini-2.0-flash";
     const messages = Array.isArray(body.messages) ? [...body.messages] : [];
     if (body.system) {
       messages.unshift({ role: "user", content: body.system });
