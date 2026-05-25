@@ -1,4 +1,3 @@
-/** Admin emails allowed to request/verify OTP (env overrides defaults). */
 const DEFAULT_ADMIN_EMAILS = [
   "englishpathsupport@gmail.com",
   "arshadmuhammedvm66@gmail.com",

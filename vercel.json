@@ -3,6 +3,12 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "installCommand": "npm install",
+  "functions": {
+    "api/**/*.js": {
+      "includeFiles": "api/lib/**",
+      "maxDuration": 15
+    }
+  },
   "rewrites": [
     { "handle": "filesystem" },
     { "source": "/(.*)", "destination": "/index.html" }

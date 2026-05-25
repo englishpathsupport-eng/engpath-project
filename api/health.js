@@ -1,5 +1,5 @@
-import { getAllowedAdminEmails } from "../lib/config.js";
-import { isRedisConfigured, testRedisConnection } from "../lib/redis.js";
+import { getAllowedAdminEmails } from "./lib/config.js";
+import { isRedisConfigured, testRedisConnection } from "./lib/redis.js";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -12,7 +12,7 @@ export default async function handler(req, res) {
     try {
       redisOk = await testRedisConnection();
     } catch (err) {
-      console.error("[health] Redis ping failed:", err);
+      console.error("[health] Redis ping failed:", err?.message || err);
     }
   }
 
@@ -24,6 +24,6 @@ export default async function handler(req, res) {
     redisConfigured: isRedisConfigured(),
     resend: resendOk,
     adminEmails: getAllowedAdminEmails().length,
-    hint: "Use /api/health (not /health). OTP: POST /api/send-otp",
+    version: 3,
   });
 }

@@ -3,10 +3,16 @@ import { Redis } from "@upstash/redis";
 let client = null;
 
 export function getRedisConfig() {
-  const url =
-    process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-  const token =
-    process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+  const url = (
+    process.env.UPSTASH_REDIS_REST_URL ||
+    process.env.KV_REST_API_URL ||
+    ""
+  ).trim();
+  const token = (
+    process.env.UPSTASH_REDIS_REST_TOKEN ||
+    process.env.KV_REST_API_TOKEN ||
+    ""
+  ).trim();
   return { url, token };
 }
 
@@ -26,12 +32,11 @@ export function getRedis() {
   return client;
 }
 
-/** Ping Redis; returns true if read/write works. */
 export async function testRedisConnection() {
   const redis = getRedis();
   const probe = `health:${Date.now()}`;
-  await redis.set(probe, "1", { ex: 10 });
+  await redis.set(probe, "ok", { ex: 10 });
   const value = await redis.get(probe);
   await redis.del(probe);
-  return value === "1" || value === 1;
+  return value === "ok";
 }
