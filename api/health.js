@@ -1,5 +1,4 @@
-import { getAllowedAdminEmails } from "./lib/config.js";
-import { isRedisConfigured, testRedisConnection } from "./lib/redis.js";
+import { Redis } from "@upstash/redis";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -7,23 +6,35 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  const url = (
+    process.env.UPSTASH_REDIS_REST_URL ||
+    process.env.KV_REST_API_URL ||
+    ""
+  ).trim();
+  const token = (
+    process.env.UPSTASH_REDIS_REST_TOKEN ||
+    process.env.KV_REST_API_TOKEN ||
+    ""
+  ).trim();
+  const resendOk = Boolean(process.env.RESEND_API_KEY);
+
   let redisOk = false;
-  if (isRedisConfigured()) {
+  if (url && token) {
     try {
-      redisOk = await testRedisConnection();
+      const redis = new Redis({ url, token });
+      const probe = `ping:${Date.now()}`;
+      await redis.set(probe, "ok", { ex: 5 });
+      redisOk = (await redis.get(probe)) === "ok";
+      await redis.del(probe);
     } catch (err) {
-      console.error("[health] Redis ping failed:", err?.message || err);
+      console.error("[health]", err?.message || err);
     }
   }
-
-  const resendOk = Boolean(process.env.RESEND_API_KEY);
 
   return res.status(200).json({
     ok: redisOk && resendOk,
     redis: redisOk,
-    redisConfigured: isRedisConfigured(),
     resend: resendOk,
-    adminEmails: getAllowedAdminEmails().length,
-    version: 3,
+    version: 4,
   });
 }

@@ -1,65 +1,88 @@
-import { getAllowedAdminEmails } from "./lib/config.js";
-import { isRedisConfigured } from "./lib/redis.js";
-import { parseJsonBody, setCors } from "./lib/request.js";
-import {
-  codesMatch,
-  deleteOtp,
-  getOtp,
-} from "./lib/otp.js";
+import { Redis } from "@upstash/redis";
 
-const ALLOWED_EMAILS = getAllowedAdminEmails();
+const ALLOWED = [
+  process.env.ADMIN_EMAIL_1,
+  process.env.ADMIN_EMAIL_2,
+  "englishpathsupport@gmail.com",
+  "arshadmuhammedvm66@gmail.com",
+]
+  .filter(Boolean)
+  .map((e) => e.toLowerCase().trim());
+
+function redisClient() {
+  const url = (
+    process.env.UPSTASH_REDIS_REST_URL ||
+    process.env.KV_REST_API_URL ||
+    ""
+  ).trim();
+  const token = (
+    process.env.UPSTASH_REDIS_REST_TOKEN ||
+    process.env.KV_REST_API_TOKEN ||
+    ""
+  ).trim();
+  if (!url || !token) throw new Error("REDIS_NOT_CONFIGURED");
+  return new Redis({ url, token });
+}
+
+function parseBody(req) {
+  if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
+    return req.body;
+  }
+  if (typeof req.body === "string") {
+    try {
+      return JSON.parse(req.body);
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
 
 export default async function handler(req, res) {
-  setCors(res);
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  if (!isRedisConfigured()) {
-    return res.status(503).json({
-      error: "OTP storage is not configured.",
-      code: "REDIS_MISSING",
-    });
-  }
-
   try {
-    const body = await parseJsonBody(req);
-    const { email, code } = body || {};
-
+    const { email, code } = parseBody(req);
     if (!email || !code) {
       return res.status(400).json({ error: "Email and code required" });
     }
 
     const normalised = email.toLowerCase().trim();
-    if (!ALLOWED_EMAILS.includes(normalised)) {
+    if (!ALLOWED.includes(normalised)) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const stored = await getOtp(normalised);
+    const redis = redisClient();
+    const key = `otp:${normalised}`;
+    const stored = await redis.get(key);
+
     if (!stored) {
-      return res.status(401).json({
-        error: "No OTP found. Please request a new OTP.",
-      });
+      return res.status(401).json({ error: "No OTP found. Request a new code." });
     }
 
-    if (!codesMatch(stored, code)) {
+    if (String(stored).trim() !== String(code).trim()) {
       return res.status(401).json({ error: "Incorrect OTP" });
     }
 
-    await deleteOtp(normalised);
+    await redis.del(key);
 
     const sessionToken = Buffer.from(
       JSON.stringify({ email: normalised, ts: Date.now() })
     ).toString("base64");
 
-    return res.status(200).json({ success: true, sessionToken });
+    return res.status(200).json({ success: true, sessionToken, v: 4 });
   } catch (err) {
     console.error("[verify-otp]", err?.message || err);
-    return res.status(500).json({
-      error: err?.message || "Server error",
-      code: "VERIFY_OTP_FAILED",
-    });
+    const msg = err?.message === "REDIS_NOT_CONFIGURED"
+      ? "Redis not configured on Vercel"
+      : (err?.message || "Server error");
+    return res.status(500).json({ error: msg, code: "VERIFY_OTP_FAILED" });
   }
 }
