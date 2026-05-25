@@ -7573,8 +7573,11 @@ async function sendOTPToEmail(email) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Failed to send OTP");
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = data.error || `Failed to send OTP (${res.status})`;
+      throw new Error(data.code ? `${msg} [${data.code}]` : msg);
+    }
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
