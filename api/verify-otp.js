@@ -1,4 +1,6 @@
+import { getAllowedAdminEmails } from "./_config.js";
 import { isRedisConfigured } from "./_redis.js";
+import { parseJsonBody, setCors } from "./_request.js";
 import {
   codesMatch,
   deleteOtp,
@@ -7,17 +9,14 @@ import {
   otpKey,
 } from "./_otp.js";
 
-const ALLOWED_EMAILS = [
-  process.env.ADMIN_EMAIL_1,
-  process.env.ADMIN_EMAIL_2,
-]
-  .filter(Boolean)
-  .map((e) => e.toLowerCase().trim());
+const ALLOWED_EMAILS = getAllowedAdminEmails();
+
+function serviceError(res, code, message, status = 503) {
+  return res.status(status).json({ error: message, code });
+}
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  setCors(res);
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -28,12 +27,17 @@ export default async function handler(req, res) {
   }
 
   if (!isRedisConfigured()) {
-    console.error("[verify-otp] Redis env vars missing");
-    return res.status(500).json({ error: "Server error" });
+    console.error("[verify-otp] Missing UPSTASH_REDIS_* or KV_REST_* env vars");
+    return serviceError(
+      res,
+      "REDIS_MISSING",
+      "OTP storage is not configured on the server."
+    );
   }
 
   try {
-    const { email, code } = req.body || {};
+    const body = await parseJsonBody(req);
+    const { email, code } = body || {};
 
     if (!email || !code) {
       return res.status(400).json({ error: "Email and code required" });
@@ -75,6 +79,18 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, sessionToken });
   } catch (err) {
     console.error("[verify-otp] Error:", err);
-    return res.status(500).json({ error: "Server error" });
+
+    if (err?.message === "REDIS_NOT_CONFIGURED") {
+      return serviceError(
+        res,
+        "REDIS_MISSING",
+        "OTP storage is not configured on the server."
+      );
+    }
+
+    return res.status(500).json({
+      error: "Server error",
+      code: "INTERNAL",
+    });
   }
 }

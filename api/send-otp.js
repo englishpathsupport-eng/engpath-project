@@ -1,5 +1,7 @@
 import { Resend } from "resend";
+import { getAllowedAdminEmails } from "./_config.js";
 import { isRedisConfigured } from "./_redis.js";
+import { parseJsonBody, setCors } from "./_request.js";
 import {
   OTP_TTL_SECONDS,
   getOtp,
@@ -7,21 +9,18 @@ import {
   secondsUntilResendAllowed,
 } from "./_otp.js";
 
-const ALLOWED_EMAILS = [
-  process.env.ADMIN_EMAIL_1,
-  process.env.ADMIN_EMAIL_2,
-]
-  .filter(Boolean)
-  .map((e) => e.toLowerCase().trim());
+const ALLOWED_EMAILS = getAllowedAdminEmails();
 
 function generate6Digit() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+function serviceError(res, code, message, status = 503) {
+  return res.status(status).json({ error: message, code });
+}
+
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  setCors(res);
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -32,12 +31,26 @@ export default async function handler(req, res) {
   }
 
   if (!isRedisConfigured()) {
-    console.error("[send-otp] Redis env vars missing");
-    return res.status(500).json({ error: "Server error" });
+    console.error("[send-otp] Missing UPSTASH_REDIS_* or KV_REST_* env vars");
+    return serviceError(
+      res,
+      "REDIS_MISSING",
+      "OTP storage is not configured on the server."
+    );
+  }
+
+  if (!process.env.RESEND_API_KEY) {
+    console.error("[send-otp] Missing RESEND_API_KEY");
+    return serviceError(
+      res,
+      "RESEND_MISSING",
+      "Email service is not configured on the server."
+    );
   }
 
   try {
-    const { email } = req.body || {};
+    const body = await parseJsonBody(req);
+    const { email } = body || {};
 
     if (!email || typeof email !== "string") {
       return res.status(400).json({ error: "Email is required" });
@@ -60,7 +73,11 @@ export default async function handler(req, res) {
     const key = await saveOtp(normalised, code);
 
     const check = await getOtp(normalised);
-    console.log("[send-otp] saved", { key, ttlSeconds: OTP_TTL_SECONDS, ok: Boolean(check) });
+    console.log("[send-otp] saved", {
+      key,
+      ttlSeconds: OTP_TTL_SECONDS,
+      ok: Boolean(check),
+    });
 
     const resend = new Resend(process.env.RESEND_API_KEY);
     const { error } = await resend.emails.send({
@@ -87,12 +104,27 @@ export default async function handler(req, res) {
 
     if (error) {
       console.error("[send-otp] Resend error:", error);
-      return res.status(500).json({ error: "Failed to send OTP email" });
+      return res.status(500).json({
+        error: "Failed to send OTP email",
+        code: "RESEND_FAILED",
+      });
     }
 
     return res.status(200).json({ success: true });
   } catch (err) {
     console.error("[send-otp] Error:", err);
-    return res.status(500).json({ error: "Server error" });
+
+    if (err?.message === "REDIS_NOT_CONFIGURED") {
+      return serviceError(
+        res,
+        "REDIS_MISSING",
+        "OTP storage is not configured on the server."
+      );
+    }
+
+    return res.status(500).json({
+      error: "Server error",
+      code: "INTERNAL",
+    });
   }
 }

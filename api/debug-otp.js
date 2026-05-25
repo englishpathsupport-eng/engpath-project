@@ -1,10 +1,8 @@
+import { getAllowedAdminEmails } from "./_config.js";
 import { redis, isRedisConfigured } from "./_redis.js";
 import { extractOtpCode, otpKey } from "./_otp.js";
 
-const ALLOWED_EMAILS = [
-  process.env.ADMIN_EMAIL_1,
-  process.env.ADMIN_EMAIL_2,
-].filter(Boolean).map((e) => e.toLowerCase().trim());
+const ALLOWED_EMAILS = getAllowedAdminEmails();
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
