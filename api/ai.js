@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const model = body.model || "gemini-2.0-flash";
+    const model = "gemini-2.0-flash";
     const messages = Array.isArray(body.messages) ? [...body.messages] : [];
     if (body.system) {
       messages.unshift({ role: "user", content: body.system });
@@ -25,7 +25,7 @@ export default async function handler(req, res) {
 
     const contents = messages.map(m => ({
       role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }]
+      parts: [{ text: String(m.content || "") }]
     }));
 
     const aiBody = {
@@ -36,18 +36,22 @@ export default async function handler(req, res) {
       }
     };
 
-    const aiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${aiStudioKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(aiBody),
-      }
-    );
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${aiStudioKey}`;
+    console.log("[api/ai] Calling Gemini URL:", url.replace(aiStudioKey, "REDACTED"));
+    console.log("[api/ai] Request body:", JSON.stringify(aiBody));
+
+    const aiRes = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(aiBody),
+    });
 
     const data = await aiRes.json();
+    console.log("[api/ai] Gemini response status:", aiRes.status);
+    console.log("[api/ai] Gemini response:", JSON.stringify(data));
+
     if (!aiRes.ok) {
-      console.error("[api/ai] Gemini error", aiRes.status, data);
+      console.error("[api/ai] Gemini error", aiRes.status, JSON.stringify(data));
       return res.status(aiRes.status).json({ error: data?.error?.message || "Gemini request failed." });
     }
 
@@ -57,7 +61,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error("[api/ai] Unexpected error:", err);
-    res.status(500).json({ error: "Server error while proxying AI request." });
+    console.error("[api/ai] Unexpected error:", err.message, err.stack);
+    res.status(500).json({ error: "Server error: " + err.message });
   }
 }
