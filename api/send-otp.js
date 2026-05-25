@@ -13,7 +13,7 @@ const ALLOWED_EMAILS = [
   .filter(Boolean)
   .map((e) => e.toLowerCase().trim());
 
-const OTP_TTL_SECONDS = 10 * 60;
+const OTP_TTL_SECONDS = 600;
 
 function generate6Digit() {
   return String(
@@ -23,14 +23,8 @@ function generate6Digit() {
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "POST, OPTIONS"
-  );
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type"
-  );
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -45,9 +39,9 @@ export default async function handler(req, res) {
   try {
     const { email } = req.body || {};
 
-    if (!email || typeof email !== "string") {
+    if (!email) {
       return res.status(400).json({
-        error: "Email is required",
+        error: "Email required",
       });
     }
 
@@ -59,92 +53,61 @@ export default async function handler(req, res) {
       });
     }
 
-    const key = `otp:${normalised}`;
-
-    // Check existing OTP
-    const existing = await redis.get(key);
-
-    if (existing) {
-      return res.status(429).json({
-        error: "OTP already sent. Please wait.",
-      });
-    }
-
-    // Generate OTP
     const code = generate6Digit();
 
-    // Save OTP in Redis
+    const key = `otp:${normalised}`;
+
+    // SAVE OTP
     await redis.set(key, code);
 
-    // Expire after 10 mins
+    // SET EXPIRY
     await redis.expire(key, OTP_TTL_SECONDS);
 
-    console.log("===== SEND OTP DEBUG =====");
+    // VERIFY SAVE
+    const check = await redis.get(key);
+
+    console.log("===== OTP SAVE DEBUG =====");
     console.log("KEY:", key);
     console.log("OTP:", code);
+    console.log("REDIS CHECK:", check);
     console.log("==========================");
 
-    // Send Email
     const resend = new Resend(
       process.env.RESEND_API_KEY
     );
 
     const { error } = await resend.emails.send({
-      from:
-        process.env.FROM_EMAIL ||
-        "EngPath Admin <onboarding@resend.dev>",
+      from: "onboarding@resend.dev",
 
       to: [normalised],
 
-      subject: "EngPath Admin — Your Login OTP",
+      subject: "EngPath Admin OTP",
 
       html: `
-        <div style="
-          font-family:sans-serif;
-          max-width:500px;
-          margin:auto;
-          padding:30px;
-          background:#f9f9f9;
-          border-radius:16px;
-          border:1px solid #eee;
-        ">
-
-          <h2 style="color:#6c5ce7">
-            EngPath Admin Login
-          </h2>
-
-          <p>Your OTP code:</p>
+        <div style="font-family:sans-serif">
+          <h2>Your OTP Code</h2>
 
           <div style="
             font-size:42px;
-            font-weight:900;
-            letter-spacing:10px;
-            text-align:center;
-            background:#6c5ce7;
-            color:white;
-            padding:18px;
-            border-radius:12px;
-            margin:20px 0;
+            font-weight:bold;
+            letter-spacing:8px;
+            color:#6c5ce7;
           ">
             ${code}
           </div>
 
           <p>
-            This code expires in 10 minutes.
+            Expires in 10 minutes.
           </p>
-
         </div>
       `,
     });
 
     if (error) {
-      console.error(
-        "[send-otp] Email Error:",
-        error
-      );
+      console.error("RESEND ERROR:", error);
 
       return res.status(500).json({
-        error: "Failed to send OTP email",
+        error: "Failed to send OTP",
       });
     }
 
@@ -154,7 +117,7 @@ export default async function handler(req, res) {
 
   } catch (err) {
 
-    console.error("[send-otp] Error:", err);
+    console.error("[send-otp] ERROR:", err);
 
     return res.status(500).json({
       error: "Server error",
