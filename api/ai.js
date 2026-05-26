@@ -33,7 +33,7 @@ export default async function handler(req, res) {
         "X-Title": "EngPath"
       },
       body: JSON.stringify({
-        model: "google/gemini-flash-1.5-8b:free",
+        model: "openrouter/free",
         messages,
         max_tokens: body.max_tokens || 500,
         temperature: body.temperature ?? 0.7,
