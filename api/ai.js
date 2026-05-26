@@ -23,6 +23,10 @@ export default async function handler(req, res) {
     if (body.system) {
       messages.unshift({ role: "system", content: body.system });
     }
+    // If no messages, create one from prompt
+    if (messages.length === 0 && body.prompt) {
+      messages.push({ role: "user", content: body.prompt });
+    }
 
     const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -46,14 +50,10 @@ export default async function handler(req, res) {
       return res.status(aiRes.status).json({ error: data?.error?.message || "AI request failed." });
     }
 
+    // Convert OpenRouter response to Anthropic format
     const text = data?.choices?.[0]?.message?.content || "";
-    if (!text) {
-      console.error("[api/ai] Empty response from OpenRouter", JSON.stringify(data));
-      return res.status(500).json({ error: "Empty response from AI." });
-    }
-
     return res.status(200).json({
-      choices: [{ message: { role: "assistant", content: text } }]
+      content: [{ type: "text", text }]
     });
 
   } catch (err) {
