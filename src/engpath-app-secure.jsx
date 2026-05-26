@@ -6280,17 +6280,6 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
 
     setMessages(prev => [...prev, { id: Date.now() + "a", role: "assistant", content: reply }]);
     setLoading(false);
-    // Auto-speak AI reply
-    if (reply && reply.trim()) {
-      const cleanReply = reply.replace(/[✅❌💡📌*#`>\[\]]/g, "").trim();
-      setTimeout(() => {
-        tts.speak(cleanReply, {
-          lang: state.settings.accent || "en-US",
-          rate: state.settings.speed || 0.9,
-          gender: state.settings.voice || "female"
-        });
-      }, 300);
-    }
   }, [mode, messages, input, loading, isPro, isLimited, state.settings.lang, state.user.level, state.dailyUsage.aiChat, dispatch]);
 
   const QUICK_PROMPTS = {
