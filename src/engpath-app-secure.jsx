@@ -1,10 +1,5 @@
 import React from 'react';
 import { useState, useEffect, useRef, useReducer, useCallback, useMemo, memo } from "react";
-import { createClient } from '@supabase/supabase-js';
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
 
 /* ═══ Audio Unlock ═══ */
 /**
@@ -7578,11 +7573,8 @@ async function sendOTPToEmail(email) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const msg = data.error || `Failed to send OTP (${res.status})`;
-      throw new Error(data.code ? `${msg} [${data.code}]` : msg);
-    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to send OTP");
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
@@ -7596,11 +7588,8 @@ async function verifyOTPRemote(email, code) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, code }),
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const msg = data.error || `Verification failed (${res.status})`;
-      throw new Error(data.code ? `${msg} [${data.code}]` : msg);
-    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Verification failed");
     return { ok: true, sessionToken: data.sessionToken };
   } catch (err) {
     return { ok: false, error: err.message };
@@ -8551,7 +8540,11 @@ const LoginPage = memo(function LoginPage({ dispatch }) {
     setSuccess("");
 
     try {
-      // ── Supabase Auth & User Management ──
+      // ── Replace this block with your real API call:
+      // Login:  await fetch("/api/auth/login",  { method:"POST", body:JSON.stringify({ email, password:pass }) })
+      // Signup: await fetch("/api/auth/signup", { method:"POST", body:JSON.stringify({ name, email, password:pass }) })
+      await new Promise(r => setTimeout(r, 950));
+
       if (tab === "login") {
         // Restore any saved user data for this email from localStorage
         let saved = null;
@@ -8575,22 +8568,7 @@ const LoginPage = memo(function LoginPage({ dispatch }) {
           },
         });
       } else {
-        // Signup - insert user into Supabase and dispatch LOGIN with isNew:true
-        try {
-          const { data, error } = await supabase
-            .from('users')
-            .insert([
-              {
-                email: email.trim().toLowerCase(),
-                name: name.trim(),
-                created_at: new Date().toISOString(),
-              }
-            ]);
-          if (error) console.error('[Signup] Supabase insert error:', error);
-        } catch (e) {
-          console.error('[Signup] Supabase error:', e);
-        }
-        
+        // Signup - dispatch LOGIN with isNew:true → routes to upgrade
         dispatch({
           type: "LOGIN",
           payload: {
@@ -9352,31 +9330,21 @@ const AdminPanel = memo(function AdminPanel({ state, dispatch }) {
   };
 
   // ── Find user ─────────────────────────────────────────────────
-  const findUser = async () => {
+  const findUser = () => {
     if (!searchEmail.trim()) return;
     try {
-      // Query Supabase users table for the email
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', searchEmail.toLowerCase().trim())
-        .limit(1);
-      
-      if (error) {
-        console.error('[findUser] Supabase error:', error);
-        setUserFound("not_found");
-        return;
-      }
-      
-      if (data && data.length > 0) {
-        setUserFound(data[0]);
+      const raw = localStorage.getItem("ep_user");
+      if (raw) {
+        const u = JSON.parse(raw);
+        if (u.email?.toLowerCase().trim() === searchEmail.toLowerCase().trim()) {
+          setUserFound(u);
+        } else {
+          setUserFound("not_found");
+        }
       } else {
         setUserFound("not_found");
       }
-    } catch (e) {
-      console.error('[findUser] Exception:', e);
-      setUserFound("not_found");
-    }
+    } catch { setUserFound("not_found"); }
   };
 
   // ── Activate Pro ──────────────────────────────────────────────
@@ -9928,4 +9896,6 @@ export default function App() {
     </>
   );
 }
+
+
 
