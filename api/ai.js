@@ -10,51 +10,44 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Request body must be JSON." });
   }
 
-  const aiStudioKey = process.env.AI_STUDIO_API_KEY;
-  if (!aiStudioKey) {
-    console.error("[api/ai] Missing AI_STUDIO_API_KEY");
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    console.error("[api/ai] Missing OPENROUTER_API_KEY");
     return res.status(500).json({ error: "AI API key not configured." });
   }
 
   try {
-    const model = "gemini-2.0-flash-lite";
     const messages = Array.isArray(body.messages) ? [...body.messages] : [];
     if (body.system) {
-      messages.unshift({ role: "user", content: body.system });
+      messages.unshift({ role: "system", content: body.system });
     }
 
-    const contents = messages.map(m => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: String(m.content || "") }]
-    }));
-
     const aiBody = {
-      contents,
-      generationConfig: {
-        maxOutputTokens: body.max_tokens || 500,
-        temperature: body.temperature ?? 0.7,
-      }
+      model: "google/gemini-2.0-flash-lite-001:free",
+      messages,
+      max_tokens: body.max_tokens || 500,
+      temperature: body.temperature ?? 0.7,
     };
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${aiStudioKey}`;
-
-    const aiRes = await fetch(url, {
+    const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+        "HTTP-Referer": "https://engpath-project.vercel.app",
+        "X-Title": "EngPath"
+      },
       body: JSON.stringify(aiBody),
     });
 
     const data = await aiRes.json();
 
     if (!aiRes.ok) {
-      console.error("[api/ai] Gemini error", aiRes.status, JSON.stringify(data));
-      return res.status(aiRes.status).json({ error: data?.error?.message || "Gemini request failed." });
+      console.error("[api/ai] OpenRouter error", aiRes.status, JSON.stringify(data));
+      return res.status(aiRes.status).json({ error: data?.error?.message || "AI request failed." });
     }
 
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    return res.status(200).json({
-      choices: [{ message: { role: "assistant", content: text } }]
-    });
+    return res.status(200).json(data);
 
   } catch (err) {
     console.error("[api/ai] Unexpected error:", err.message);
