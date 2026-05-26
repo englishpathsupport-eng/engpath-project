@@ -23,7 +23,7 @@ export default async function handler(req, res) {
     }
 
     const aiBody = {
-      model: "google/gemini-2.0-flash-lite-001:free",
+      model: "google/gemini-flash-1.5-8b:free",
       messages,
       max_tokens: body.max_tokens || 500,
       temperature: body.temperature ?? 0.7,
