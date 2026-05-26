@@ -33,7 +33,7 @@ export default async function handler(req, res) {
         "X-Title": "EngPath"
       },
       body: JSON.stringify({
-        model: "openrouter/free",
+        model: "meta-llama/llama-3.3-70b-instruct:free",
         messages,
         max_tokens: body.max_tokens || 500,
         temperature: body.temperature ?? 0.7,
@@ -46,7 +46,15 @@ export default async function handler(req, res) {
       return res.status(aiRes.status).json({ error: data?.error?.message || "AI request failed." });
     }
 
-    return res.status(200).json(data);
+    const text = data?.choices?.[0]?.message?.content || "";
+    if (!text) {
+      console.error("[api/ai] Empty response from OpenRouter", JSON.stringify(data));
+      return res.status(500).json({ error: "Empty response from AI." });
+    }
+
+    return res.status(200).json({
+      choices: [{ message: { role: "assistant", content: text } }]
+    });
 
   } catch (err) {
     console.error("[api/ai] Unexpected error:", err.message);
