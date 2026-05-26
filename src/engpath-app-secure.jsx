@@ -6433,35 +6433,27 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
               {m.content}
             </div>
 
-            {/* TTS button for AI messages */}
             {m.role==="assistant" && (
-              <button
-  onClick={() => {
-    const clean = m.content
-      .replace(/\*\*([^*]+)\*\*/g, "$1")
-      .replace(/\*([^*]+)\*/g, "$1")
-      .replace(/[#`>\[\]]/g, "")
-      .replace(/[\u{1F000}-\u{1FFFF}]/gu, "")
-      .trim();
-    if (clean && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-      setTimeout(() => {
-        const u = new SpeechSynthesisUtterance(clean.slice(0, 300));
-        u.lang = state.settings.accent || "en-US";
-        u.rate = state.settings.speed || 0.9;
-        window.speechSynthesis.speak(u);
-      }, 100);
-    }
-  }}
-  style={{
-            background:"none", border:"none", cursor:"pointer",
-            fontSize:18, color:"var(--text-3)", padding:"4px 6px",
-            borderRadius:8, marginTop:4,
-          }}
-        >🔊</button>
-        )}
-
-        {loading && (
+  <button
+    onClick={() => {
+      try {
+        window.speechSynthesis.cancel();
+        setTimeout(() => {
+          const u = new SpeechSynthesisUtterance(m.content.slice(0, 300));
+          u.lang = state.settings.accent || "en-US";
+          u.rate = state.settings.speed || 0.9;
+          window.speechSynthesis.speak(u);
+        }, 150);
+      } catch(e) { console.error("TTS error", e); }
+    }}
+    style={{
+      background:"none", border:"none", cursor:"pointer",
+      fontSize:18, color:"var(--text-3)", padding:"4px 6px",
+      borderRadius:8, marginTop:4, display:"block",
+    }}
+  >🔊</button>
+)}
+               {loading && (
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
             <div style={{
               width:34, height:34, borderRadius:12,
