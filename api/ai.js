@@ -22,8 +22,14 @@ export default async function handler(req, res) {
       messages.unshift({ role: "system", content: body.system });
     }
 
+    const model = body.model && typeof body.model === "string"
+      ? body.model.includes("/")
+        ? body.model
+        : `google/${body.model}`
+      : "google/gemini-flash-1.5-8b:free";
+
     const aiBody = {
-      model: "google/gemini-flash-1.5-8b:free",
+      model,
       messages,
       max_tokens: body.max_tokens || 500,
       temperature: body.temperature ?? 0.7,
@@ -44,10 +50,11 @@ export default async function handler(req, res) {
 
     if (!aiRes.ok) {
       console.error("[api/ai] OpenRouter error", aiRes.status, JSON.stringify(data));
-      return res.status(aiRes.status).json({ error: data?.error?.message || "AI request failed." });
+      return res.status(aiRes.status).json({ error: data?.error?.message || data?.detail || "AI request failed." });
     }
 
-    return res.status(200).json(data);
+    const text = data?.choices?.[0]?.message?.content || data?.output_text || data?.results?.[0]?.message?.content ?? "";
+    return res.status(200).json({ content: [{ text: String(text).trim() }] });
 
   } catch (err) {
     console.error("[api/ai] Unexpected error:", err.message);
