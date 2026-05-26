@@ -6436,15 +6436,30 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
             {/* TTS button for AI messages */}
             {m.role==="assistant" && (
               <button
-               onClick={() => {
-  const clean = m.content.replace(/[*#`>✅❌💡📌\[\]]/g, "").trim();
-  tts.speak(clean, { lang: state.settings.accent || "en-US", rate: state.settings.speed || 0.9 });
-}}
-                style={{ background:"none", border:"none", cursor:"pointer", fontSize:14, color:"var(--text-3)", flexShrink:0, marginBottom:6, padding:4, borderRadius:8, transition:"color .15s" }}
-              >🔊</button>
-            )}
-          </div>
-        ))}
+  onClick={() => {
+    const clean = m.content
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/\*([^*]+)\*/g, "$1")
+      .replace(/[#`>\[\]]/g, "")
+      .replace(/[\u{1F000}-\u{1FFFF}]/gu, "")
+      .trim();
+    if (clean && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      setTimeout(() => {
+        const u = new SpeechSynthesisUtterance(clean.slice(0, 300));
+        u.lang = state.settings.accent || "en-US";
+        u.rate = state.settings.speed || 0.9;
+        window.speechSynthesis.speak(u);
+      }, 100);
+    }
+  }}
+  style={{
+            background:"none", border:"none", cursor:"pointer",
+            fontSize:18, color:"var(--text-3)", padding:"4px 6px",
+            borderRadius:8, marginTop:4,
+          }}
+        >🔊</button>
+        )}
 
         {loading && (
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
