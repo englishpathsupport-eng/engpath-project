@@ -6436,10 +6436,7 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
             {/* TTS button for AI messages */}
             {m.role==="assistant" && (
               <button
-               onClick={() => {
-  const clean = m.content.replace(/[*#`>✅❌💡📌\[\]]/g, "").trim();
-  tts.speak(clean, { lang: state.settings.accent || "en-US", rate: state.settings.speed || 0.9 });
-}}
+                onClick={() => tts.speak(m.content.replace(/[✅❌💡📌*#`>]/g,""), {lang:state.settings.accent, rate:state.settings.speed})}
                 style={{ background:"none", border:"none", cursor:"pointer", fontSize:14, color:"var(--text-3)", flexShrink:0, marginBottom:6, padding:4, borderRadius:8, transition:"color .15s" }}
               >🔊</button>
             )}
