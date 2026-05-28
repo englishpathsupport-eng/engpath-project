@@ -3,6 +3,7 @@
 
 import { Redis } from "@upstash/redis";
 import { Resend } from "resend";
+import { otpStore, OTP_TTL_MS } from "./_otpStore.js";
 
 const useRedis = Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
 let redis = null;
