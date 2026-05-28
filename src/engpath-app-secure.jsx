@@ -273,7 +273,6 @@ function useSTT({ lang = "en-US" } = {}) {
   const retryCount = useRef(0);     // prevents infinite restart loop
   const MAX_RETRY  = 3;
   const lastFinalIdx = useRef(0);   // FIX: prevent duplicate finals
-  const lastFinalIdx = useRef(0);   // FIX: prevent duplicate finals
 
   useEffect(() => {
     mounted.current = true;
