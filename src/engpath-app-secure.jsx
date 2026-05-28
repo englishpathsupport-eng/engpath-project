@@ -9790,7 +9790,19 @@ export default function App() {
 
   // ✅ AUDIO FIX: unlock mobile audio pipeline on first user interaction
   useEffect(() => {
-    const handler = () => { unlockAudio(); };
+    const handler = () => {
+      unlockAudio();
+      // FIX: also unlock speechSynthesis on Android Chrome - requires a gesture-triggered speak()
+      try {
+        const synth = window.speechSynthesis;
+        if (synth) {
+          const u = new SpeechSynthesisUtterance("");
+          u.volume = 0;
+          synth.speak(u);
+          setTimeout(() => { try { synth.cancel(); } catch(_) {} }, 100);
+        }
+      } catch(_) {}
+    };
     window.addEventListener("touchstart", handler, { once: true, passive: true });
     window.addEventListener("click",      handler, { once: true, passive: true });
     return () => {
