@@ -6440,21 +6440,24 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
             </div>
 
             {/* TTS button for AI messages */}
-            {m.role==="assistant" && (
               <button
-                onClick={() => {
-                  const s=window.speechSynthesis;
-                  if(s){try{s.cancel();}catch(_){}}
-                  const cleaned = m.content
-                    .replace(/[\u{1F000}-\u{1FFFF}]/gu, "")
-                    .replace(/[\u2600-\u27BF]/g, "")
-                    .replace(/[*#`>\[\]]/g, "")
-                    .replace(/\s+/g, " ")
-                    .trim();
-                  if(cleaned) tts.speak(cleaned, {lang:state.settings.accent||"en-US", rate:state.settings.speed||0.9});
-                }}
-                style={{ background:"none", border:"none", cursor:"pointer", fontSize:14, color:tts.speaking?"var(--accent)":"var(--text-3)", flexShrink:0, marginBottom:6, padding:4, borderRadius:8, transition:"color .15s" }}
-              >{tts.speaking ? "⏹" : "🔊"}</button>
+                onClick={() => { const cleaned = m.content.replace(/[*#`>[\]]/g,"").replace(/\s+/g," ").trim(); if(cleaned) window._safeSpeak(cleaned, state.settings.accent||"en-US", state.settings.speed||0.9); }}
+                style={{ background:"none", border:"none", cursor:"pointer", fontSize:16, color:"var(--text-3)", flexShrink:0, marginBottom:6, padding:4, borderRadius:8 }}
+              >🔊</button>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             )}
           </div>
         ))}
