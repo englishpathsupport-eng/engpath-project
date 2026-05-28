@@ -322,7 +322,7 @@ function useSTT({ lang = "en-US" } = {}) {
 
     recRef.current = new SR();
     recRef.current.lang           = lang || "en-US";
-    recRef.current.continuous     = true;   // FIX: keep listening - stop via silence or manual stop
+    recRef.current.continuous     = false;  // FIX: Android Chrome restarts cause duplicates with continuous=true
     recRef.current.interimResults = true;
 
     recRef.current.onstart = () => {
