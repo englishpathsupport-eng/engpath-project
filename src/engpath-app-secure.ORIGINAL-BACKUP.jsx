@@ -272,8 +272,6 @@ function useSTT({ lang = "en-US" } = {}) {
   const silenceRef = useRef(null);
   const retryCount = useRef(0);     // prevents infinite restart loop
   const MAX_RETRY  = 3;
-  const lastFinalIdx = useRef(0);   // FIX: prevent duplicate finals
-  const lastFinalIdx = useRef(0);   // FIX: prevent duplicate finals
 
   useEffect(() => {
     mounted.current = true;
@@ -329,7 +327,6 @@ function useSTT({ lang = "en-US" } = {}) {
     recRef.current.onstart = () => {
       if (!mounted.current) return;
       retryCount.current = 0;  // clean start - reset retry counter
-      lastFinalIdx.current = 0; // FIX: reset on fresh start
       setRecording(true);
       setError(null);
       setTranscript("");
@@ -342,9 +339,7 @@ function useSTT({ lang = "en-US" } = {}) {
       let fin = "", inter = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) {
-          if (i >= lastFinalIdx.current) { fin += t + " "; lastFinalIdx.current = i + 1; }
-        } else { inter += t; }
+        e.results[i].isFinal ? (fin += t + " ") : (inter += t);
       }
       if (fin) {
         setTranscript(prev => {
@@ -3028,10 +3023,8 @@ function alignWords(target, spoken) {
     const sc  = clean(sArr[si]);
     if (tc === sc) { si++; return { word: tw, status: "correct", said: sArr[si - 1] }; }
     const sim = 1 - levenshtein(tc, sc) / Math.max(tc.length, sc.length, 1);
-    // FIX: also match if spoken word contains target or vice versa (handles merged STT words)
-    const contained = sc.includes(tc) || (tc.length >= 3 && sc.startsWith(tc.slice(0,3)) && sim >= 0.5);
     si++;
-    return { word: tw, status: (sim >= 0.65 || contained) ? "close" : "wrong", said: sArr[si - 1] };
+    return { word: tw, status: sim >= 0.65 ? "close" : "wrong", said: sArr[si - 1] };
   });
 }
 
