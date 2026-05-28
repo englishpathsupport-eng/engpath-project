@@ -3302,7 +3302,7 @@ const AIFeedbackCard = memo(function AIFeedbackCard({ feedback, target, onRetry,
           </div>
         </div>
         <div style={{ display:"flex", gap:6 }}>
-          {tts && target && <button onClick={() => { const s=window.speechSynthesis; if(s){try{s.cancel();}catch(_){}} setTimeout(()=>tts.speak(target,{lang:settings?.accent||"en-US",rate:.88}),80); }} style={{ width:34,height:34,borderRadius:12,background:"var(--accent-soft)",border:"1px solid var(--accent-border)",cursor:"pointer",fontSize:15,color:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center" }}>🔊</button>}
+          {tts && target && <button onClick={() => { const s=window.speechSynthesis; if(s){try{s.cancel();}catch(_){}} tts.speak(target,{lang:settings?.accent||"en-US",rate:.88}); }} style={{ width:34,height:34,borderRadius:12,background:"var(--accent-soft)",border:"1px solid var(--accent-border)",cursor:"pointer",fontSize:15,color:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center" }}>🔊</button>}
           {onRetry && <button onClick={onRetry} style={{ width:34,height:34,borderRadius:12,background:"var(--surf-2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:14,color:"var(--text-2)",display:"flex",alignItems:"center",justifyContent:"center" }}>🔄</button>}
         </div>
       </div>
@@ -3322,7 +3322,7 @@ const AIFeedbackCard = memo(function AIFeedbackCard({ feedback, target, onRetry,
       {naturalVersion && (
         <div style={{ padding:"9px 12px", background:"var(--green-soft)", border:"1px solid var(--green-border)", borderRadius:12, marginBottom:8, fontSize:12, color:"var(--text)", lineHeight:1.5 }}>
           <span style={{ fontWeight:800, color:"var(--green)" }}>🌟 Natural: </span>"{naturalVersion}"
-          <button onClick={() => { const s=window.speechSynthesis; if(s){try{s.cancel();}catch(_){}} setTimeout(()=>tts?.speak(naturalVersion,{lang:settings?.accent||"en-US",rate:.9}),80); }} style={{ marginLeft:8, background:"none", border:"none", cursor:"pointer", fontSize:13, color:"var(--green)" }}>🔊</button>
+          <button onClick={() => { const s=window.speechSynthesis; if(s){try{s.cancel();}catch(_){}} tts?.speak(naturalVersion,{lang:settings?.accent||"en-US",rate:.9}); }} style={{ marginLeft:8, background:"none", border:"none", cursor:"pointer", fontSize:13, color:"var(--green)" }}>🔊</button>
         </div>
       )}
       {onNext && <button onClick={onNext} style={{ width:"100%", marginTop:6, padding:"12px", borderRadius:16, background:"linear-gradient(135deg,var(--accent),var(--blue))", border:"none", cursor:"pointer", fontSize:13, fontWeight:700, color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>Next ✦</button>}
@@ -6442,7 +6442,7 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
             {/* TTS button for AI messages */}
             {m.role==="assistant" && (
               <button
-                onClick={() => { const s=window.speechSynthesis; if(s){try{s.cancel();}catch(_){}} setTimeout(()=>tts.speak(m.content.replace(/[✅❌💡📌*#`>]/g,""), {lang:state.settings.accent||"en-US", rate:state.settings.speed||0.9}),80); }}
+                onClick={() => { const s=window.speechSynthesis; if(s){try{s.cancel();}catch(_){}} tts.speak(m.content.replace(/[✅❌💡📌*#`>]/g,""), {lang:state.settings.accent||"en-US", rate:state.settings.speed||0.9}); }}
                 style={{ background:"none", border:"none", cursor:"pointer", fontSize:14, color:"var(--text-3)", flexShrink:0, marginBottom:6, padding:4, borderRadius:8, transition:"color .15s" }}
               >🔊</button>
             )}
