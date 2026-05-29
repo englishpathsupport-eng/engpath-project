@@ -3382,7 +3382,7 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
         setScores(p => ({ ...p, [tt.id]: sc }));
         setFeedback({ score:sc, fluency, said:spoken, tip: sc<70?"Try slowing down and focusing on each sound.":"Great! Now try it faster!", naturalVersion:tt.text, grammarFix:null, pronunciationIssue: sc<60?`Focus on: ${tt.focus}`:null });
         setPhase("done");
-        dispatch({ type:"ADD_XP", payload:Math.round(sc/10) });
+        dispatch({ type:"ADD_XP", payload:Math.round(sc/10) }); dispatch({ type:"UPDATE_PROGRESS", payload:{ speaking: Math.min(100, Math.round(sc)) } });
       } else if (attempts < 20) {
         setTimeout(check, 150);
       } else {
@@ -3480,7 +3480,7 @@ const ShadowingMode = memo(function ShadowingMode({ state, dispatch }) {
       const fluency=Math.min(100,Math.round(sc*0.9+(spoken.split(" ").length/sentence.split(" ").length)*10));
       setFeedback({score:sc,fluency,said:spoken,tip:sc>=80?"Excellent shadowing! Your timing is perfect.":"Try to match the rhythm and stress of the original sentence.",naturalVersion:sentence,grammarFix:null,pronunciationIssue:sc<60?"Focus on matching the exact sounds you heard.":null});
       setPhase("done");
-      dispatch({type:"ADD_XP",payload:Math.round(sc/8)});
+      dispatch({type:"ADD_XP",payload:Math.round(sc/8)}); dispatch({type:"UPDATE_PROGRESS",payload:{speaking:Math.min(100,Math.round(sc))}});
     },600);
   },[stt, sentence, dispatch]);
 
@@ -3537,7 +3537,7 @@ const TransformTab = memo(function TransformTab({ state, dispatch }) {
   const TYPES=[{id:"affirmative",label:"+ Affirmative",col:"var(--green)",text:item.base},{id:"negative",label:"− Negative",col:"var(--red)",text:item.neg},{id:"interrogative",label:"? Question",col:"var(--blue)",text:item.q},{id:"exclamatory",label:"! Exclamatory",col:"var(--gold)",text:item.exc},{id:"imperative",label:"⟹ Imperative",col:"var(--purple)",text:item.imp}];
   const current=TYPES.find(t=>t.id===view);
   const startSpeak=async()=>{setPhase("recording");setFeedback(null);stt.reset();await stt.start();};
-  const stopSpeak=()=>{stt.stop();setPhase("analysing");setTimeout(()=>{const spoken=stt.getLatest()||"";if(!spoken.trim()){setPhase("idle");return;}const sc=calcScore(alignWords(current.text,spoken));setFeedback({score:sc,fluency:Math.min(100,sc+5),said:spoken,tip:sc>=80?"Perfect transformation!":"The correct form is: "+current.text,naturalVersion:current.text,grammarFix:sc<80?`Expected: "${current.text}"`:null,pronunciationIssue:null});setPhase("done");dispatch({type:"ADD_XP",payload:Math.round(sc/12)});},600);};
+  const stopSpeak=()=>{stt.stop();setPhase("analysing");setTimeout(()=>{const spoken=stt.getLatest()||"";if(!spoken.trim()){setPhase("idle");return;}const sc=calcScore(alignWords(current.text,spoken));setFeedback({score:sc,fluency:Math.min(100,sc+5),said:spoken,tip:sc>=80?"Perfect transformation!":"The correct form is: "+current.text,naturalVersion:current.text,grammarFix:sc<80?`Expected: "${current.text}"`:null,pronunciationIssue:null});setPhase("done");dispatch({type:"ADD_XP",payload:Math.round(sc/12)}); dispatch({type:"UPDATE_PROGRESS",payload:{writing:Math.min(100,Math.round(sc))}});},600);};
   return(
     <div style={{ animation:"fadeUp .3s ease" }}>
       <div style={{ fontFamily:"'Poppins',sans-serif",fontSize:14,fontWeight:800,color:"var(--text)",marginBottom:10 }}>Sentence Transformations</div>
@@ -3599,7 +3599,7 @@ const GrammarExercisesTab = memo(function GrammarExercisesTab({ state, dispatch 
   const start=key=>{setTopic(key);setCurrent(0);setChosen(null);setChecked(false);setScore(0);setDone(false);};
   const getQs=key=>getExerciseQuestions(key,isPro2);
   const check=()=>{if(chosen==null)return;setChecked(true);if(chosen===getQs(topic)[current].ans)setScore(s=>s+1);};
-  const next=()=>{const qs=getQs(topic);if(current+1>=qs.length){setDone(true);const f=score+(chosen===qs[current].ans?1:0);dispatch({type:"ADD_XP",payload:f*5});}else{setCurrent(c=>c+1);setChosen(null);setChecked(false);}};
+  const next=()=>{const qs=getQs(topic);if(current+1>=qs.length){setDone(true);const f=score+(chosen===qs[current].ans?1:0);dispatch({type:"ADD_XP",payload:f*5});dispatch({type:"UPDATE_PROGRESS",payload:{grammar:Math.min(100,Math.round((f/qs.length)*100))}});}else{setCurrent(c=>c+1);setChosen(null);setChecked(false);}};
   if(!topic) return(
     <div style={{ animation:"fadeUp .3s ease" }}>
       <div style={{ fontFamily:"'Poppins',sans-serif",fontSize:14,fontWeight:800,color:"var(--text)",marginBottom:12 }}>Grammar Exercises</div>
@@ -3919,7 +3919,7 @@ const SentencePractice = memo(function SentencePractice({ state, dispatch }) {
                     const al = alignWords(sent.text, tx);
                     const sc = calcScore(al);
                     setAligned(al); setScore(sc); setPhase("done");
-                    dispatch({ type:"ADD_XP", payload:Math.round(sc/10) });
+                    dispatch({ type:"ADD_XP", payload:Math.round(sc/10) }); dispatch({ type:"UPDATE_PROGRESS", payload:{ speaking: Math.min(100, Math.round(sc)) } });
                     e.target.value="";
                   }
                 }}
@@ -5152,7 +5152,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
       setWords(merged);
       try { await window.storage?.set(STORAGE_KEY, JSON.stringify(merged)); } catch {}
       setGenMsg(`v Added ${newWords.length} words! Total: ${merged.length}`);
-      dispatch({ type: "ADD_XP", payload: 15 });
+      dispatch({ type: "ADD_XP", payload: 15 }); dispatch({ type: "UPDATE_PROGRESS", payload: { vocabulary: Math.min(100, (state?.progress?.vocabulary || 58) + 2) } });
     } else {
       setGenMsg("Generation failed - try again.");
     }
@@ -7711,7 +7711,7 @@ const initialState = {
   screen:      savedUser ? "home" : "login",
   user:        savedUser || { name: "Learner", level: "B1", xp: 0, streak: 7, plan: "free", email: "", isGuest: false, isNew: false, isPro: false, expiryDate: null },
   settings:    { ...DEFAULT_SETTINGS, ...(loadSettings() || {}) },
-  progress:    { grammar: 42, vocabulary: 58, speaking: 30, writing: 45 },
+  progress:    { grammar: 42, vocabulary: 58, speaking: 30, writing: 45, ...(JSON.parse(localStorage.getItem("ep_progress") || "{}")) },
   dailyUsage:  { pronunciation: 0, conversations: 0, aiChat: 0 },
   adminConfig: { ...(loadAdminConfig() || DEFAULT_ADMIN) },
   toasts:      [],
@@ -7721,8 +7721,8 @@ function reducer(state, action) {
   switch (action.type) {
     case "SET_SCREEN":      return { ...state, screen: action.payload };
     case "SET_USER_LEVEL":  return { ...state, user: { ...state.user, level: action.payload } };
-    case "ADD_XP":          return { ...state, user: { ...state.user, xp: state.user.xp + action.payload } };
-    case "UPDATE_PROGRESS": return { ...state, progress: { ...state.progress, ...action.payload } };
+    case "ADD_XP": { const nu = { ...state.user, xp: state.user.xp + action.payload }; saveUser(nu); return { ...state, user: nu }; }
+    case "UPDATE_PROGRESS": { const np = { ...state.progress, ...action.payload }; try { localStorage.setItem("ep_progress", JSON.stringify(np)); } catch {} return { ...state, progress: np }; }
     case "UPDATE_SETTINGS": {
       const next = { ...state.settings, ...action.payload };
       saveSettings(next);
