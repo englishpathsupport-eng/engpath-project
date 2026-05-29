@@ -6457,7 +6457,6 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
 
 
 
-            )}
           </div>
         ))}
         {loading && (
