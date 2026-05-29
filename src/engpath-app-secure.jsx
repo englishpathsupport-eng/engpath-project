@@ -7723,6 +7723,7 @@ function reducer(state, action) {
     case "SET_USER_LEVEL":  return { ...state, user: { ...state.user, level: action.payload } };
     case "ADD_XP": { const nu = { ...state.user, xp: state.user.xp + action.payload }; saveUser(nu); return { ...state, user: nu }; }
     case "UPDATE_PROGRESS": { const np = { ...state.progress, ...action.payload }; try { localStorage.setItem("ep_progress", JSON.stringify(np)); } catch {} return { ...state, progress: np }; }
+    case "UPDATE_STREAK": { const nu2 = { ...state.user, streak: action.payload }; saveUser(nu2); return { ...state, user: nu2 }; }
     case "UPDATE_SETTINGS": {
       const next = { ...state.settings, ...action.payload };
       saveSettings(next);
@@ -8528,10 +8529,14 @@ const LoginPage = memo(function LoginPage({ dispatch }) {
         if (r) { const u = JSON.parse(r); if (ADMIN_EMAILS_LIST.includes(u.email?.toLowerCase())) return u; }
       } catch {} return null;
     })();
+    const today = new Date().toDateString();
+    const lastLogin = saved?.lastLoginDate;
+    const daysDiff = lastLogin ? Math.floor((new Date() - new Date(lastLogin)) / 86400000) : 999;
+    const newStreak = daysDiff === 0 ? (saved?.streak || 0) : daysDiff === 1 ? (saved?.streak || 0) + 1 : 1;
     dispatch({ type:"LOGIN", payload:{
       email: verifiedEmail.toLowerCase().trim(),
       name: "Admin", isPro: true, plan: "pro",
-      xp: saved?.xp || 0, streak: saved?.streak || 0,
+      xp: saved?.xp || 0, streak: newStreak, lastLoginDate: today,
       expiryDate: null, isNew: false, isGuest: false,
     }});
   };
@@ -8596,6 +8601,10 @@ const LoginPage = memo(function LoginPage({ dispatch }) {
           if (raw) { const u = JSON.parse(raw); if (u.email === email.trim().toLowerCase()) saved = u; }
         } catch {}
 
+        const today2 = new Date().toDateString();
+        const lastLogin2 = saved?.lastLoginDate;
+        const daysDiff2 = lastLogin2 ? Math.floor((new Date() - new Date(lastLogin2)) / 86400000) : 999;
+        const newStreak2 = daysDiff2 === 0 ? (saved?.streak || 0) : daysDiff2 === 1 ? (saved?.streak || 0) + 1 : 1;
         dispatch({
           type: "LOGIN",
           payload: {
@@ -8604,7 +8613,7 @@ const LoginPage = memo(function LoginPage({ dispatch }) {
             isPro:   saved?.isPro   || false,
             plan:    saved?.plan    || "free",
             xp:      saved?.xp      || 0,
-            streak:  saved?.streak  || 0,
+            streak:  newStreak2, lastLoginDate: today2,
             expiryDate: saved?.expiryDate || null,
             isNew:   false,
             isGuest: false,
