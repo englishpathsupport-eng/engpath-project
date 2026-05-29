@@ -3361,16 +3361,25 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
   const stopRecord = async (tt) => {
     stt.stop();
     setPhase("analysing");
-    setTimeout(async () => {
+    // FIX: wait for final transcript — Android Chrome needs more time after stop()
+    let attempts = 0;
+    const check = () => {
       const spoken = stt.getLatest() || "";
-      if (!spoken.trim()) { setPhase("idle"); return; }
-      const sc = calcScore(alignWords(tt.text, spoken));
-      const fluency = Math.min(100, Math.round(sc * 0.9 + Math.random() * 10));
-      setScores(p => ({ ...p, [tt.id]: sc }));
-      setFeedback({ score:sc, fluency, said:spoken, tip: sc<70?"Try slowing down and focusing on each sound.":"Great! Now try it faster!", naturalVersion:tt.text, grammarFix:null, pronunciationIssue: sc<60?`Focus on: ${tt.focus}`:null });
-      setPhase("done");
-      dispatch({ type:"ADD_XP", payload:Math.round(sc/10) });
-    }, 600);
+      attempts++;
+      if (spoken.trim()) {
+        const sc = calcScore(alignWords(tt.text, spoken));
+        const fluency = Math.min(100, Math.round(sc * 0.9 + Math.random() * 10));
+        setScores(p => ({ ...p, [tt.id]: sc }));
+        setFeedback({ score:sc, fluency, said:spoken, tip: sc<70?"Try slowing down and focusing on each sound.":"Great! Now try it faster!", naturalVersion:tt.text, grammarFix:null, pronunciationIssue: sc<60?`Focus on: ${tt.focus}`:null });
+        setPhase("done");
+        dispatch({ type:"ADD_XP", payload:Math.round(sc/10) });
+      } else if (attempts < 20) {
+        setTimeout(check, 150);
+      } else {
+        setPhase("idle");
+      }
+    };
+    setTimeout(check, 400);
   };
 
   return (
