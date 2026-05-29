@@ -272,7 +272,6 @@ function useSTT({ lang = "en-US" } = {}) {
   const silenceRef = useRef(null);
   const retryCount = useRef(0);     // prevents infinite restart loop
   const MAX_RETRY  = 3;
-  const lastFinalIdx = useRef(0);   // FIX: prevent duplicate finals
 
   useEffect(() => {
     mounted.current = true;
@@ -322,14 +321,12 @@ function useSTT({ lang = "en-US" } = {}) {
 
     recRef.current = new SR();
     recRef.current.lang           = lang || "en-US";
-    recRef.current.continuous     = false;  // FIX: Android Chrome restarts cause duplicates with continuous=true
+    recRef.current.continuous     = true;   // FIX: keep listening - stop via silence or manual stop
     recRef.current.interimResults = true;
-    recRef.current.maxAlternatives = 1;  // FIX: get best alternative only
 
     recRef.current.onstart = () => {
       if (!mounted.current) return;
       retryCount.current = 0;  // clean start - reset retry counter
-      lastFinalIdx.current = 0; // FIX: reset on fresh start
       setRecording(true);
       setError(null);
       setTranscript("");
@@ -341,19 +338,8 @@ function useSTT({ lang = "en-US" } = {}) {
       if (!mounted.current) return;
       let fin = "", inter = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        // FIX: pick highest-confidence alternative
-        let bestT = e.results[i][0].transcript;
-        let bestConf = e.results[i][0].confidence || 0;
-        for (let j = 1; j < e.results[i].length; j++) {
-          if ((e.results[i][j].confidence || 0) > bestConf) {
-            bestConf = e.results[i][j].confidence;
-            bestT = e.results[i][j].transcript;
-          }
-        }
-        const t = bestT;
-        if (e.results[i].isFinal) {
-          if (i >= lastFinalIdx.current) { fin += t + " "; lastFinalIdx.current = i + 1; }
-        } else { inter += t; }
+        const t = e.results[i][0].transcript;
+        e.results[i].isFinal ? (fin += t + " ") : (inter += t);
       }
       if (fin) {
         setTranscript(prev => {
@@ -362,12 +348,12 @@ function useSTT({ lang = "en-US" } = {}) {
           return next;
         });
         clearTimeout(silenceRef.current);
-        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 2500);
+        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 1500);
       }
       if (inter) {
         setInterim(inter);
         clearTimeout(silenceRef.current);
-        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 2500);
+        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 1500);
       }
     };
 
@@ -533,7 +519,7 @@ function useVoiceChat({ lang = "en-US", onTranscript, enabled = true } = {}) {
 
     const rec = new SR();
     rec.lang           = lang;
-    rec.continuous     = false;  // FIX: Android Chrome restarts cause duplicates
+    rec.continuous     = true;    // KEY: don't stop mid-speech
     rec.interimResults = true;
 
     rec.onstart = () => {
@@ -3037,10 +3023,8 @@ function alignWords(target, spoken) {
     const sc  = clean(sArr[si]);
     if (tc === sc) { si++; return { word: tw, status: "correct", said: sArr[si - 1] }; }
     const sim = 1 - levenshtein(tc, sc) / Math.max(tc.length, sc.length, 1);
-    // FIX: also match if spoken word contains target or vice versa (handles merged STT words)
-    const contained = sc.includes(tc) || (tc.length >= 3 && sc.startsWith(tc.slice(0,3)) && sim >= 0.5);
     si++;
-    return { word: tw, status: (sim >= 0.65 || contained) ? "close" : "wrong", said: sArr[si - 1] };
+    return { word: tw, status: sim >= 0.65 ? "close" : "wrong", said: sArr[si - 1] };
   });
 }
 
@@ -3312,7 +3296,7 @@ const AIFeedbackCard = memo(function AIFeedbackCard({ feedback, target, onRetry,
           </div>
         </div>
         <div style={{ display:"flex", gap:6 }}>
-          {tts && target && <button onClick={() => { const s=window.speechSynthesis; if(s){try{s.cancel();}catch(_){}} tts.speak(target,{lang:settings?.accent||"en-US",rate:.88}); }} style={{ width:34,height:34,borderRadius:12,background:"var(--accent-soft)",border:"1px solid var(--accent-border)",cursor:"pointer",fontSize:15,color:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center" }}>🔊</button>}
+          {tts && target && <button onClick={() => { const s=window.speechSynthesis; if(s){try{s.cancel();}catch(_){}} setTimeout(()=>tts.speak(target,{lang:settings?.accent||"en-US",rate:.88}),80); }} style={{ width:34,height:34,borderRadius:12,background:"var(--accent-soft)",border:"1px solid var(--accent-border)",cursor:"pointer",fontSize:15,color:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center" }}>🔊</button>}
           {onRetry && <button onClick={onRetry} style={{ width:34,height:34,borderRadius:12,background:"var(--surf-2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:14,color:"var(--text-2)",display:"flex",alignItems:"center",justifyContent:"center" }}>🔄</button>}
         </div>
       </div>
@@ -3332,7 +3316,7 @@ const AIFeedbackCard = memo(function AIFeedbackCard({ feedback, target, onRetry,
       {naturalVersion && (
         <div style={{ padding:"9px 12px", background:"var(--green-soft)", border:"1px solid var(--green-border)", borderRadius:12, marginBottom:8, fontSize:12, color:"var(--text)", lineHeight:1.5 }}>
           <span style={{ fontWeight:800, color:"var(--green)" }}>🌟 Natural: </span>"{naturalVersion}"
-          <button onClick={() => { const s=window.speechSynthesis; if(s){try{s.cancel();}catch(_){}} tts?.speak(naturalVersion,{lang:settings?.accent||"en-US",rate:.9}); }} style={{ marginLeft:8, background:"none", border:"none", cursor:"pointer", fontSize:13, color:"var(--green)" }}>🔊</button>
+          <button onClick={() => { const s=window.speechSynthesis; if(s){try{s.cancel();}catch(_){}} setTimeout(()=>tts?.speak(naturalVersion,{lang:settings?.accent||"en-US",rate:.9}),80); }} style={{ marginLeft:8, background:"none", border:"none", cursor:"pointer", fontSize:13, color:"var(--green)" }}>🔊</button>
         </div>
       )}
       {onNext && <button onClick={onNext} style={{ width:"100%", marginTop:6, padding:"12px", borderRadius:16, background:"linear-gradient(135deg,var(--accent),var(--blue))", border:"none", cursor:"pointer", fontSize:13, fontWeight:700, color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>Next ✦</button>}
@@ -3371,25 +3355,16 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
   const stopRecord = async (tt) => {
     stt.stop();
     setPhase("analysing");
-    // FIX: wait for final transcript — Android Chrome needs more time after stop()
-    let attempts = 0;
-    const check = () => {
+    setTimeout(async () => {
       const spoken = stt.getLatest() || "";
-      attempts++;
-      if (spoken.trim()) {
-        const sc = calcScore(alignWords(tt.text, spoken));
-        const fluency = Math.min(100, Math.round(sc * 0.9 + Math.random() * 10));
-        setScores(p => ({ ...p, [tt.id]: sc }));
-        setFeedback({ score:sc, fluency, said:spoken, tip: sc<70?"Try slowing down and focusing on each sound.":"Great! Now try it faster!", naturalVersion:tt.text, grammarFix:null, pronunciationIssue: sc<60?`Focus on: ${tt.focus}`:null });
-        setPhase("done");
-        dispatch({ type:"ADD_XP", payload:Math.round(sc/10) }); dispatch({ type:"UPDATE_PROGRESS", payload:{ speaking: Math.min(100, Math.round(sc)) } });
-      } else if (attempts < 20) {
-        setTimeout(check, 150);
-      } else {
-        setPhase("idle");
-      }
-    };
-    setTimeout(check, 400);
+      if (!spoken.trim()) { setPhase("idle"); return; }
+      const sc = calcScore(alignWords(tt.text, spoken));
+      const fluency = Math.min(100, Math.round(sc * 0.9 + Math.random() * 10));
+      setScores(p => ({ ...p, [tt.id]: sc }));
+      setFeedback({ score:sc, fluency, said:spoken, tip: sc<70?"Try slowing down and focusing on each sound.":"Great! Now try it faster!", naturalVersion:tt.text, grammarFix:null, pronunciationIssue: sc<60?`Focus on: ${tt.focus}`:null });
+      setPhase("done");
+      dispatch({ type:"ADD_XP", payload:Math.round(sc/10) });
+    }, 600);
   };
 
   return (
@@ -3480,7 +3455,7 @@ const ShadowingMode = memo(function ShadowingMode({ state, dispatch }) {
       const fluency=Math.min(100,Math.round(sc*0.9+(spoken.split(" ").length/sentence.split(" ").length)*10));
       setFeedback({score:sc,fluency,said:spoken,tip:sc>=80?"Excellent shadowing! Your timing is perfect.":"Try to match the rhythm and stress of the original sentence.",naturalVersion:sentence,grammarFix:null,pronunciationIssue:sc<60?"Focus on matching the exact sounds you heard.":null});
       setPhase("done");
-      dispatch({type:"ADD_XP",payload:Math.round(sc/8)}); dispatch({type:"UPDATE_PROGRESS",payload:{speaking:Math.min(100,Math.round(sc))}});
+      dispatch({type:"ADD_XP",payload:Math.round(sc/8)});
     },600);
   },[stt, sentence, dispatch]);
 
@@ -3537,7 +3512,7 @@ const TransformTab = memo(function TransformTab({ state, dispatch }) {
   const TYPES=[{id:"affirmative",label:"+ Affirmative",col:"var(--green)",text:item.base},{id:"negative",label:"− Negative",col:"var(--red)",text:item.neg},{id:"interrogative",label:"? Question",col:"var(--blue)",text:item.q},{id:"exclamatory",label:"! Exclamatory",col:"var(--gold)",text:item.exc},{id:"imperative",label:"⟹ Imperative",col:"var(--purple)",text:item.imp}];
   const current=TYPES.find(t=>t.id===view);
   const startSpeak=async()=>{setPhase("recording");setFeedback(null);stt.reset();await stt.start();};
-  const stopSpeak=()=>{stt.stop();setPhase("analysing");setTimeout(()=>{const spoken=stt.getLatest()||"";if(!spoken.trim()){setPhase("idle");return;}const sc=calcScore(alignWords(current.text,spoken));setFeedback({score:sc,fluency:Math.min(100,sc+5),said:spoken,tip:sc>=80?"Perfect transformation!":"The correct form is: "+current.text,naturalVersion:current.text,grammarFix:sc<80?`Expected: "${current.text}"`:null,pronunciationIssue:null});setPhase("done");dispatch({type:"ADD_XP",payload:Math.round(sc/12)}); dispatch({type:"UPDATE_PROGRESS",payload:{writing:Math.min(100,Math.round(sc))}});},600);};
+  const stopSpeak=()=>{stt.stop();setPhase("analysing");setTimeout(()=>{const spoken=stt.getLatest()||"";if(!spoken.trim()){setPhase("idle");return;}const sc=calcScore(alignWords(current.text,spoken));setFeedback({score:sc,fluency:Math.min(100,sc+5),said:spoken,tip:sc>=80?"Perfect transformation!":"The correct form is: "+current.text,naturalVersion:current.text,grammarFix:sc<80?`Expected: "${current.text}"`:null,pronunciationIssue:null});setPhase("done");dispatch({type:"ADD_XP",payload:Math.round(sc/12)});},600);};
   return(
     <div style={{ animation:"fadeUp .3s ease" }}>
       <div style={{ fontFamily:"'Poppins',sans-serif",fontSize:14,fontWeight:800,color:"var(--text)",marginBottom:10 }}>Sentence Transformations</div>
@@ -3599,7 +3574,7 @@ const GrammarExercisesTab = memo(function GrammarExercisesTab({ state, dispatch 
   const start=key=>{setTopic(key);setCurrent(0);setChosen(null);setChecked(false);setScore(0);setDone(false);};
   const getQs=key=>getExerciseQuestions(key,isPro2);
   const check=()=>{if(chosen==null)return;setChecked(true);if(chosen===getQs(topic)[current].ans)setScore(s=>s+1);};
-  const next=()=>{const qs=getQs(topic);if(current+1>=qs.length){setDone(true);const f=score+(chosen===qs[current].ans?1:0);dispatch({type:"ADD_XP",payload:f*5});dispatch({type:"UPDATE_PROGRESS",payload:{grammar:Math.min(100,Math.round((f/qs.length)*100))}});}else{setCurrent(c=>c+1);setChosen(null);setChecked(false);}};
+  const next=()=>{const qs=getQs(topic);if(current+1>=qs.length){setDone(true);const f=score+(chosen===qs[current].ans?1:0);dispatch({type:"ADD_XP",payload:f*5});}else{setCurrent(c=>c+1);setChosen(null);setChecked(false);}};
   if(!topic) return(
     <div style={{ animation:"fadeUp .3s ease" }}>
       <div style={{ fontFamily:"'Poppins',sans-serif",fontSize:14,fontWeight:800,color:"var(--text)",marginBottom:12 }}>Grammar Exercises</div>
@@ -3919,7 +3894,7 @@ const SentencePractice = memo(function SentencePractice({ state, dispatch }) {
                     const al = alignWords(sent.text, tx);
                     const sc = calcScore(al);
                     setAligned(al); setScore(sc); setPhase("done");
-                    dispatch({ type:"ADD_XP", payload:Math.round(sc/10) }); dispatch({ type:"UPDATE_PROGRESS", payload:{ speaking: Math.min(100, Math.round(sc)) } });
+                    dispatch({ type:"ADD_XP", payload:Math.round(sc/10) });
                     e.target.value="";
                   }
                 }}
@@ -4005,7 +3980,7 @@ const IMAGE_BANK = {
     { id:"a1_7",  scene:"A child brushing teeth at a bathroom sink",                      hint:"What is the child doing? What time of day might it be?",                               imageUrl:getA1Image("a1_7") },
     { id:"a1_8",  scene:"A woman watering colourful flowers in a garden",                 hint:"Where is she? What is she doing? Describe the flowers.",                               imageUrl:getA1Image("a1_8") },
     { id:"a1_9",  scene:"A family sitting together on a sofa at home",                    hint:"Who can you see? How many people are there? How do they look?",                        imageUrl:getA1Image("a1_9") },
-    { id:"a1_10", scene:"An elderly man reading a newspaper in an armchair",               hint:"Who is in the picture? What is he doing? Where is he sitting?",                       imageUrl:getA1Image("a1_10") },
+    { id:"a1_10", scene:"A boy kicking a football in a sunny backyard",               hint:"Who is in the picture? What is he doing? Where is he sitting?",                       imageUrl:getA1Image("a1_10") },
   ],
   A2: [
     { id:"a2_1",  scene:"Two friends eating lunch and laughing at a café",                hint:"Who can you see? What are they doing? How do they feel?",                              imageUrl:getA2Image("a2_1") },
@@ -4039,9 +4014,9 @@ const IMAGE_BANK = {
     { id:"b2_5",  scene:"Two surgeons performing an operation in a bright theatre",        hint:"Describe what you see and discuss the importance of this scene.",                      imageUrl:getB2Image("b2_5") },
     { id:"b2_6",  scene:"A politician giving a press conference at a podium",              hint:"Describe the scene and speculate about what announcement is being made.",             imageUrl:getB2Image("b2_6") },
     { id:"b2_7",  scene:"Firefighters directing water at a burning building at night",     hint:"Describe the scene in detail and discuss the emotions involved.",                      imageUrl:getB2Image("b2_7") },
-    { id:"b2_8",  scene:"A startup team brainstorming with sticky notes on walls",        hint:"Describe the environment and discuss the type of work they might be doing.",           imageUrl:getB2Image("b2_8") },
-    { id:"b2_9",  scene:"A woman in formal wear accepting an award on a stage",           hint:"Describe the scene and speculate about what the award might be for.",                  imageUrl:getB2Image("b2_9") },
-    { id:"b2_10", scene:"A tired family arriving at a border checkpoint with aid workers", hint:"Describe what you see and reflect on the human story in this image.",                  imageUrl:getB2Image("b2_10") },
+    { id:"b2_8",  scene:"A tired family arriving at a border checkpoint with aid workers",        hint:"Describe what you see and reflect on the human story in this image.",           imageUrl:getB2Image("b2_8") },
+    { id:"b2_9",  scene:"A startup team brainstorming with sticky notes on walls",           hint:"Describe the environment and discuss the type of work they might be doing.",                  imageUrl:getB2Image("b2_9") },
+    { id:"b2_10", scene:"A woman in formal wear accepting an award on a stage", hint:"Describe the scene and speculate about what the award might be for.",                  imageUrl:getB2Image("b2_10") },
   ],
   C1: [
     { id:"c1_1",  scene:"World leaders at an international climate summit with climate data on screens",            hint:"Describe the leaders, the data on screen, and what this global meeting might mean for the future.",           imageUrl:getC1Image("c1_01_climate_summit") },
@@ -4176,9 +4151,9 @@ const SCENE_PROMPTS = {
     { id:"b2_5",  scene:"Two surgeons in scrubs performing an operation in a brightly lit operating theatre",                hint:"Describe what you see and discuss the importance of this scene" },
     { id:"b2_6",  scene:"A politician giving a press conference at a podium with microphones, reporters with cameras",       hint:"Describe the scene and speculate about what announcement is being made" },
     { id:"b2_7",  scene:"Firefighters in full gear directing water hoses at a burning building at night",                    hint:"Describe the scene in detail and discuss the emotions involved" },
-    { id:"b2_8",  scene:"A diverse startup team brainstorming around a screen with sticky notes on the wall",               hint:"Describe the environment and discuss the type of work they might be doing" },
-    { id:"b2_9",  scene:"A woman in formal wear accepting an award on a stage in a large auditorium, audience applauding",  hint:"Describe the scene and speculate about what the award might be for" },
-    { id:"b2_10", scene:"A tired family with children and bags arriving at a border checkpoint, aid workers greeting them",  hint:"Describe what you see and reflect on the human story in this image" },
+    { id:"b2_8",  scene:"A tired family with children and bags arriving at a border checkpoint, aid workers greeting them",               hint:"Describe the environment and discuss the type of work they might be doing" },
+    { id:"b2_9",  scene:"A diverse startup team brainstorming around a screen with sticky notes on the wall",  hint:"Describe the scene and speculate about what the award might be for" },
+    { id:"b2_10", scene:"A woman in formal wear accepting an award on a stage in a large auditorium, audience applauding",  hint:"Describe what you see and reflect on the human story in this image" },
   ],
 };
 
@@ -4260,11 +4235,11 @@ const SmartImage = React.memo(function SmartImage({ src, alt, style = {}, sceneT
         <div style={{ position:"absolute", inset:0 }}><ScenePlaceholder /></div>
       )}
       {status !== "error" && (
-        <img src={src} alt={alt||"Scene"} draggable={false} loading="eager" decoding="async"
+        <img src={src} alt={alt||"Scene"} draggable={false} loading="lazy" decoding="async"
           onLoad={() => setStatus("loaded")}
           onError={() => setStatus("error")}
           style={{ width:"100%", display:"block", objectFit:"cover", aspectRatio:"16/9",
-            filter:    status==="loaded"?"none":"blur(4px)",
+            filter:    status==="loaded"?"none":"blur(12px)",
             transform: status==="loaded"?"scale(1)":"scale(1.04)",
             transition:"filter .5s ease, transform .5s ease",
             opacity:   status==="loaded"?1:0,
@@ -5152,7 +5127,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
       setWords(merged);
       try { await window.storage?.set(STORAGE_KEY, JSON.stringify(merged)); } catch {}
       setGenMsg(`v Added ${newWords.length} words! Total: ${merged.length}`);
-      dispatch({ type: "ADD_XP", payload: 15 }); dispatch({ type: "UPDATE_PROGRESS", payload: { vocabulary: Math.min(100, (state?.progress?.vocabulary || 58) + 2) } });
+      dispatch({ type: "ADD_XP", payload: 15 });
     } else {
       setGenMsg("Generation failed - try again.");
     }
@@ -6457,27 +6432,17 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
             }}>
               {m.content}
             </div>
+
             {/* TTS button for AI messages */}
-            {m.role==="assistant" ? (
+            {m.role==="assistant" && (
               <button
-                onClick={() => { const cleaned = m.content.replace(/[*#`>[\]]/g,"").replace(/\s+/g," ").trim(); if(cleaned) window._safeSpeak(cleaned, state.settings.accent||"en-US", state.settings.speed||0.9); }}
-                style={{ background:"none", border:"none", cursor:"pointer", fontSize:16, color:"var(--text-3)", flexShrink:0, marginBottom:6, padding:4, borderRadius:8 }}
+                onClick={() => tts.speak(m.content.replace(/[✅❌💡📌*#`>]/g,""), {lang:state.settings.accent, rate:state.settings.speed})}
+                style={{ background:"none", border:"none", cursor:"pointer", fontSize:14, color:"var(--text-3)", flexShrink:0, marginBottom:6, padding:4, borderRadius:8, transition:"color .15s" }}
               >🔊</button>
-            ) : null}
-
-
-
-
-
-
-
-
-
-
-
-
+            )}
           </div>
         ))}
+
         {loading && (
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
             <div style={{
@@ -6556,13 +6521,9 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
               flex:1, padding:"11px 14px", borderRadius:20,
               border:"1.5px solid var(--border)",
               fontSize:14, background:"var(--surf-2)", color:"var(--text)",
-              height:42, maxHeight:120, lineHeight:1.5,
-              resize:"none",
-              overflow:"hidden",
-              appearance:"none",
+              height:42, maxHeight:120, lineHeight:1.5, resize:"none",
+              fontFamily:"'Inter',sans-serif", outline:"none",
               WebkitAppearance:"none",
-              fontFamily:"'Inter',sans-serif",
-              outline:"none",
             }}
           />
 
@@ -7522,10 +7483,6 @@ textarea { resize: none; }
 @keyframes fadeUp     { from { opacity:0; transform:translateY(16px) } to { opacity:1; transform:translateY(0) } }
 @keyframes fadeIn     { from { opacity:0 } to { opacity:1 } }
 @keyframes scaleIn    { from { opacity:0; transform:scale(.95) } to { opacity:1; transform:scale(1) } }
-
-textarea{ resize:none !important; }
-textarea::-webkit-resizer{ display:none; }
-textarea::-webkit-scrollbar{ display:none; }
 @keyframes spin       { to { transform:rotate(360deg) } }
 @keyframes pulse      { 0%,100%{opacity:.4} 50%{opacity:1} }
 @keyframes recPulse   { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.35)} 60%{box-shadow:0 0 0 20px rgba(239,68,68,0)} }
@@ -7616,8 +7573,11 @@ async function sendOTPToEmail(email) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Failed to send OTP");
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = data.error || `Failed to send OTP (${res.status})`;
+      throw new Error(data.code ? `${msg} [${data.code}]` : msg);
+    }
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
@@ -7631,8 +7591,11 @@ async function verifyOTPRemote(email, code) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, code }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Verification failed");
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = data.error || `Verification failed (${res.status})`;
+      throw new Error(data.code ? `${msg} [${data.code}]` : msg);
+    }
     return { ok: true, sessionToken: data.sessionToken };
   } catch (err) {
     return { ok: false, error: err.message };
@@ -7711,7 +7674,7 @@ const initialState = {
   screen:      savedUser ? "home" : "login",
   user:        savedUser || { name: "Learner", level: "B1", xp: 0, streak: 7, plan: "free", email: "", isGuest: false, isNew: false, isPro: false, expiryDate: null },
   settings:    { ...DEFAULT_SETTINGS, ...(loadSettings() || {}) },
-  progress:    { grammar: 42, vocabulary: 58, speaking: 30, writing: 45, ...(JSON.parse(localStorage.getItem("ep_progress") || "{}")) },
+  progress:    { grammar: 42, vocabulary: 58, speaking: 30, writing: 45 },
   dailyUsage:  { pronunciation: 0, conversations: 0, aiChat: 0 },
   adminConfig: { ...(loadAdminConfig() || DEFAULT_ADMIN) },
   toasts:      [],
@@ -7721,9 +7684,8 @@ function reducer(state, action) {
   switch (action.type) {
     case "SET_SCREEN":      return { ...state, screen: action.payload };
     case "SET_USER_LEVEL":  return { ...state, user: { ...state.user, level: action.payload } };
-    case "ADD_XP": { const nu = { ...state.user, xp: state.user.xp + action.payload }; saveUser(nu); return { ...state, user: nu }; }
-    case "UPDATE_PROGRESS": { const np = { ...state.progress, ...action.payload }; try { localStorage.setItem("ep_progress", JSON.stringify(np)); } catch {} return { ...state, progress: np }; }
-    case "UPDATE_STREAK": { const nu2 = { ...state.user, streak: action.payload }; saveUser(nu2); return { ...state, user: nu2 }; }
+    case "ADD_XP":          return { ...state, user: { ...state.user, xp: state.user.xp + action.payload } };
+    case "UPDATE_PROGRESS": return { ...state, progress: { ...state.progress, ...action.payload } };
     case "UPDATE_SETTINGS": {
       const next = { ...state.settings, ...action.payload };
       saveSettings(next);
@@ -8529,14 +8491,10 @@ const LoginPage = memo(function LoginPage({ dispatch }) {
         if (r) { const u = JSON.parse(r); if (ADMIN_EMAILS_LIST.includes(u.email?.toLowerCase())) return u; }
       } catch {} return null;
     })();
-    const today = new Date().toDateString();
-    const lastLogin = saved?.lastLoginDate;
-    const daysDiff = lastLogin ? Math.floor((new Date() - new Date(lastLogin)) / 86400000) : 999;
-    const newStreak = daysDiff === 0 ? (saved?.streak || 0) : daysDiff === 1 ? (saved?.streak || 0) + 1 : 1;
     dispatch({ type:"LOGIN", payload:{
       email: verifiedEmail.toLowerCase().trim(),
       name: "Admin", isPro: true, plan: "pro",
-      xp: saved?.xp || 0, streak: newStreak, lastLoginDate: today,
+      xp: saved?.xp || 0, streak: saved?.streak || 0,
       expiryDate: null, isNew: false, isGuest: false,
     }});
   };
@@ -8601,10 +8559,6 @@ const LoginPage = memo(function LoginPage({ dispatch }) {
           if (raw) { const u = JSON.parse(raw); if (u.email === email.trim().toLowerCase()) saved = u; }
         } catch {}
 
-        const today2 = new Date().toDateString();
-        const lastLogin2 = saved?.lastLoginDate;
-        const daysDiff2 = lastLogin2 ? Math.floor((new Date() - new Date(lastLogin2)) / 86400000) : 999;
-        const newStreak2 = daysDiff2 === 0 ? (saved?.streak || 0) : daysDiff2 === 1 ? (saved?.streak || 0) + 1 : 1;
         dispatch({
           type: "LOGIN",
           payload: {
@@ -8613,7 +8567,7 @@ const LoginPage = memo(function LoginPage({ dispatch }) {
             isPro:   saved?.isPro   || false,
             plan:    saved?.plan    || "free",
             xp:      saved?.xp      || 0,
-            streak:  newStreak2, lastLoginDate: today2,
+            streak:  saved?.streak  || 0,
             expiryDate: saved?.expiryDate || null,
             isNew:   false,
             isGuest: false,
@@ -9836,19 +9790,7 @@ export default function App() {
 
   // ✅ AUDIO FIX: unlock mobile audio pipeline on first user interaction
   useEffect(() => {
-    const handler = () => {
-      unlockAudio();
-      // FIX: also unlock speechSynthesis on Android Chrome - requires a gesture-triggered speak()
-      try {
-        const synth = window.speechSynthesis;
-        if (synth) {
-          const u = new SpeechSynthesisUtterance("");
-          u.volume = 0;
-          synth.speak(u);
-          setTimeout(() => { try { synth.cancel(); } catch(_) {} }, 100);
-        }
-      } catch(_) {}
-    };
+    const handler = () => { unlockAudio(); };
     window.addEventListener("touchstart", handler, { once: true, passive: true });
     window.addEventListener("click",      handler, { once: true, passive: true });
     return () => {
@@ -9960,6 +9902,4 @@ export default function App() {
     </>
   );
 }
-
-
 
