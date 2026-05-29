@@ -6441,11 +6441,13 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
 
             {/* TTS button for AI messages */}
             {m.role==="assistant" && (
+            {m.role==="assistant" ? (
               <button
                 onClick={() => { const cleaned = m.content.replace(/[*#`>[\]]/g,"").replace(/\s+/g," ").trim(); if(cleaned) window._safeSpeak(cleaned, state.settings.accent||"en-US", state.settings.speed||0.9); }}
                 style={{ background:"none", border:"none", cursor:"pointer", fontSize:16, color:"var(--text-3)", flexShrink:0, marginBottom:6, padding:4, borderRadius:8 }}
               >🔊</button>
-            )}
+              >🔊</button>
+            ) : null}
 
 
 
@@ -6461,7 +6463,6 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
             )}
           </div>
         ))}
-
         {loading && (
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
             <div style={{
