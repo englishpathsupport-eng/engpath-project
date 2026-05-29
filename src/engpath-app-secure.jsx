@@ -523,7 +523,7 @@ function useVoiceChat({ lang = "en-US", onTranscript, enabled = true } = {}) {
 
     const rec = new SR();
     rec.lang           = lang;
-    rec.continuous     = true;    // KEY: don't stop mid-speech
+    rec.continuous     = false;  // FIX: Android Chrome restarts cause duplicates
     rec.interimResults = true;
 
     rec.onstart = () => {
