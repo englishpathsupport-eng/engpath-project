@@ -4241,11 +4241,11 @@ const SmartImage = React.memo(function SmartImage({ src, alt, style = {}, sceneT
         <div style={{ position:"absolute", inset:0 }}><ScenePlaceholder /></div>
       )}
       {status !== "error" && (
-        <img src={src} alt={alt||"Scene"} draggable={false} loading="lazy" decoding="async"
+        <img src={src} alt={alt||"Scene"} draggable={false} loading="eager" decoding="async"
           onLoad={() => setStatus("loaded")}
           onError={() => setStatus("error")}
           style={{ width:"100%", display:"block", objectFit:"cover", aspectRatio:"16/9",
-            filter:    status==="loaded"?"none":"blur(12px)",
+            filter:    status==="loaded"?"none":"blur(4px)",
             transform: status==="loaded"?"scale(1)":"scale(1.04)",
             transition:"filter .5s ease, transform .5s ease",
             opacity:   status==="loaded"?1:0,
