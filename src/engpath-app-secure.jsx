@@ -6537,9 +6537,13 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
               flex:1, padding:"11px 14px", borderRadius:20,
               border:"1.5px solid var(--border)",
               fontSize:14, background:"var(--surf-2)", color:"var(--text)",
-              height:42, maxHeight:120, lineHeight:1.5, resize:"none",
-              fontFamily:"'Inter',sans-serif", outline:"none",
+              height:42, maxHeight:120, lineHeight:1.5,
+              resize:"none",
+              overflow:"hidden",
+              appearance:"none",
               WebkitAppearance:"none",
+              fontFamily:"'Inter',sans-serif",
+              outline:"none",
             }}
           />
 
@@ -7499,6 +7503,10 @@ textarea { resize: none; }
 @keyframes fadeUp     { from { opacity:0; transform:translateY(16px) } to { opacity:1; transform:translateY(0) } }
 @keyframes fadeIn     { from { opacity:0 } to { opacity:1 } }
 @keyframes scaleIn    { from { opacity:0; transform:scale(.95) } to { opacity:1; transform:scale(1) } }
+
+textarea{ resize:none !important; }
+textarea::-webkit-resizer{ display:none; }
+textarea::-webkit-scrollbar{ display:none; }
 @keyframes spin       { to { transform:rotate(360deg) } }
 @keyframes pulse      { 0%,100%{opacity:.4} 50%{opacity:1} }
 @keyframes recPulse   { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.35)} 60%{box-shadow:0 0 0 20px rgba(239,68,68,0)} }
