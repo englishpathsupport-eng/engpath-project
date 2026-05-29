@@ -324,6 +324,7 @@ function useSTT({ lang = "en-US" } = {}) {
     recRef.current.lang           = lang || "en-US";
     recRef.current.continuous     = false;  // FIX: Android Chrome restarts cause duplicates with continuous=true
     recRef.current.interimResults = true;
+    recRef.current.maxAlternatives = 1;  // FIX: get best alternative only
 
     recRef.current.onstart = () => {
       if (!mounted.current) return;
@@ -340,7 +341,16 @@ function useSTT({ lang = "en-US" } = {}) {
       if (!mounted.current) return;
       let fin = "", inter = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
+        // FIX: pick highest-confidence alternative
+        let bestT = e.results[i][0].transcript;
+        let bestConf = e.results[i][0].confidence || 0;
+        for (let j = 1; j < e.results[i].length; j++) {
+          if ((e.results[i][j].confidence || 0) > bestConf) {
+            bestConf = e.results[i][j].confidence;
+            bestT = e.results[i][j].transcript;
+          }
+        }
+        const t = bestT;
         if (e.results[i].isFinal) {
           if (i >= lastFinalIdx.current) { fin += t + " "; lastFinalIdx.current = i + 1; }
         } else { inter += t; }
@@ -352,12 +362,12 @@ function useSTT({ lang = "en-US" } = {}) {
           return next;
         });
         clearTimeout(silenceRef.current);
-        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 1500);
+        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 2500);
       }
       if (inter) {
         setInterim(inter);
         clearTimeout(silenceRef.current);
-        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 1500);
+        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 2500);
       }
     };
 
