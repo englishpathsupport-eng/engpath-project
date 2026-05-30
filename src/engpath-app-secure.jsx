@@ -3975,7 +3975,7 @@ const IMAGE_BANK = {
     { id:"a1_2",  scene:"A boy eating an apple in a kitchen",                             hint:"Who is in the picture? What is he eating? Where is he?",                               imageUrl:getA1Image("a1_2") },
     { id:"a1_3",  scene:"A dog sitting on a mat on a wooden floor",                       hint:"Describe the dog — what colour is it? What is it doing?",                              imageUrl:getA1Image("a1_3") },
     { id:"a1_4",  scene:"A girl riding a red bicycle in a sunny park",                    hint:"What is the girl doing? What can you see around her?",                                 imageUrl:getA1Image("a1_4") },
-    { id:"a1_5",  scene:"A boy kicking a football in a sunny backyard garden",            hint:"What is the boy doing? Describe the garden around him. What is the weather like?",     imageUrl:_EXTRA_A1["a1_5"] },
+    { id:"a1_5",  scene:"An elderly man sitting in an armchair reading a newspaper",       hint:"Describe the man — what is he doing? Where is he sitting? What is the atmosphere like?",     imageUrl:_EXTRA_A1["a1_5"] },
     { id:"a1_6",  scene:"A cat sitting on a windowsill looking outside",                  hint:"Describe the cat and what it is looking at. What can you see outside?",                imageUrl:getA1Image("a1_6") },
     { id:"a1_7",  scene:"A child brushing teeth at a bathroom sink",                      hint:"What is the child doing? What time of day might it be?",                               imageUrl:getA1Image("a1_7") },
     { id:"a1_8",  scene:"A woman watering colourful flowers in a garden",                 hint:"Where is she? What is she doing? Describe the flowers.",                               imageUrl:getA1Image("a1_8") },
