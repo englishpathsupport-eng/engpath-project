@@ -3738,12 +3738,44 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
     setTimeout(async () => {
       const spoken = stt.getLatest() || "";
       if (!spoken.trim()) { setPhase("idle"); return; }
-      const sc = calcScore(alignWords(tt.text, spoken));
-      const fluency = Math.min(100, Math.round(sc * 0.9 + Math.random() * 10));
-      setScores(p => ({ ...p, [tt.id]: sc }));
-      setFeedback({ score:sc, fluency, said:spoken, tip: sc<70?"Try slowing down and focusing on each sound.":"Great! Now try it faster!", naturalVersion:tt.text, grammarFix:null, pronunciationIssue: sc<60?`Focus on: ${tt.focus}`:null });
+      const localSc = calcScore(alignWords(tt.text, spoken));
+      try {
+        const aiPrompt = "You are an English pronunciation judge for a tongue twister app.
+
+Target: \"" + tt.text + "\"
+STT transcript: \"" + spoken + "\"
+Focus: " + tt.focus + "
+
+IMPORTANT: Browser STT often mishears tongue twisters badly. Example: \"She sells sea shells\" gets transcribed as \"freshers seashore\". The learner IS attempting the target - STT just fails on similar sounds.
+
+Judge phonetic similarity between transcript and target:
+- Similar sounds/rhythm/syllables = 60-90 score
+- Compound word variants (seashells=sea shells) = correct
+- Only score below 40 if transcript is completely unrelated
+
+Return ONLY JSON: {\"score\":0-100,\"fluency\":0-100,\"tip\":\"specific tip for " + tt.focus + "\",\"wordFeedback\":\"encouragement\"}";
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 200, messages: [{ role: "user", content: aiPrompt }] })
+        });
+        const data = await res.json();
+        const raw = (data?.content?.[0]?.text || "").replace(/```json|```/g, "").trim();
+        const parsed = JSON.parse(raw);
+        if (parsed?.score != null) {
+          const aiSc = parsed.score;
+          setScores(p => ({ ...p, [tt.id]: aiSc }));
+          setFeedback({ score:aiSc, fluency:parsed.fluency||aiSc, said:spoken, tip:parsed.tip||"Keep practising!", naturalVersion:tt.text, grammarFix:parsed.wordFeedback||null, pronunciationIssue:aiSc<60?"Focus on: "+tt.focus:null });
+          setPhase("done");
+          dispatch({ type:"ADD_XP", payload:Math.round(aiSc/10) });
+          return;
+        }
+      } catch(_) {}
+      const fluency = Math.min(100, Math.round(localSc * 0.9 + Math.random() * 10));
+      setScores(p => ({ ...p, [tt.id]: localSc }));
+      setFeedback({ score:localSc, fluency, said:spoken, tip: localSc<70?"Try slowing down and focusing on each sound.":"Great! Now try it faster!", naturalVersion:tt.text, grammarFix:null, pronunciationIssue: localSc<60?"Focus on: "+tt.focus:null });
       setPhase("done");
-      dispatch({ type:"ADD_XP", payload:Math.round(sc/10) });
+      dispatch({ type:"ADD_XP", payload:Math.round(localSc/10) });
     }, 600);
   };
 
