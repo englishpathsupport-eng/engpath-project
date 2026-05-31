@@ -6648,7 +6648,7 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
 
   const tts        = useTTS();
   // English STT
-  const sttEn      = useSTT({ lang: state.settings.accent }); // auto-detects any spoken language
+  const sttEn      = useSTT({ lang: '' }); // empty = browser auto-detects any language
   // Native language STT (Malayalam, Hindi, etc.)
   const sttNative  = useSTT({ lang: `${state.settings.lang}-IN` });
   const bottomRef  = useRef(null);
@@ -6688,7 +6688,7 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
     const langHint    = langLabel && settingsRef.current.lang !== "en"
       ? `\nWhen helpful, add a brief ${langLabel} translation in brackets [ ] after key terms.`
       : "";
-    const system      = modeSystem + `\n\nUser English level: ${levelRef.current}. Be concise (2-3 sentences max in voice mode).${langHint}`;
+    const system      = modeSystem + `\n\nUser English level: ${levelRef.current}. IMPORTANT: The user may speak in ANY language (Malayalam, Arabic, Tamil, Hindi, etc.). You MUST always reply in English only, regardless of what language the user speaks. Be concise (2-3 sentences max in voice mode).${langHint}`;
     const historyForApi = nextMsgs
       .filter(m => m.id !== "welcome")
       .slice(-10)
@@ -6808,7 +6808,7 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
     const langHint  = langLabel && state.settings.lang !== "en"
       ? `\nWhen helpful, add a brief ${langLabel} translation in brackets [ ] after key terms or phrases.`
       : "";
-    const system = modeSystem + `\n\nUser English level: ${state.user.level}. Be concise (max 3-4 sentences unless explaining grammar).${langHint}`;
+    const system = modeSystem + `\n\nUser English level: ${state.user.level}. IMPORTANT: The user may write or speak in ANY language. You MUST always reply in English only. Be concise (max 3-4 sentences unless explaining grammar).${langHint}`;
 
     // Build history without the welcome message to avoid confusing the AI
     const historyForApi = newMessages
