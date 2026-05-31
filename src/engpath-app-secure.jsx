@@ -6648,10 +6648,11 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
   const [voiceGender, setVoiceGender] = useState(state.settings.voice || "female");
 
   const tts        = useTTS();
-  // English STT
-  const sttEn      = useSTT({ lang: '' }); // empty = browser auto-detects any language
-  // Native language STT (Malayalam, Hindi, etc.)
-  const sttNative  = useSTT({ lang: `${state.settings.lang}-IN` });
+  // Auto STT language from user settings
+  const sttLangMap = { ml:"ml-IN", hi:"hi-IN", ta:"ta-IN", te:"te-IN", ar:"ar-SA", fr:"fr-FR", de:"de-DE", es:"es-ES", zh:"zh-CN", ja:"ja-JP", tl:"fil-PH" };
+  const sttLang    = sttLangMap[state.settings.lang] || state.settings.accent || "en-US";
+  const sttEn      = useSTT({ lang: sttLang });
+  const sttNative  = useSTT({ lang: sttLang });
   const bottomRef  = useRef(null);
   const modeData   = MODES.find(m => m.id === mode) || MODES[0];
 
