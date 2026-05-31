@@ -6974,14 +6974,28 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
                 : "var(--surf)",
               border: m.role==="user" ? "none" : "1px solid var(--border)",
               color: m.role==="user" ? "#fff" : "var(--text)",
-              fontSize:14, lineHeight:1.7,
+              fontSize:14, lineHeight:1.8,
               boxShadow: m.role==="user"
                 ? "0 4px 16px rgba(108,92,231,.35)"
                 : "var(--shadow-sm)",
               animation:"fadeUp .22s ease",
               fontFamily:"'Inter',sans-serif",
             }}>
-              {m.content}
+              {m.role==="assistant" ? (
+                <div dangerouslySetInnerHTML={{ __html:
+                  m.content
+                    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+                    .replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>")
+                    .replace(/\*(.*?)\*/g,"<em>$1</em>")
+                    .replace(/`(.*?)`/g,"<code style='background:var(--surf-2);padding:2px 6px;border-radius:6px;font-size:13px'>$1</code>")
+                    .replace(/
+
+/g,"</p><p style='margin:8px 0'>")
+                    .replace(/
+/g,"<br/>")
+                    .replace(/^/,"<p style='margin:0'>").replace(/$/,"</p>")
+                }} />
+              ) : m.content}
             </div>
 
             {/* TTS button for AI messages */}
@@ -7102,7 +7116,7 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
         </div>
 
         <div style={{ display:"flex", justifyContent:"space-between", marginTop:5, padding:"0 4px", fontSize:10, color:"var(--text-3)" }}>
-          <span>🎙 Speak any language — AI replies in English</span>
+          <span>🎙 {{"ml":"Malayalam","hi":"Hindi","ta":"Tamil","te":"Telugu","ar":"Arabic","fr":"French","de":"German","es":"Spanish","zh":"Chinese","ja":"Japanese","tl":"Tagalog"}[state.settings.lang] || "English"} mic · AI replies in English</span>
           <span style={{ color:modeData.color, fontWeight:600 }}>{modeData.icon} {modeData.label}</span>
         </div>
       </div>
