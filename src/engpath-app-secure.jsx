@@ -343,7 +343,8 @@ function useSTT({ lang = "en-US" } = {}) {
       }
       if (fin) {
         setTranscript(prev => {
-          const next = (prev + fin).trim();
+          // FIX: replace with latest final, don't append (prevents repetition)
+          const next = fin.trim();
           txRef.current = next;
           return next;
         });
