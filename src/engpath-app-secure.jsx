@@ -7026,11 +7026,8 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
                     .replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>")
                     .replace(/\*(.*?)\*/g,"<em>$1</em>")
                     .replace(/`(.*?)`/g,"<code style='background:var(--surf-2);padding:2px 6px;border-radius:6px;font-size:13px'>$1</code>")
-                    .replace(/
-
-/g,"</p><p style='margin:8px 0'>")
-                    .replace(/
-/g,"<br/>")
+                    .replace(/\n/g,"</p><p style='margin:8px 0'>")
+                    .replace(/\n/g,"<br/>")
                     .replace(/^/,"<p style='margin:0'>").replace(/$/,"</p>")
                 }} />
               ) : m.content}
