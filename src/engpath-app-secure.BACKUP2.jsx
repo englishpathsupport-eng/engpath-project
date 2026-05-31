@@ -6648,7 +6648,7 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
 
   const tts        = useTTS();
   // English STT
-  const sttEn      = useSTT({ lang: state.settings.accent }); // auto-detects any spoken language
+  const sttEn      = useSTT({ lang: state.settings.accent });
   // Native language STT (Malayalam, Hindi, etc.)
   const sttNative  = useSTT({ lang: `${state.settings.lang}-IN` });
   const bottomRef  = useRef(null);
@@ -7016,23 +7016,23 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
         position:"relative", zIndex:10,
       }}>
         {/* Live waveform when recording */}
-        {sttEn.recording && (
+        {(sttEn.recording || sttNative.recording) && (
           <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 14px", marginBottom:8,
             background: sttEn.recording ? "var(--accent-soft)" : "var(--gold-soft)",
             borderRadius:16, border:`1px solid ${sttEn.recording ? "var(--accent-border)" : "var(--gold-border)"}` }}>
             <div style={{ display:"flex", gap:2, alignItems:"center" }}>
               {Array.from({length:16}).map((_,i)=>(
                 <div key={i} style={{ width:2.5, borderRadius:2,
-                  background: "var(--accent)",
+                  background: sttEn.recording ? "var(--accent)" : "var(--gold)",
                   height:`${10+Math.sin(i*0.8)*8}px`,
                   animation:`wave ${0.35+i*0.04}s ease-in-out infinite`,
                   animationDelay:`${i*0.03}s` }} />
               ))}
             </div>
             <span style={{ fontSize:12, fontWeight:600, color:sttEn.recording?"var(--accent)":"var(--gold)", flex:1 }}>
-              "🎙 Listening... (any language)"
+              {sttEn.recording ? "🎙 Listening in English..." : `🌐 Listening in ${LANG_LABELS[state.settings.lang]||"your language"}...`}
             </span>
-            <button onClick={sttEn.stop}
+            <button onClick={sttEn.recording ? sttEn.stop : sttNative.stop}
               style={{ padding:"5px 10px", borderRadius:999, border:"none", cursor:"pointer",
                 background:sttEn.recording?"var(--accent)":"var(--gold)", color:"#fff", fontSize:11, fontWeight:700 }}>
               Stop ⏹
@@ -7041,7 +7041,20 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
         )}
 
         <div style={{ display:"flex", gap:7, alignItems:"flex-end" }}>
-
+          {/* Native language voice */}
+          <button
+            onClick={sttNative.recording ? sttNative.stop : sttNative.start}
+            title={`Speak in ${LANG_LABELS[state.settings.lang]||"your language"}`}
+            style={{
+              width:42, height:42, borderRadius:"50%", border:"none", flexShrink:0,
+              background: sttNative.recording ? "var(--gold)" : "var(--surf-2)",
+              cursor:"pointer", fontSize:18,
+              display:"flex", alignItems:"center", justifyContent:"center",
+              color: sttNative.recording ? "#fff" : "var(--text-3)",
+              boxShadow: sttNative.recording ? "0 0 0 4px rgba(245,158,11,.25)" : "none",
+              transition:"all .2s",
+            }}
+          >🌐</button>
 
           <textarea
             value={input}
@@ -7100,7 +7113,7 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
         </div>
 
         <div style={{ display:"flex", justifyContent:"space-between", marginTop:5, padding:"0 4px", fontSize:10, color:"var(--text-3)" }}>
-          <span>🎙 Speak any language — AI replies in English</span>
+          <span>🌐 {LANG_LABELS[state.settings.lang]||"Native"} &nbsp;·&nbsp; 🎙 English</span>
           <span style={{ color:modeData.color, fontWeight:600 }}>{modeData.icon} {modeData.label}</span>
         </div>
       </div>
