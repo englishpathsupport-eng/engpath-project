@@ -7116,7 +7116,7 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
         </div>
 
         <div style={{ display:"flex", justifyContent:"space-between", marginTop:5, padding:"0 4px", fontSize:10, color:"var(--text-3)" }}>
-          <span>🎙 {{"ml":"Malayalam","hi":"Hindi","ta":"Tamil","te":"Telugu","ar":"Arabic","fr":"French","de":"German","es":"Spanish","zh":"Chinese","ja":"Japanese","tl":"Tagalog"}[state.settings.lang] || "English"} mic · AI replies in English</span>
+          <span>🎙 {({"ml":"Malayalam","hi":"Hindi","ta":"Tamil","te":"Telugu","ar":"Arabic","fr":"French","de":"German","es":"Spanish","zh":"Chinese","ja":"Japanese","tl":"Tagalog"})[state.settings.lang] || "English"} mic · AI replies in English</span>
           <span style={{ color:modeData.color, fontWeight:600 }}>{modeData.icon} {modeData.label}</span>
         </div>
       </div>
