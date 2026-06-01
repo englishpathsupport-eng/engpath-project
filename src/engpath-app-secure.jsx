@@ -961,22 +961,14 @@ Keep under 200 words. Use clear formatting.`;
 }
 
 // ── Vocabulary AI generator ──────────────────────────────────────
-export async function generateVocabWords(level, existingWords = [], count = 50) {
+export async function generateVocabWords(level, existingWords = [], count = 50, nativeLang = "ml") {
   const existing = existingWords.slice(-20).join(", ");
-  const prompt = `Generate ${count} useful ${level} English vocabulary words NOT in: [${existing}].
-Return ONLY a JSON array (no markdown):
-[
-  {
-    "word": "...",
-    "pos": "noun|verb|adjective|adverb|phrase",
-    "meaning": "one-sentence definition",
-    "example": "natural example sentence",
-    "translation": "Malayalam translation",
-    "cefr": "${level}"
-  },
-  ...
-]
-Focus on: varied parts of speech, real-life practical use, academic/professional contexts.`;
+  const LANG_NAMES = {ml:"Malayalam",hi:"Hindi",ta:"Tamil",te:"Telugu",ar:"Arabic",fr:"French",de:"German",es:"Spanish",zh:"Chinese",ja:"Japanese",ko:"Korean",pt:"Portuguese"};
+  const langName = LANG_NAMES[nativeLang] || "Hindi";
+  const prompt = `Generate ${count} useful ${level} CEFR English vocabulary words. Do NOT repeat: [${existing}].
+Return ONLY valid JSON array, no markdown, no extra text:
+[{"word":"example","pos":"noun","meaning":"a thing that represents others","example":"This is a good example sentence.","translation":"translation in ${langName}","cefr":"${level}"}]
+Rules: exactly ${count} objects, varied pos (noun/verb/adj/adv), practical ${level} level words, accurate ${langName} translation, natural example sentence.`;
 
   const raw = await callClaude(
     "Expert English teacher. Return valid JSON arrays only. No markdown.",
@@ -5741,7 +5733,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
     }
     setGenerating(true);
     setGenMsg(`Generating 50 more ${level} words via AI...`);
-    const newWords = await generateVocabWords(level, words.map(w => w.word), 50);
+    const newWords = await generateVocabWords(level, words.map(w => w.word), 50, currentLang || "ml");
     if (newWords.length) {
       const merged = [...words, ...newWords];
       setWords(merged);
