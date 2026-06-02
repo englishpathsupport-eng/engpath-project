@@ -2999,7 +2999,7 @@ const SENTENCES = {
     { text: "The committee has reached a unanimous decision.",            focus:"Formal vocab | Stress", ipa:"ðə kəˈmɪti hæz riːtʃt ə juːˈnænɪməs dɪˈsɪʒən"             },
     { text: "He specifically requested a vegetarian meal.",               focus:"Specifically | Stress", ipa:"hiː spɪˈsɪfɪkli rɪˈkwɛstɪd ə ˌvɛdʒɪˈtɛərɪən miːl"        },
     { text: "Despite the challenges, they managed to complete the project.",focus:"Contrast | Rhythm", ipa:"dɪˈspaɪt ðə ˈtʃælɪndʒɪz ðeɪ ˈmænɪdʒd tə kəmˈpliːt ðə ˈprɒdʒɛkt"},
-    { text: "I would have helped if I had known about the problem.",      focus:"Third conditional",    ipa:"aɪ wʊd həv hɛlpt ɪf aɪ həd nəʊn əˈbaʊt ðə ˈprɒbləm"      },
+    { text: "I would have helfunction alignWordsped if I had known about the problem.",      focus:"Third conditional",    ipa:"aɪ wʊd həv hɛlpt ɪf aɪ həd nəʊn əˈbaʊt ðə ˈprɒbləm"      },
   ],
   C1: [
     { text: "The government introduced new environmental regulations.",   focus:"Polysyllabic stress",  ipa:"ðə ˈɡʌvənmənt ɪntrəˈdjuːst njuː ɪnˌvaɪrənˈmɛntəl ˌrɛɡjʊˈleɪʃənz"},
@@ -3012,7 +3012,7 @@ const SENTENCES = {
 
 
 
-function alignWords(target, spoken) {
+(target, spoken) {
   const clean = (w) => w.toLowerCase().replace(/[^a-z']/g, "");
   const tArr  = target.trim().split(/\s+/);
   const sArr  = spoken.trim().split(/\s+/).filter(Boolean);

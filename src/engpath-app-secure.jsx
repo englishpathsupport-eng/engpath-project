@@ -3003,30 +3003,30 @@ const SENTENCES = {
 
 // Normalize text for phonetic comparison
 function normalizeForComparison(text) {
-  return (text || '')
-    .toLowerCase()
-    .replace(/[^a-z'\s]/g, '')
-    .replace(/\b44\b/g, 'forty four')
-    .replace(/\b33\b/g, 'thirty three')
-    .replace(/\bseashells?\b/g, 'sea shells')
-    .replace(/\bsea\s+shells?\b/g, 'sea shells')
-    .replace(/\bseashore\b/g, 'sea shore')
-    .replace(/\bsea\s+shore\b/g, 'sea shore')
-    .replace(/\bwoodchucks?\b/g, 'wood chuck')
-    .replace(/\bwood\s+chuck\b/g, 'wood chuck')
-    .replace(/\bicecream\b/g, 'ice cream')
-    .replace(/\bice\s+cream\b/g, 'ice cream')
-    .replace(/\bshoeshine\b/g, 'shoe shine')
-    .replace(/\bshoe\s+shine\b/g, 'shoe shine')
-    .replace(/\bwristwatches?\b/g, 'wrist watch')
-    .replace(/\bwrist\s+watches?\b/g, 'wrist watch')
-    .replace(/\bforty\s*-?\s*four\b/g, 'forty four')
-    .replace(/\bthirty\s*-?\s*three\b/g, 'thirty three')
-    .replace(/\bceaseth\b/g, 'ceases')
-    .replace(/\bsufficeth\b/g, 'suffices')
-    .replace(/\bthunk\b/g, 'thought')
-    .replace(/\s+/g, ' ')
-    .trim();
+  if (!text) return '';
+  let t = text.toLowerCase().replace(/[^a-z'\s]/g, '');
+  const pairs = [
+    [/\bseashells?\b/g,'sea shells'],[/\bsea\s+shells?\b/g,'sea shells'],
+    [/\bseashore\b/g,'sea shore'],[/\bsea\s+shore\b/g,'sea shore'],
+    [/\bwoodchucks?\b/g,'wood chuck'],[/\bwood\s+chuck\b/g,'wood chuck'],
+    [/\bicecream\b/g,'ice cream'],[/\bshoeshine\b/g,'shoe shine'],
+    [/\bwristwatches?\b/g,'wrist watch'],
+    [/\b44\b/g,'forty four'],[/\b33\b/g,'thirty three'],
+    [/\bforty\s*-?\s*four\b/g,'forty four'],[/\bthirty\s*-?\s*three\b/g,'thirty three'],
+    [/\bceaseth\b/g,'ceases'],[/\bsufficeth\b/g,'suffices'],[/\bthunk\b/g,'thought'],
+    [/\bt-?shirts?\b/g,'she sells'],[/\btee\s+shirt\b/g,'she sells'],
+    [/\bfreshers?\b/g,'she sells'],[/\bshelly\b/g,'she'],
+    [/\blori(e)?\b/g,'lorry'],[/\byelo\b/g,'yellow'],
+    [/\bruber\b/g,'rubber'],[/\bbuggie\b/g,'buggy'],
+    [/\bwud\b/g,'wood'],[/\bwould\s+chuck\b/g,'wood chuck'],
+    [/\byunique\b/g,'unique'],[/\bnew\s+yoke\b/g,'new york'],
+    [/\bthirdy\b/g,'thirty'],[/\btheives\b/g,'thieves'],
+    [/\bpeeta\b/g,'peter'],[/\bpickle[ds]?\b/g,'pickled'],
+    [/\btoi\b/g,'toy'],[/\bbot\b/g,'boat'],
+    [/\bcoppa\b/g,'copper'],[/\bkoffee\b/g,'coffee'],
+  ];
+  pairs.forEach(([re,rep]) => { t = t.replace(re, rep); });
+  return t.replace(/\s+/g,' ').trim();
 }
 
 function alignWords(target, spoken) {
@@ -3050,13 +3050,17 @@ function alignWords(target, spoken) {
 }
 
 function calcScore(aligned, spokenWordCount) {
-  if (!aligned.length) return 0;
-  const weights = { correct: 1, close: 0.7, wrong: 0.1, missing: 0 };
-  const base = aligned.reduce((s, x) => s + (weights[x.status] || 0), 0) / aligned.length;
-  // Extra words penalty: if user said more than target, penalise proportionally
-  const extraWords = spokenWordCount != null ? Math.max(0, spokenWordCount - aligned.length) : 0;
-  const extraPenalty = extraWords > 0 ? Math.min(0.4, extraWords * 0.07) : 0;
-  return Math.max(0, Math.round((base - extraPenalty) * 100));
+  if (!aligned || !aligned.length) return 0;
+  const W = { correct: 1.0, close: 0.72, wrong: 0.15, missing: 0.0 };
+  const n = aligned.length;
+  const alignPct = aligned.reduce((s, x) => s + (W[x.status] || 0), 0) / n;
+  const coveragePct = aligned.filter(x => x.status !== 'missing').length / n;
+  const correctRatio = aligned.filter(x => x.status === 'correct').length / n;
+  const bonusPct = correctRatio >= 0.85 ? 1.0 : 0.0;
+  const extra = spokenWordCount != null ? Math.max(0, spokenWordCount - n) : 0;
+  const extraPenalty = Math.min(0.15, extra * 0.03);
+  const raw = (alignPct * 0.60 + coveragePct * 0.30 + bonusPct * 0.10) - extraPenalty;
+  return Math.max(0, Math.min(100, Math.round(raw * 100)));
 }
 
 /* ── Waveform ───────────────────────────────────────────────── */
@@ -3732,20 +3736,16 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
       if (!spoken.trim()) { setPhase("idle"); return; }
       const localSc = calcScore(alignWords(tt.text, spoken));
       try {
-        const aiPrompt = "You are an English pronunciation judge for a tongue twister app.
-
-Target: \"" + tt.text + "\"
-STT transcript: \"" + spoken + "\"
-Focus: " + tt.focus + "
-
-IMPORTANT: Browser STT often mishears tongue twisters badly. Example: \"She sells sea shells\" gets transcribed as \"freshers seashore\". The learner IS attempting the target - STT just fails on similar sounds.
-
-Judge phonetic similarity between transcript and target:
-- Similar sounds/rhythm/syllables = 60-90 score
-- Compound word variants (seashells=sea shells) = correct
-- Only score below 40 if transcript is completely unrelated
-
-Return ONLY JSON: {\"score\":0-100,\"fluency\":0-100,\"tip\":\"specific tip for " + tt.focus + "\",\"wordFeedback\":\"encouragement\"}";
+        const aiPrompt = "You are an English pronunciation judge for a tongue twister app.\n"
+          + "Target: \"" + tt.text + "\"\n"
+          + "STT transcript: \"" + spoken + "\"\n"
+          + "Focus: " + tt.focus + "\n"
+          + "IMPORTANT: Browser STT often mishears tongue twisters badly. Example: \"She sells sea shells\" gets transcribed as \"freshers seashore\". The learner IS attempting the target - STT just fails on similar sounds.\n"
+          + "Judge phonetic similarity between transcript and target:\n"
+          + "- Similar sounds/rhythm/syllables = 60-90 score\n"
+          + "- Compound word variants (seashells=sea shells) = correct\n"
+          + "- Only score below 40 if transcript is completely unrelated\n"
+          + "Return ONLY JSON: {\"score\":0-100,\"fluency\":0-100,\"tip\":\"specific tip for " + tt.focus + "\",\"wordFeedback\":\"encouragement\"}";
         const res = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -3759,15 +3759,15 @@ Return ONLY JSON: {\"score\":0-100,\"fluency\":0-100,\"tip\":\"specific tip for 
           setScores(p => ({ ...p, [tt.id]: aiSc }));
           setFeedback({ score:aiSc, fluency:parsed.fluency||aiSc, said:spoken, tip:parsed.tip||"Keep practising!", naturalVersion:tt.text, grammarFix:parsed.wordFeedback||null, pronunciationIssue:aiSc<60?"Focus on: "+tt.focus:null });
           setPhase("done");
-          dispatch({ type:"ADD_XP", payload:Math.round(aiSc/10) });
+          dispatch({ type:"ADD_XP", payload: aiSc>=90?25:aiSc>=75?15:aiSc>=55?8:aiSc>=35?4:1 });
           return;
         }
       } catch(_) {}
-      const fluency = Math.min(100, Math.round(localSc * 0.9 + Math.random() * 10));
+      const fluency = Math.min(100, Math.round(localSc * 0.92 + 5));
       setScores(p => ({ ...p, [tt.id]: localSc }));
       setFeedback({ score:localSc, fluency, said:spoken, tip: localSc<70?"Try slowing down and focusing on each sound.":"Great! Now try it faster!", naturalVersion:tt.text, grammarFix:null, pronunciationIssue: localSc<60?"Focus on: "+tt.focus:null });
       setPhase("done");
-      dispatch({ type:"ADD_XP", payload:Math.round(localSc/10) });
+      dispatch({ type:"ADD_XP", payload: localSc>=90?25:localSc>=75?15:localSc>=55?8:localSc>=35?4:1 });
     }, 600);
   };
 
