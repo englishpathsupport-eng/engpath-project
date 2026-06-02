@@ -5734,6 +5734,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
     setGenerating(true);
     setGenMsg(`Generating 50 more ${level} words via AI...`);
     const newWords = await generateVocabWords(level, words.map(w => w.word), 50, currentLang || "ml");
+    console.log("[VOCAB] generated:", newWords.length, newWords[0]);
     if (newWords.length) {
       const merged = [...words, ...newWords];
       setWords(merged);
