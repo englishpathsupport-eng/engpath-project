@@ -698,6 +698,7 @@ const LANG_LABELS = {
 };
 
 export async function translateText(text, targetLang) {
+  if (targetLang === "en") return text;
   const label = LANG_LABELS[targetLang] || "Malayalam";
   return callClaude(
     `You are a professional translator. Reply ONLY with the ${label} translation, nothing else.`,
@@ -6307,7 +6308,7 @@ const Dictionary = memo(function Dictionary({ state, dispatch }) {
             </div>
 
             {/* Translation */}
-            {result.translation && (
+            {result.translation && state.settings.lang !== "en" && (
               <div style={{ padding: "10px 14px", background: "var(--gold-soft)", border: "1px solid var(--gold-border)", borderRadius: 12, marginBottom: 14, display: "flex", gap: 8, alignItems: "center" }}>
                 <span style={{ fontSize: 18 }}>🌐</span>
                 <div>
