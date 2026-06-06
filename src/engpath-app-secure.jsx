@@ -3675,6 +3675,13 @@ const AIFeedbackCard = memo(function AIFeedbackCard({ feedback, target, onRetry,
         </div>
       </div>
 
+      {/* ── AI Pronunciation Tip (from Claude) ── */}
+      {tip && (
+        <div style={{ padding:"11px 13px", background:"var(--accent-soft)", border:"1px solid var(--accent-border)", borderRadius:14, marginBottom:8 }}>
+          <div style={{ fontSize:10, fontWeight:800, color:"var(--accent)", textTransform:"uppercase", letterSpacing:".06em", marginBottom:4 }}>💡 Pronunciation Tip</div>
+          <div style={{ fontSize:12, color:"var(--text)", lineHeight:1.6 }}>{tip}</div>
+        </div>
+      )}
       {/* ── Smart Tip ── */}
       <div style={{ padding:"11px 13px", background:`${smartTip.color}12`, border:`1px solid ${smartTip.color}35`, borderRadius:14, marginBottom:8 }}>
         <div style={{ fontSize:10, fontWeight:800, color:smartTip.color, textTransform:"uppercase", letterSpacing:".06em", marginBottom:4 }}>{smartTip.icon} {smartTip.label}</div>
