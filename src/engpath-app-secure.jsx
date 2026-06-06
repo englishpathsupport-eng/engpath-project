@@ -3584,7 +3584,7 @@ function getSmartTip(target, score) {
   if(score >= 70) return { icon:"⭐", color:"var(--gold)", label:"Great job!", msg:"Almost perfect! Focus on the stressed syllables to sound even more natural." };
   if(t.includes("would like") || t.includes("could you") || t.includes("i'd"))
     return { icon:"💬", color:"var(--blue)", label:"Connected Speech", msg:"Native speakers blend these words together — 'would like' sounds like 'wud-like', try saying it as one smooth phrase." };
-  if(t.includes("th"))
+  if(/\bth(e|at|is|ey|em|ink|ree|rew|ough|orn|irst|rough|irty|ank)\b/.test(t) && !t.includes("she sells") && !t.includes("shell"))
     return { icon:"👄", color:"var(--purple)||var(--accent)", label:"TH Sound", msg:"Place your tongue lightly between your teeth for 'th'. It's the most unique sound in English!" };
   if(t.includes("'ve") || t.includes("'re") || t.includes("'ll") || t.includes("'s"))
     return { icon:"🔗", color:"var(--blue)", label:"Contractions", msg:"Contractions like 'I've', 'you're' are key to sounding natural. Practise blending them smoothly." };
