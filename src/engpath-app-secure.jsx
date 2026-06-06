@@ -7194,18 +7194,18 @@ const ACCENTS = [
 ];
 
 const LANGUAGES = [
-  ["ml","🇮🇳","Malayalam"],
-  ["hi","🇮🇳","Hindi"],
-  ["ta","🇮🇳","Tamil"],
-  ["te","🇮🇳","Telugu"],
+  ["en","🇬🇧","English"],
   ["ar","🇸🇦","Arabic"],
+  ["zh","🇨🇳","Chinese"],
   ["fr","🇫🇷","French"],
   ["de","🇩🇪","German"],
-  ["es","🇪🇸","Spanish"],
-  ["zh","🇨🇳","Chinese"],
+  ["hi","🇮🇳","Hindi"],
   ["ja","🇯🇵","Japanese"],
+  ["ml","🇮🇳","Malayalam"],
   ["pt","🇧🇷","Portuguese"],
-  ["en","🇬🇧","English"],
+  ["es","🇪🇸","Spanish"],
+  ["ta","🇮🇳","Tamil"],
+  ["te","🇮🇳","Telugu"],
 ];
 
 // ✅ FIX: Free users are limited to the first 5 languages
