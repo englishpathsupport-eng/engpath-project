@@ -3751,7 +3751,7 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
           + "- Similar sounds/rhythm/syllables = 60-90 score\n"
           + "- Compound word variants (seashells=sea shells) = correct\n"
           + "- Only score below 40 if transcript is completely unrelated\n"
-          + "Return ONLY JSON: {\"score\":0-100,\"fluency\":0-100,\"tip\":\"specific tip for " + tt.focus + "\",\"wordFeedback\":\"encouragement\"}";
+          + "Return ONLY JSON: {\"score\":0-100,\"fluency\":0-100,\"tip\":\"one specific practical tip ONLY about " + tt.focus + " sound (do NOT mention other sounds)\",\"wordFeedback\":\"one short encouragement line\"}";
         const res = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
