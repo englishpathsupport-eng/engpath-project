@@ -3733,7 +3733,12 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
     stt.stop();
     setPhase("analysing");
     setTimeout(async () => {
-      const spoken = stt.getLatest() || "";
+      let spoken = stt.getLatest() || "";
+      // Retry up to 3 times if transcript not ready yet
+      for (let i = 0; i < 3 && !spoken.trim(); i++) {
+        await new Promise(r => setTimeout(r, 400));
+        spoken = stt.getLatest() || "";
+      }
       if (!spoken.trim()) { setPhase("idle"); return; }
       const localSc = calcScore(alignWords(tt.text, spoken));
       try {
