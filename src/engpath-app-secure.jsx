@@ -320,7 +320,8 @@ function useSTT({ lang = "en-US" } = {}) {
     }
 
     recRef.current = new SR();
-    recRef.current.lang           = lang || "en-US";
+    // Accept any English accent — use en-US as base for best recognition
+    recRef.current.lang           = "en-US";
     recRef.current.continuous     = true;   // FIX: keep listening - stop via silence or manual stop
     recRef.current.interimResults = true;
 
