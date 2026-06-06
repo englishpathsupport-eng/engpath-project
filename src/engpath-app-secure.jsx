@@ -3824,7 +3824,8 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
                   }
                 </div>
               )}
-              {isDone && feedback && (
+              {isDone&&feedback&&<div style={{ marginTop:10 }}><AIFeedbackCard feedback={feedback} target={tt.text} onRetry={()=>{setPhase("idle");setFeedback(null);setAligned([]);setAiTip("");stt.reset();}} onNext={()=>{setActive(null);setPhase("idle");setFeedback(null);setAligned([]);setAiTip("");}} tts={tts} settings={state.settings} /></div>}
+              {isDone && feedback && false && (
                 <div style={{ marginTop:12, animation:"fadeUp .3s ease" }}>
                   <div style={{ display:"flex", gap:20, alignItems:"center", flexWrap:"wrap", marginBottom:14, padding:"14px 16px", background:"var(--surf-2)", borderRadius:18, border:"1px solid var(--border)" }}>
                     <ScoreRing score={feedback.score} />
