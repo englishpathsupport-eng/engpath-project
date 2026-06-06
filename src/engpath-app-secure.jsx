@@ -3760,30 +3760,11 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
       setPhase("done");
       dispatch({ type:"ADD_XP", payload: localSc>=90?25:localSc>=75?15:localSc>=55?8:localSc>=35?4:1 });
       setAiLoading(true); setAiTip("");
-      try {
-        const aiPrompt = "You are an English pronunciation coach.\n"
-          + "Tongue twister: \"" + tt.text + "\"\n"
-          + "Student said: \"" + spoken + "\"\n"
-          + "Focus sound: " + tt.focus + "\n"
-          + "NOTE: Browser STT mishears tongue twisters badly — student IS attempting the target.\n"
-          + "Give ONE practical tip ONLY about the " + tt.focus + " sound. Max 2 sentences. Be encouraging.\n"
-          + "Return ONLY JSON: {\"score\":0-100,\"fluency\":0-100,\"tip\":\"tip here\",\"wordFeedback\":\"encouragement\"}";
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
-          method:"POST", headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:250, messages:[{role:"user",content:aiPrompt}] })
-        });
-        const data = await res.json();
-        const raw  = (data?.content?.[0]?.text||"").replace(/```json|```/g,"").trim();
-        const parsed = JSON.parse(raw);
-        if (parsed?.score != null) {
-          setScores(p => ({ ...p, [tt.id]: parsed.score }));
-          setFeedback(prev => ({ ...prev, score:parsed.score, fluency:parsed.fluency||prev.fluency }));
-        }
-        setAiTip(parsed?.tip || parsed?.wordFeedback || "Great effort! Keep practising!");
-      } catch(_) {
-        setAiTip(localSc>=70 ? "Great rhythm! Focus on each '"+tt.focus+"' sound clearly." : "Slow down and emphasise each '"+tt.focus+"' sound — speed comes with practice!");
-      }
-      setAiLoading(false);
+      getPronunciationFeedback(
+        tt.text + " (Focus: " + tt.focus + " sound)",
+        spoken
+      ).then(tip => { setAiTip(tip); setAiLoading(false); })
+       .catch(()  => { setAiTip(localSc>=70?"Great rhythm! Focus on each '"+tt.focus+"' sound clearly.":"Slow down and say each '"+tt.focus+"' sound clearly — speed comes with practice!"); setAiLoading(false); });
     }, 600);
   };
 
