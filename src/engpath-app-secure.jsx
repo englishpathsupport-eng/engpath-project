@@ -7204,6 +7204,8 @@ const LANGUAGES = [
   ["es","🇪🇸","Spanish"],
   ["zh","🇨🇳","Chinese"],
   ["ja","🇯🇵","Japanese"],
+  ["pt","🇧🇷","Portuguese"],
+  ["en","🇬🇧","English"],
 ];
 
 // ✅ FIX: Free users are limited to the first 5 languages
