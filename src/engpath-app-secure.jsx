@@ -3736,51 +3736,54 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
     await stt.start();
   };
 
+  const [aligned,  setAligned]  = useState([]);
+  const [aiTip,    setAiTip]    = useState("");
+  const [aiLoading,setAiLoading]= useState(false);
+
   const stopRecord = async (tt) => {
     stt.stop();
     setPhase("analysing");
     setTimeout(async () => {
       let spoken = stt.getLatest() || "";
-      // Retry up to 3 times if transcript not ready yet
       for (let i = 0; i < 3 && !spoken.trim(); i++) {
         await new Promise(r => setTimeout(r, 400));
         spoken = stt.getLatest() || "";
       }
       if (!spoken.trim()) { setPhase("idle"); return; }
-      const localSc = calcScore(alignWords(tt.text, spoken));
-      try {
-        const aiPrompt = "You are an English pronunciation judge for a tongue twister app.\n"
-          + "Target: \"" + tt.text + "\"\n"
-          + "STT transcript: \"" + spoken + "\"\n"
-          + "Focus: " + tt.focus + "\n"
-          + "IMPORTANT: Browser STT often mishears tongue twisters badly. Example: \"She sells sea shells\" gets transcribed as \"freshers seashore\". The learner IS attempting the target - STT just fails on similar sounds.\n"
-          + "Judge phonetic similarity between transcript and target:\n"
-          + "- Similar sounds/rhythm/syllables = 60-90 score\n"
-          + "- Compound word variants (seashells=sea shells) = correct\n"
-          + "- Only score below 40 if transcript is completely unrelated\n"
-          + "Return ONLY JSON: {\"score\":0-100,\"fluency\":0-100,\"tip\":\"one specific practical tip ONLY about " + tt.focus + " sound (do NOT mention other sounds)\",\"wordFeedback\":\"one short encouragement line\"}";
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 200, messages: [{ role: "user", content: aiPrompt }] })
-        });
-        const data = await res.json();
-        const raw = (data?.content?.[0]?.text || "").replace(/```json|```/g, "").trim();
-        const parsed = JSON.parse(raw);
-        if (parsed?.score != null) {
-          const aiSc = parsed.score;
-          setScores(p => ({ ...p, [tt.id]: aiSc }));
-          setFeedback({ score:aiSc, fluency:parsed.fluency||aiSc, said:spoken, tip:parsed.tip||"Keep practising!", naturalVersion:tt.text, grammarFix:parsed.wordFeedback||null, pronunciationIssue:aiSc<60?"Focus on: "+tt.focus:null });
-          setPhase("done");
-          dispatch({ type:"ADD_XP", payload: aiSc>=90?25:aiSc>=75?15:aiSc>=55?8:aiSc>=35?4:1 });
-          return;
-        }
-      } catch(_) {}
-      const fluency = Math.min(100, Math.round(localSc * 0.92 + 5));
+      const al = alignWords(tt.text, spoken);
+      const localSc = calcScore(al);
+      setAligned(al);
+      const fluency = Math.min(100, Math.round(al.filter(x=>x.status==="correct"||x.status==="close").length/Math.max(al.length,1)*100));
+      const complete = Math.min(100, Math.round(al.filter(x=>x.status!=="missing").length/Math.max(al.length,1)*100));
       setScores(p => ({ ...p, [tt.id]: localSc }));
-      setFeedback({ score:localSc, fluency, said:spoken, tip: localSc<70?"Try slowing down and focusing on each sound.":"Great! Now try it faster!", naturalVersion:tt.text, grammarFix:null, pronunciationIssue: localSc<60?"Focus on: "+tt.focus:null });
+      setFeedback({ score:localSc, fluency, complete, said:spoken, naturalVersion:tt.text });
       setPhase("done");
       dispatch({ type:"ADD_XP", payload: localSc>=90?25:localSc>=75?15:localSc>=55?8:localSc>=35?4:1 });
+      setAiLoading(true); setAiTip("");
+      try {
+        const aiPrompt = "You are an English pronunciation coach.\n"
+          + "Tongue twister: \"" + tt.text + "\"\n"
+          + "Student said: \"" + spoken + "\"\n"
+          + "Focus sound: " + tt.focus + "\n"
+          + "NOTE: Browser STT mishears tongue twisters badly — student IS attempting the target.\n"
+          + "Give ONE practical tip ONLY about the " + tt.focus + " sound. Max 2 sentences. Be encouraging.\n"
+          + "Return ONLY JSON: {\"score\":0-100,\"fluency\":0-100,\"tip\":\"tip here\",\"wordFeedback\":\"encouragement\"}";
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:250, messages:[{role:"user",content:aiPrompt}] })
+        });
+        const data = await res.json();
+        const raw  = (data?.content?.[0]?.text||"").replace(/```json|```/g,"").trim();
+        const parsed = JSON.parse(raw);
+        if (parsed?.score != null) {
+          setScores(p => ({ ...p, [tt.id]: parsed.score }));
+          setFeedback(prev => ({ ...prev, score:parsed.score, fluency:parsed.fluency||prev.fluency }));
+        }
+        setAiTip(parsed?.tip || parsed?.wordFeedback || "Great effort! Keep practising!");
+      } catch(_) {
+        setAiTip(localSc>=70 ? "Great rhythm! Focus on each '"+tt.focus+"' sound clearly." : "Slow down and emphasise each '"+tt.focus+"' sound — speed comes with practice!");
+      }
+      setAiLoading(false);
     }, 600);
   };
 
@@ -3821,7 +3824,67 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
                   }
                 </div>
               )}
-              {isDone&&feedback&&<div style={{ marginTop:10 }}><AIFeedbackCard feedback={feedback} target={tt.text} onRetry={()=>{setPhase("idle");setFeedback(null);stt.reset();}} onNext={()=>{setActive(null);setPhase("idle");setFeedback(null);}} tts={tts} settings={state.settings} /></div>}
+              {isDone && feedback && (
+                <div style={{ marginTop:12, animation:"fadeUp .3s ease" }}>
+                  <div style={{ display:"flex", gap:20, alignItems:"center", flexWrap:"wrap", marginBottom:14, padding:"14px 16px", background:"var(--surf-2)", borderRadius:18, border:"1px solid var(--border)" }}>
+                    <ScoreRing score={feedback.score} />
+                    <div style={{ flex:1, minWidth:140 }}>
+                      <div style={{ fontFamily:"'Poppins',sans-serif", fontSize:13, fontWeight:700, marginBottom:10, color:"var(--text)" }}>Breakdown</div>
+                      {[
+                        { label:"Accuracy", value:feedback.score },
+                        { label:"Complete", value:feedback.complete??Math.round(aligned.filter(x=>x.status!=="missing").length/Math.max(aligned.length,1)*100), color:"var(--accent)" },
+                        { label:"Fluency",  value:feedback.fluency, color:"var(--blue)" },
+                      ].map(b => (
+                        <ProgressBar key={b.label} value={b.value} label={b.label}
+                          color={b.color||(feedback.score>=80?"var(--green)":feedback.score>=55?"var(--gold)":"var(--red)")}
+                          style={{ marginBottom:6 }} />
+                      ))}
+                    </div>
+                  </div>
+                  {aligned.length>0 && (
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginBottom:8 }}>
+                      {aligned.map((x,i)=>(
+                        <span key={i} style={{ padding:"3px 9px", borderRadius:999, fontSize:12, fontWeight:700,
+                          background:x.status==="correct"?"var(--green-soft)":x.status==="close"?"var(--gold-soft)":"var(--red-soft)",
+                          color:x.status==="correct"?"var(--green)":x.status==="close"?"var(--gold)":"var(--red)",
+                          border:`1px solid ${x.status==="correct"?"var(--green-border)":x.status==="close"?"var(--gold-border)":"var(--red-border)"}`}}>
+                          {x.status==="correct"?"✓":x.status==="close"?"~":"✗"} {x.word}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display:"flex", gap:10, marginBottom:12 }}>
+                    {[["var(--green)","Correct"],["var(--gold)","Close"],["var(--red)","Wrong"]].map(([c,l])=>(
+                      <span key={l} style={{ display:"flex", gap:4, alignItems:"center", fontSize:10, color:"var(--text-2)" }}>
+                        <span style={{ width:6,height:6,borderRadius:"50%",background:c,display:"inline-block" }}/>{l}
+                      </span>
+                    ))}
+                  </div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
+                    <div style={{ padding:"10px 12px", background:"var(--red-soft)", border:"1px solid var(--red-border)", borderRadius:14 }}>
+                      <div style={{ fontSize:9, fontWeight:800, color:"var(--red)", textTransform:"uppercase", letterSpacing:".08em", marginBottom:4 }}>🎙 You Said</div>
+                      <div style={{ fontSize:12, color:"var(--text)", lineHeight:1.5, fontStyle:"italic" }}>"{feedback.said}"</div>
+                    </div>
+                    <div style={{ padding:"10px 12px", background:"var(--green-soft)", border:"1px solid var(--green-border)", borderRadius:14 }}>
+                      <div style={{ fontSize:9, fontWeight:800, color:"var(--green)", textTransform:"uppercase", letterSpacing:".08em", marginBottom:4 }}>🎯 Target</div>
+                      <div style={{ fontSize:12, color:"var(--text)", lineHeight:1.5, fontStyle:"italic" }}>"{tt.text}"</div>
+                    </div>
+                  </div>
+                  {aiLoading && <div style={{ display:"flex", gap:8, alignItems:"center", fontSize:12, color:"var(--text-3)", marginBottom:10 }}><div style={{ width:12,height:12,borderRadius:"50%",border:"2px solid var(--border-2)",borderTopColor:"var(--accent)",animation:"spin .7s linear infinite" }}/>Getting AI feedback...</div>}
+                  {aiTip && <div style={{ padding:"10px 12px", background:"var(--surf-2)", borderRadius:12, fontSize:13, color:"var(--text-2)", lineHeight:1.65, borderLeft:"3px solid var(--accent)", marginBottom:12 }}>💡 {aiTip}</div>}
+                  <div style={{ padding:"10px 13px", background:"var(--accent-soft)", border:"1px solid var(--accent-border)", borderRadius:14, display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:12 }}>
+                    <div>
+                      <div style={{ fontSize:9, fontWeight:800, color:"var(--accent)", textTransform:"uppercase", letterSpacing:".06em", marginBottom:3 }}>🌟 Native Speaker</div>
+                      <div style={{ fontSize:12, color:"var(--text)", fontStyle:"italic" }}>"{tt.text}"</div>
+                    </div>
+                    <button onClick={()=>{const s=window.speechSynthesis;if(s){try{s.cancel();}catch(_){}}setTimeout(()=>tts.speak(tt.text,{lang:state.settings.accent||"en-US",rate:0.82}),80);}} style={{ flexShrink:0,width:36,height:36,borderRadius:10,background:"var(--accent)",border:"none",cursor:"pointer",fontSize:14,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center" }}>🔊</button>
+                  </div>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <button onClick={()=>{setPhase("idle");setFeedback(null);setAligned([]);setAiTip("");stt.reset();}} style={{ flex:1,padding:"11px",borderRadius:14,background:"var(--surf-2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:13,fontWeight:700,color:"var(--text-2)",fontFamily:"inherit" }}>🔄 Try Again</button>
+                    <button onClick={()=>{setActive(null);setPhase("idle");setFeedback(null);setAligned([]);setAiTip("");}} style={{ flex:1,padding:"11px",borderRadius:14,background:"linear-gradient(135deg,var(--accent),var(--blue))",border:"none",cursor:"pointer",fontSize:13,fontWeight:700,color:"#fff",fontFamily:"inherit" }}>Next ✦</button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
