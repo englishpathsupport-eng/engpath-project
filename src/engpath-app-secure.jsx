@@ -3727,13 +3727,11 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
   const [active,setActive]=useState(null);
   const [phase, setPhase]=useState("idle");
   const [feedback,setFeedback]=useState(null);
-  const [scores, setScoresLocal] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("tt_scores") || "{}"); } catch(_) { return {}; }
-  });
+  const [scores, setScoresLocal] = useState(() => loadTTScores());
   const setScores = (updater) => {
     setScoresLocal(prev => {
       const next = typeof updater === "function" ? updater(prev) : updater;
-      try { localStorage.setItem("tt_scores", JSON.stringify(next)); } catch(_) {}
+      saveTTScores(next);
       return next;
     });
   };
@@ -8200,6 +8198,12 @@ textarea { resize: none; }
 `;
 
 /* ── State ─────────────────────────────────────────────────── */
+function loadTTScores() {
+  try { const s = localStorage.getItem("ep_tt_scores"); return s ? JSON.parse(s) : {}; } catch { return {}; }
+}
+function saveTTScores(s) {
+  try { localStorage.setItem("ep_tt_scores", JSON.stringify(s)); } catch {}
+}
 function loadSettings() {
   try { const s = localStorage.getItem("ep_settings"); return s ? JSON.parse(s) : null; } catch { return null; }
 }
