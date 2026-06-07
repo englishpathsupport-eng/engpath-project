@@ -320,8 +320,7 @@ function useSTT({ lang = "en-US" } = {}) {
     }
 
     recRef.current = new SR();
-    // Accept any English accent — use en-US as base for best recognition
-    recRef.current.lang           = "en-US";
+    recRef.current.lang           = lang || "en-US";
     recRef.current.continuous     = true;   // FIX: keep listening - stop via silence or manual stop
     recRef.current.interimResults = true;
 
@@ -343,26 +342,19 @@ function useSTT({ lang = "en-US" } = {}) {
         e.results[i].isFinal ? (fin += t + " ") : (inter += t);
       }
       if (fin) {
-        const finText = fin.trim();
-        // If TTS is playing on same device, keep mic open but don't save transcript yet
-        if (window.speechSynthesis?.speaking) {
-          clearTimeout(silenceRef.current);
-          silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 4000);
-        } else {
-          setTranscript(prev => {
-            txRef.current = finText;
-            return finText;
-          });
-          clearTimeout(silenceRef.current);
-          silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 2500);
-        }
+        setTranscript(prev => {
+          // FIX: replace with latest final, don't append (prevents repetition)
+          const next = fin.trim();
+          txRef.current = next;
+          return next;
+        });
+        clearTimeout(silenceRef.current);
+        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 1500);
       }
       if (inter) {
-        if (!window.speechSynthesis?.speaking) {
-          setInterim(inter);
-        }
+        setInterim(inter);
         clearTimeout(silenceRef.current);
-        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, window.speechSynthesis?.speaking ? 4000 : 2500);
+        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 1500);
       }
     };
 
@@ -706,7 +698,6 @@ const LANG_LABELS = {
 };
 
 export async function translateText(text, targetLang) {
-  if (targetLang === "en") return text;
   const label = LANG_LABELS[targetLang] || "Malayalam";
   return callClaude(
     `You are a professional translator. Reply ONLY with the ${label} translation, nothing else.`,
@@ -776,6 +767,32 @@ const LOCAL_DICT = {
   "give":  {phonetic:"/ɡɪv/",cefr:"A1",pos:"v.",definition:"To freely transfer something to someone",simple:"Give means you hand something to another person",examples:["Please give me your pen.","He gave her a gift."],synonyms:["hand","offer","provide"],antonyms:["take","receive","keep"]},
   "think": {phonetic:"/θɪŋk/",cefr:"A1",pos:"v.",definition:"To use your mind to form ideas and opinions",simple:"Think means using your brain to have ideas",examples:["I think you are right.","She is thinking about her future."],synonyms:["consider","believe","reflect"],antonyms:[]},
   "say":   {phonetic:"/seɪ/",cefr:"A1",pos:"v.",definition:"To speak words; to express in words",simple:"Say means to speak something out loud",examples:["What did she say?","I say thank you every time."],synonyms:["tell","speak","mention"],antonyms:[]},
+
+  "travel": {phonetic:"/ˈtræv.əl/",cefr:"A2",pos:"v.",definition:"To go from one place to another, especially over a long distance",simple:"Travel means moving from one place to another",examples:["I love to travel abroad.","She travels to work by train."],synonyms:["journey","trip","voyage"],antonyms:["stay","remain"]},
+  "hotel":  {phonetic:"/həʊˈtel/",cefr:"A2",pos:"n.",definition:"A place where people pay to sleep and eat meals",simple:"A hotel is a building where you pay to stay the night",examples:["We stayed in a nice hotel.","Book the hotel in advance."],synonyms:["inn","lodge","accommodation"],antonyms:[]},
+  "airport":{phonetic:"/ˈeə.pɔːt/",cefr:"A2",pos:"n.",definition:"A place where planes take off and land",simple:"An airport is where you go to catch a plane",examples:["Meet me at the airport.","The airport was very busy."],synonyms:["airfield","terminal","aerodrome"],antonyms:[]},
+  "ticket": {phonetic:"/ˈtɪk.ɪt/",cefr:"A2",pos:"n.",definition:"A piece of paper that shows you have paid to travel or enter somewhere",simple:"A ticket lets you get on a bus, train, or plane",examples:["Buy your ticket online.","I lost my train ticket."],synonyms:["pass","permit","voucher"],antonyms:[]},
+  "passport":{phonetic:"/ˈpɑːs.pɔːt/",cefr:"A2",pos:"n.",definition:"An official document that proves your identity when travelling abroad",simple:"You need a passport to travel to another country",examples:["Do not forget your passport.","My passport expires next year."],synonyms:["identity document","travel document"],antonyms:[]},
+  "money":  {phonetic:"/ˈmʌn.i/",cefr:"A2",pos:"n.",definition:"Coins and notes used to buy things",simple:"Money is what you use to pay for things",examples:["I need money for the bus.","She saved her money carefully."],synonyms:["cash","currency","funds"],antonyms:[]},
+  "shop":   {phonetic:"/ʃɒp/",cefr:"A2",pos:"n.",definition:"A building where you can buy goods",simple:"A shop is a place where things are sold",examples:["There is a shop near the school.","I went to the shop to buy bread."],synonyms:["store","market","outlet"],antonyms:[]},
+  "price":  {phonetic:"/praɪs/",cefr:"A2",pos:"n.",definition:"The amount of money needed to buy something",simple:"The price is how much something costs",examples:["What is the price of this bag?","The price of food has gone up."],synonyms:["cost","charge","fee"],antonyms:[]},
+  "cheap":  {phonetic:"/tʃiːp/",cefr:"A2",pos:"adj.",definition:"Low in price; not expensive",simple:"Cheap means something does not cost much money",examples:["This shirt is very cheap.","I found a cheap flight."],synonyms:["affordable","inexpensive","low-cost"],antonyms:["expensive","costly","pricey"]},
+  "expensive":{phonetic:"/ɪkˈspen.sɪv/",cefr:"A2",pos:"adj.",definition:"Costing a lot of money",simple:"Expensive means something costs a lot",examples:["That car is too expensive.","Eating out can be expensive."],synonyms:["costly","pricey","dear"],antonyms:["cheap","affordable","inexpensive"]},
+  "open":   {phonetic:"/ˈəʊ.pən/",cefr:"A2",pos:"adj.",definition:"Not closed; allowing people to enter or use",simple:"Open means you can go in or use it",examples:["The bank is open at nine.","Is the shop open today?"],synonyms:["available","accessible","unlocked"],antonyms:["closed","shut","locked"]},
+  "closed": {phonetic:"/kləʊzd/",cefr:"A2",pos:"adj.",definition:"Not open; not allowing people to enter",simple:"Closed means you cannot go in",examples:["The shop is closed today.","The library is closed on Sundays."],synonyms:["shut","locked","unavailable"],antonyms:["open","available","unlocked"]},
+  "early":  {phonetic:"/ˈɜː.li/",cefr:"A2",pos:"adv.",definition:"Before the usual or expected time",simple:"Early means before the normal time",examples:["She wakes up early every day.","Come early to get a good seat."],synonyms:["soon","ahead of time","beforehand"],antonyms:["late","tardily"]},
+  "late":   {phonetic:"/leɪt/",cefr:"A2",pos:"adv.",definition:"After the expected or usual time",simple:"Late means after the time it should happen",examples:["He arrived late to class.","Sorry I am late!"],synonyms:["overdue","delayed","behind"],antonyms:["early","on time","punctual"]},
+  "always": {phonetic:"/ˈɔːl.weɪz/",cefr:"A2",pos:"adv.",definition:"At all times; on every occasion",simple:"Always means every single time",examples:["She always smiles.","I always brush my teeth at night."],synonyms:["every time","constantly","forever"],antonyms:["never","rarely","seldom"]},
+  "sometimes":{phonetic:"/ˈsʌm.taɪmz/",cefr:"A2",pos:"adv.",definition:"On some occasions but not always",simple:"Sometimes means not every time, but a few times",examples:["I sometimes eat outside.","He sometimes forgets his keys."],synonyms:["occasionally","now and then","at times"],antonyms:["always","never"]},
+  "never":  {phonetic:"/ˈnev.ər/",cefr:"A2",pos:"adv.",definition:"At no time; not ever",simple:"Never means not even once",examples:["He never lies.","I have never been to Japan."],synonyms:["not ever","at no time"],antonyms:["always","ever","constantly"]},
+  "ask":    {phonetic:"/ɑːsk/",cefr:"A2",pos:"v.",definition:"To say something as a question in order to get information",simple:"Ask means to put a question to someone",examples:["Ask the teacher if you are unsure.","She asked for directions."],synonyms:["inquire","question","request"],antonyms:["answer","reply","respond"]},
+  "answer": {phonetic:"/ˈɑːn.sər/",cefr:"A2",pos:"v.",definition:"To say or write something in reply to a question",simple:"Answer means to reply when someone asks you something",examples:["Please answer my question.","He answered correctly."],synonyms:["reply","respond","react"],antonyms:["ask","question","ignore"]},
+  "learn":  {phonetic:"/lɜːn/",cefr:"A2",pos:"v.",definition:"To gain knowledge or a skill through study or experience",simple:"Learn means to get new knowledge or a skill",examples:["I want to learn English.","She learned to drive last year."],synonyms:["study","discover","master"],antonyms:["forget","ignore","unlearn"]},
+  "study":  {phonetic:"/ˈstʌd.i/",cefr:"A2",pos:"v.",definition:"To spend time reading and practising to learn something",simple:"Study means to work hard to learn something",examples:["She studies every evening.","I need to study for my exam."],synonyms:["learn","revise","practise"],antonyms:["ignore","forget","play"]},
+  "remember":{phonetic:"/rɪˈmem.bər/",cefr:"A2",pos:"v.",definition:"To keep something in your memory; to not forget",simple:"Remember means to keep something in your mind",examples:["Remember to bring your book.","I cannot remember his name."],synonyms:["recall","recollect","retain"],antonyms:["forget","overlook","ignore"]},
+  "forget": {phonetic:"/fəˈɡet/",cefr:"A2",pos:"v.",definition:"To fail to remember something",simple:"Forget means something leaves your memory",examples:["Do not forget the meeting.","I forgot my umbrella."],synonyms:["overlook","miss","omit"],antonyms:["remember","recall","recollect"]},
+  "help":   {phonetic:"/help/",cefr:"A2",pos:"v.",definition:"To make it easier for someone to do something",simple:"Help means to do something useful for another person",examples:["Can you help me, please?","She helped him carry the bags."],synonyms:["assist","support","aid"],antonyms:["hinder","obstruct","ignore"]},
+  "choose": {phonetic:"/tʃuːz/",cefr:"A2",pos:"v.",definition:"To pick one thing from several options",simple:"Choose means to decide which one you want",examples:["Choose the answer you think is right.","He chose the blue shirt."],synonyms:["select","pick","decide on"],antonyms:["reject","refuse","ignore"]},
 };
 
 // Free Dictionary API - no key needed
@@ -1682,26 +1699,54 @@ C1: [
   {word:"wane",pos:"v.",meaning:"To decrease gradually",example:"His interest began to wane.",translation:"ക്ഷീണിക്കുക"},
   {word:"zealous",pos:"adj.",meaning:"Having great energy for a cause",example:"A zealous worker.",translation:"ആവേശ"},
 ],
+  A2_extra: [
+  {word:"travel",pos:"v.",meaning:"To go from one place to another",example:"I love to travel abroad.",translation:"യാത്ര ചെയ്യുക"},
+  {word:"hotel",pos:"n.",meaning:"A place where you pay to stay",example:"We stayed in a nice hotel.",translation:"ഹോട്ടൽ"},
+  {word:"airport",pos:"n.",meaning:"A place where planes land and take off",example:"Meet me at the airport.",translation:"വിമാനത്താവളം"},
+  {word:"ticket",pos:"n.",meaning:"A paper that lets you travel or enter",example:"Buy your ticket online.",translation:"ടിക്കറ്റ്"},
+  {word:"passport",pos:"n.",meaning:"An official document for international travel",example:"Do not forget your passport.",translation:"പാസ്പോർട്ട്"},
+  {word:"money",pos:"n.",meaning:"Coins or notes used to buy things",example:"I need money for the bus.",translation:"പണം"},
+  {word:"shop",pos:"n.",meaning:"A place where you buy things",example:"There is a shop near the school.",translation:"കട"},
+  {word:"price",pos:"n.",meaning:"How much something costs",example:"What is the price of this bag?",translation:"വില"},
+  {word:"cheap",pos:"adj.",meaning:"Not expensive; low in price",example:"This shirt is very cheap.",translation:"വിലകുറഞ്ഞ"},
+  {word:"expensive",pos:"adj.",meaning:"Costing a lot of money",example:"That car is too expensive.",translation:"വിലയേറിയ"},
+  {word:"open",pos:"adj.",meaning:"Not closed; available to enter",example:"The bank is open at nine.",translation:"തുറന്ന"},
+  {word:"closed",pos:"adj.",meaning:"Not open; not available",example:"The shop is closed today.",translation:"അടച്ച"},
+  {word:"early",pos:"adv.",meaning:"Before the usual or expected time",example:"She wakes up early every day.",translation:"നേരത്തെ"},
+  {word:"late",pos:"adv.",meaning:"After the expected time",example:"He arrived late to class.",translation:"വൈകി"},
+  {word:"always",pos:"adv.",meaning:"At all times; every time",example:"She always smiles.",translation:"എപ്പോഴും"},
+  {word:"sometimes",pos:"adv.",meaning:"On some occasions but not always",example:"I sometimes eat outside.",translation:"ചിലപ്പോൾ"},
+  {word:"never",pos:"adv.",meaning:"At no time; not ever",example:"He never lies.",translation:"ഒരിക്കലും ഇല്ല"},
+  {word:"ask",pos:"v.",meaning:"To request information or help",example:"Ask the teacher if you are unsure.",translation:"ചോദിക്കുക"},
+  {word:"answer",pos:"v.",meaning:"To reply to a question",example:"Please answer my question.",translation:"ഉത്തരം പറയുക"},
+  {word:"learn",pos:"v.",meaning:"To gain knowledge or a skill",example:"I want to learn English.",translation:"പഠിക്കുക"},
+  {word:"study",pos:"v.",meaning:"To spend time reading or practising",example:"She studies every evening.",translation:"പഠിക്കുക"},
+  {word:"remember",pos:"v.",meaning:"To keep something in your memory",example:"Remember to bring your book.",translation:"ഓർക്കുക"},
+  {word:"forget",pos:"v.",meaning:"To fail to remember something",example:"Do not forget the meeting.",translation:"മറക്കുക"},
+  {word:"help",pos:"v.",meaning:"To make it easier for someone",example:"Can you help me, please?",translation:"സഹായിക്കുക"},
+  {word:"choose",pos:"v.",meaning:"To pick one from several options",example:"Choose the answer you think is right.",translation:"തിരഞ്ഞെടുക്കുക"}
+  ]
 };
 
 // Helper functions
 const LEVELS = ["A1", "A2", "B1", "B2", "C1"];
 
 function getWordsByLevel(level) {
-  return VOCAB[level] || [];
+  const extra = level === "A2" ? (VOCAB["A2_extra"] || []) : [];
+  return [...(VOCAB[level] || []), ...extra];
 }
 
 function getAllWords() {
-  return LEVELS.flatMap(l => VOCAB[l]);
+  return LEVELS.flatMap(l => l === "A2" ? [...(VOCAB[l] || []), ...(VOCAB["A2_extra"] || [])] : (VOCAB[l] || []));
 }
 
 function getTotalCount() {
-  return LEVELS.reduce((sum, l) => sum + (VOCAB[l]?.length || 0), 0);
+  return LEVELS.reduce((sum, l) => sum + (VOCAB[l]?.length || 0) + (l === "A2" ? (VOCAB["A2_extra"]?.length || 0) : 0), 0);
 }
 
 function searchWords(query, level = null) {
   const q = query.toLowerCase();
-  const source = level ? (VOCAB[level] || []) : getAllWords();
+  const source = level ? [...(VOCAB[level] || []), ...(level === "A2" ? (VOCAB["A2_extra"] || []) : [])] : getAllWords();
   return source.filter(w =>
     w.word.includes(q) ||
     w.meaning.toLowerCase().includes(q) ||
@@ -3592,7 +3637,7 @@ function getSmartTip(target, score) {
   if(score >= 70) return { icon:"⭐", color:"var(--gold)", label:"Great job!", msg:"Almost perfect! Focus on the stressed syllables to sound even more natural." };
   if(t.includes("would like") || t.includes("could you") || t.includes("i'd"))
     return { icon:"💬", color:"var(--blue)", label:"Connected Speech", msg:"Native speakers blend these words together — 'would like' sounds like 'wud-like', try saying it as one smooth phrase." };
-  if(/\bth(e|at|is|ey|em|ink|ree|rew|ough|orn|irst|rough|irty|ank)\b/.test(t) && !t.includes("she sells") && !t.includes("shell"))
+  if(t.includes("th"))
     return { icon:"👄", color:"var(--purple)||var(--accent)", label:"TH Sound", msg:"Place your tongue lightly between your teeth for 'th'. It's the most unique sound in English!" };
   if(t.includes("'ve") || t.includes("'re") || t.includes("'ll") || t.includes("'s"))
     return { icon:"🔗", color:"var(--blue)", label:"Contractions", msg:"Contractions like 'I've', 'you're' are key to sounding natural. Practise blending them smoothly." };
@@ -3683,20 +3728,11 @@ const AIFeedbackCard = memo(function AIFeedbackCard({ feedback, target, onRetry,
         </div>
       </div>
 
-      {/* ── AI Pronunciation Tip (from Claude) ── */}
-      {tip && (
-        <div style={{ padding:"11px 13px", background:"var(--accent-soft)", border:"1px solid var(--accent-border)", borderRadius:14, marginBottom:8 }}>
-          <div style={{ fontSize:10, fontWeight:800, color:"var(--accent)", textTransform:"uppercase", letterSpacing:".06em", marginBottom:4 }}>💡 Pronunciation Tip</div>
-          <div style={{ fontSize:12, color:"var(--text)", lineHeight:1.6 }}>{tip}</div>
-        </div>
-      )}
-      {/* ── Smart Tip — only show if no AI tip ── */}
-      {!tip && (
-        <div style={{ padding:"11px 13px", background:`${smartTip.color}12`, border:`1px solid ${smartTip.color}35`, borderRadius:14, marginBottom:8 }}>
-          <div style={{ fontSize:10, fontWeight:800, color:smartTip.color, textTransform:"uppercase", letterSpacing:".06em", marginBottom:4 }}>{smartTip.icon} {smartTip.label}</div>
-          <div style={{ fontSize:12, color:"var(--text)", lineHeight:1.6 }}>{smartTip.msg}</div>
-        </div>
-      )}
+      {/* ── Smart Tip ── */}
+      <div style={{ padding:"11px 13px", background:`${smartTip.color}12`, border:`1px solid ${smartTip.color}35`, borderRadius:14, marginBottom:8 }}>
+        <div style={{ fontSize:10, fontWeight:800, color:smartTip.color, textTransform:"uppercase", letterSpacing:".06em", marginBottom:4 }}>{smartTip.icon} {smartTip.label}</div>
+        <div style={{ fontSize:12, color:"var(--text)", lineHeight:1.6 }}>{smartTip.msg}</div>
+      </div>
 
       {/* ── Grammar Fix ── */}
       {grammarFix && <div style={{ padding:"9px 12px", background:"var(--gold-soft)", border:"1px solid var(--gold-border)", borderRadius:12, marginBottom:8, fontSize:12, color:"var(--text)", lineHeight:1.5 }}><span style={{ fontWeight:800, color:"var(--gold)" }}>📝 Grammar: </span>{grammarFix}</div>}
@@ -3727,14 +3763,7 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
   const [active,setActive]=useState(null);
   const [phase, setPhase]=useState("idle");
   const [feedback,setFeedback]=useState(null);
-  const [scores, setScoresLocal] = useState(() => loadTTScores());
-  const setScores = (updater) => {
-    setScoresLocal(prev => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      saveTTScores(next);
-      return next;
-    });
-  };
+  const [scores,setScores]=useState({});
   const tts = useTTS();
   const stt = useSTT({ lang: state.settings.accent||"en-US" });
 
@@ -3750,40 +3779,49 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
   const startRecord = async (tt) => {
     setActive(tt.id); setPhase("recording"); setFeedback(null);
     tts.stop(); stt.reset();
-    // Small delay so any nearby audio (e.g. another device's TTS) fades before mic opens
-    await new Promise(r => setTimeout(r, 1000));
     await stt.start();
   };
-
-  const [aligned,  setAligned]  = useState([]);
-  const [aiTip,    setAiTip]    = useState("");
-  const [aiLoading,setAiLoading]= useState(false);
 
   const stopRecord = async (tt) => {
     stt.stop();
     setPhase("analysing");
     setTimeout(async () => {
-      let spoken = stt.getLatest() || stt.transcript || "";
-      for (let i = 0; i < 5 && !spoken.trim(); i++) {
-        await new Promise(r => setTimeout(r, 500));
-        spoken = stt.getLatest() || stt.transcript || "";
-      }
+      const spoken = stt.getLatest() || "";
       if (!spoken.trim()) { setPhase("idle"); return; }
-      const al = alignWords(tt.text, spoken);
-      const localSc = calcScore(al);
-      setAligned(al);
-      const fluency = Math.min(100, Math.round(al.filter(x=>x.status==="correct"||x.status==="close").length/Math.max(al.length,1)*100));
-      const complete = Math.min(100, Math.round(al.filter(x=>x.status!=="missing").length/Math.max(al.length,1)*100));
+      const localSc = calcScore(alignWords(tt.text, spoken));
+      try {
+        const aiPrompt = "You are an English pronunciation judge for a tongue twister app.\n"
+          + "Target: \"" + tt.text + "\"\n"
+          + "STT transcript: \"" + spoken + "\"\n"
+          + "Focus: " + tt.focus + "\n"
+          + "IMPORTANT: Browser STT often mishears tongue twisters badly. Example: \"She sells sea shells\" gets transcribed as \"freshers seashore\". The learner IS attempting the target - STT just fails on similar sounds.\n"
+          + "Judge phonetic similarity between transcript and target:\n"
+          + "- Similar sounds/rhythm/syllables = 60-90 score\n"
+          + "- Compound word variants (seashells=sea shells) = correct\n"
+          + "- Only score below 40 if transcript is completely unrelated\n"
+          + "Return ONLY JSON: {\"score\":0-100,\"fluency\":0-100,\"tip\":\"specific tip for " + tt.focus + "\",\"wordFeedback\":\"encouragement\"}";
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 200, messages: [{ role: "user", content: aiPrompt }] })
+        });
+        const data = await res.json();
+        const raw = (data?.content?.[0]?.text || "").replace(/```json|```/g, "").trim();
+        const parsed = JSON.parse(raw);
+        if (parsed?.score != null) {
+          const aiSc = parsed.score;
+          setScores(p => ({ ...p, [tt.id]: aiSc }));
+          setFeedback({ score:aiSc, fluency:parsed.fluency||aiSc, said:spoken, tip:parsed.tip||"Keep practising!", naturalVersion:tt.text, grammarFix:parsed.wordFeedback||null, pronunciationIssue:aiSc<60?"Focus on: "+tt.focus:null });
+          setPhase("done");
+          dispatch({ type:"ADD_XP", payload: aiSc>=90?25:aiSc>=75?15:aiSc>=55?8:aiSc>=35?4:1 });
+          return;
+        }
+      } catch(_) {}
+      const fluency = Math.min(100, Math.round(localSc * 0.92 + 5));
       setScores(p => ({ ...p, [tt.id]: localSc }));
-      setFeedback({ score:localSc, fluency, complete, said:spoken, naturalVersion:tt.text });
+      setFeedback({ score:localSc, fluency, said:spoken, tip: localSc<70?"Try slowing down and focusing on each sound.":"Great! Now try it faster!", naturalVersion:tt.text, grammarFix:null, pronunciationIssue: localSc<60?"Focus on: "+tt.focus:null });
       setPhase("done");
       dispatch({ type:"ADD_XP", payload: localSc>=90?25:localSc>=75?15:localSc>=55?8:localSc>=35?4:1 });
-      setAiLoading(true); setAiTip("");
-      getPronunciationFeedback(
-        tt.text + " (Focus: " + tt.focus + " sound)",
-        spoken
-      ).then(tip => { setAiTip(tip); setAiLoading(false); })
-       .catch(()  => { setAiTip(localSc>=70?"Great rhythm! Focus on each '"+tt.focus+"' sound clearly.":"Slow down and say each '"+tt.focus+"' sound clearly — speed comes with practice!"); setAiLoading(false); });
     }, 600);
   };
 
@@ -3824,68 +3862,7 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
                   }
                 </div>
               )}
-              {isDone&&feedback&&<div style={{ marginTop:10 }}><AIFeedbackCard feedback={feedback} target={tt.text} onRetry={()=>{setPhase("idle");setFeedback(null);setAligned([]);setAiTip("");stt.reset();}} onNext={()=>{setActive(null);setPhase("idle");setFeedback(null);setAligned([]);setAiTip("");}} tts={tts} settings={state.settings} /></div>}
-              {isDone && feedback && false && (
-                <div style={{ marginTop:12, animation:"fadeUp .3s ease" }}>
-                  <div style={{ display:"flex", gap:20, alignItems:"center", flexWrap:"wrap", marginBottom:14, padding:"14px 16px", background:"var(--surf-2)", borderRadius:18, border:"1px solid var(--border)" }}>
-                    <ScoreRing score={feedback.score} />
-                    <div style={{ flex:1, minWidth:140 }}>
-                      <div style={{ fontFamily:"'Poppins',sans-serif", fontSize:13, fontWeight:700, marginBottom:10, color:"var(--text)" }}>Breakdown</div>
-                      {[
-                        { label:"Accuracy", value:feedback.score },
-                        { label:"Complete", value:feedback.complete??Math.round(aligned.filter(x=>x.status!=="missing").length/Math.max(aligned.length,1)*100), color:"var(--accent)" },
-                        { label:"Fluency",  value:feedback.fluency, color:"var(--blue)" },
-                      ].map(b => (
-                        <ProgressBar key={b.label} value={b.value} label={b.label}
-                          color={b.color||(feedback.score>=80?"var(--green)":feedback.score>=55?"var(--gold)":"var(--red)")}
-                          style={{ marginBottom:6 }} />
-                      ))}
-                    </div>
-                  </div>
-                  {aligned.length>0 && (
-                    <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginBottom:8 }}>
-                      {aligned.map((x,i)=>(
-                        <span key={i} style={{ padding:"3px 9px", borderRadius:999, fontSize:12, fontWeight:700,
-                          background:x.status==="correct"?"var(--green-soft)":x.status==="close"?"var(--gold-soft)":"var(--red-soft)",
-                          color:x.status==="correct"?"var(--green)":x.status==="close"?"var(--gold)":"var(--red)",
-                          border:`1px solid ${x.status==="correct"?"var(--green-border)":x.status==="close"?"var(--gold-border)":"var(--red-border)"}`}}>
-                          {x.status==="correct"?"✓":x.status==="close"?"~":"✗"} {x.word}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <div style={{ display:"flex", gap:10, marginBottom:12 }}>
-                    {[["var(--green)","Correct"],["var(--gold)","Close"],["var(--red)","Wrong"]].map(([c,l])=>(
-                      <span key={l} style={{ display:"flex", gap:4, alignItems:"center", fontSize:10, color:"var(--text-2)" }}>
-                        <span style={{ width:6,height:6,borderRadius:"50%",background:c,display:"inline-block" }}/>{l}
-                      </span>
-                    ))}
-                  </div>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
-                    <div style={{ padding:"10px 12px", background:"var(--red-soft)", border:"1px solid var(--red-border)", borderRadius:14 }}>
-                      <div style={{ fontSize:9, fontWeight:800, color:"var(--red)", textTransform:"uppercase", letterSpacing:".08em", marginBottom:4 }}>🎙 You Said</div>
-                      <div style={{ fontSize:12, color:"var(--text)", lineHeight:1.5, fontStyle:"italic" }}>"{feedback.said}"</div>
-                    </div>
-                    <div style={{ padding:"10px 12px", background:"var(--green-soft)", border:"1px solid var(--green-border)", borderRadius:14 }}>
-                      <div style={{ fontSize:9, fontWeight:800, color:"var(--green)", textTransform:"uppercase", letterSpacing:".08em", marginBottom:4 }}>🎯 Target</div>
-                      <div style={{ fontSize:12, color:"var(--text)", lineHeight:1.5, fontStyle:"italic" }}>"{tt.text}"</div>
-                    </div>
-                  </div>
-                  {aiLoading && <div style={{ display:"flex", gap:8, alignItems:"center", fontSize:12, color:"var(--text-3)", marginBottom:10 }}><div style={{ width:12,height:12,borderRadius:"50%",border:"2px solid var(--border-2)",borderTopColor:"var(--accent)",animation:"spin .7s linear infinite" }}/>Getting AI feedback...</div>}
-                  {aiTip && <div style={{ padding:"10px 12px", background:"var(--surf-2)", borderRadius:12, fontSize:13, color:"var(--text-2)", lineHeight:1.65, borderLeft:"3px solid var(--accent)", marginBottom:12 }}>💡 {aiTip}</div>}
-                  <div style={{ padding:"10px 13px", background:"var(--accent-soft)", border:"1px solid var(--accent-border)", borderRadius:14, display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:12 }}>
-                    <div>
-                      <div style={{ fontSize:9, fontWeight:800, color:"var(--accent)", textTransform:"uppercase", letterSpacing:".06em", marginBottom:3 }}>🌟 Native Speaker</div>
-                      <div style={{ fontSize:12, color:"var(--text)", fontStyle:"italic" }}>"{tt.text}"</div>
-                    </div>
-                    <button onClick={()=>{const s=window.speechSynthesis;if(s){try{s.cancel();}catch(_){}}setTimeout(()=>tts.speak(tt.text,{lang:state.settings.accent||"en-US",rate:0.82}),80);}} style={{ flexShrink:0,width:36,height:36,borderRadius:10,background:"var(--accent)",border:"none",cursor:"pointer",fontSize:14,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center" }}>🔊</button>
-                  </div>
-                  <div style={{ display:"flex", gap:8 }}>
-                    <button onClick={()=>{setPhase("idle");setFeedback(null);setAligned([]);setAiTip("");stt.reset();}} style={{ flex:1,padding:"11px",borderRadius:14,background:"var(--surf-2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:13,fontWeight:700,color:"var(--text-2)",fontFamily:"inherit" }}>🔄 Try Again</button>
-                    <button onClick={()=>{setActive(null);setPhase("idle");setFeedback(null);setAligned([]);setAiTip("");}} style={{ flex:1,padding:"11px",borderRadius:14,background:"linear-gradient(135deg,var(--accent),var(--blue))",border:"none",cursor:"pointer",fontSize:13,fontWeight:700,color:"#fff",fontFamily:"inherit" }}>Next ✦</button>
-                  </div>
-                </div>
-              )}
+              {isDone&&feedback&&<div style={{ marginTop:10 }}><AIFeedbackCard feedback={feedback} target={tt.text} onRetry={()=>{setPhase("idle");setFeedback(null);stt.reset();}} onNext={()=>{setActive(null);setPhase("idle");setFeedback(null);}} tts={tts} settings={state.settings} /></div>}
             </div>
           );
         })}
@@ -4813,7 +4790,7 @@ Requirements:
 - No markdown, no explanation, no backticks — pure SVG only`;
 
   try {
-    const res = await fetch("/api/ai", {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -5762,7 +5739,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
         const stored = await window.storage?.get(STORAGE_KEY);
         if (stored?.value) { setWords(JSON.parse(stored.value)); return; }
       } catch {}
-      const seed = VOCAB[level] || [];
+      const seed = [...(VOCAB[level] || []), ...(level === "A2" ? (VOCAB["A2_extra"] || []) : [])];
       setWords(seed);
       try { await window.storage?.set(STORAGE_KEY, JSON.stringify(seed)); } catch {}
     })();
@@ -6384,7 +6361,7 @@ const Dictionary = memo(function Dictionary({ state, dispatch }) {
             </div>
 
             {/* Translation */}
-            {result.translation && state.settings.lang !== "en" && (
+            {result.translation && (
               <div style={{ padding: "10px 14px", background: "var(--gold-soft)", border: "1px solid var(--gold-border)", borderRadius: 12, marginBottom: 14, display: "flex", gap: 8, alignItems: "center" }}>
                 <span style={{ fontSize: 18 }}>🌐</span>
                 <div>
@@ -7271,18 +7248,16 @@ const ACCENTS = [
 ];
 
 const LANGUAGES = [
-  ["en","🇬🇧","English"],
-  ["ar","🇸🇦","Arabic"],
-  ["zh","🇨🇳","Chinese"],
-  ["fr","🇫🇷","French"],
-  ["de","🇩🇪","German"],
-  ["hi","🇮🇳","Hindi"],
-  ["ja","🇯🇵","Japanese"],
   ["ml","🇮🇳","Malayalam"],
-  ["pt","🇧🇷","Portuguese"],
-  ["es","🇪🇸","Spanish"],
+  ["hi","🇮🇳","Hindi"],
   ["ta","🇮🇳","Tamil"],
   ["te","🇮🇳","Telugu"],
+  ["ar","🇸🇦","Arabic"],
+  ["fr","🇫🇷","French"],
+  ["de","🇩🇪","German"],
+  ["es","🇪🇸","Spanish"],
+  ["zh","🇨🇳","Chinese"],
+  ["ja","🇯🇵","Japanese"],
 ];
 
 // ✅ FIX: Free users are limited to the first 5 languages
@@ -8198,12 +8173,6 @@ textarea { resize: none; }
 `;
 
 /* ── State ─────────────────────────────────────────────────── */
-function loadTTScores() {
-  try { const s = localStorage.getItem("ep_tt_scores"); return s ? JSON.parse(s) : {}; } catch { return {}; }
-}
-function saveTTScores(s) {
-  try { localStorage.setItem("ep_tt_scores", JSON.stringify(s)); } catch {}
-}
 function loadSettings() {
   try { const s = localStorage.getItem("ep_settings"); return s ? JSON.parse(s) : null; } catch { return null; }
 }
@@ -8373,179 +8342,8 @@ const initialState = {
   settings:    { ...DEFAULT_SETTINGS, ...(loadSettings() || {}) },
   progress:    { grammar: 42, vocabulary: 58, speaking: 30, writing: 45 },
   dailyUsage:  { pronunciation: 0, conversations: 0, aiChat: 0 },
-  ttScores:    {},
   adminConfig: { ...(loadAdminConfig() || DEFAULT_ADMIN) },
-  toasts:      [],
-
-
-  A2_extra: [
-  {word:"travel",pos:"v.",meaning:"To go from one place to another",example:"I love to travel abroad.",translation:"യാത്ര ചെയ്യുക"},
-  {word:"hotel",pos:"n.",meaning:"A place where you pay to stay",example:"We stayed in a nice hotel.",translation:"ഹോട്ടൽ"},
-  {word:"airport",pos:"n.",meaning:"A place where planes land and take off",example:"Meet me at the airport.",translation:"വിമാനത്താവളം"},
-  {word:"ticket",pos:"n.",meaning:"A paper that lets you enter or travel",example:"Buy your ticket online.",translation:"ടിക്കറ്റ്"},
-  {word:"passport",pos:"n.",meaning:"An official document for travel",example:"Don't forget your passport.",translation:"പാസ്പോർട്ട്"},
-  {word:"luggage",pos:"n.",meaning:"Bags you take when travelling",example:"My luggage is too heavy.",translation:"ബാഗേജ്/സാധനങ്ങൾ"},
-  {word:"reservation",pos:"n.",meaning:"A booking made in advance",example:"I have a reservation for two.",translation:"ബുക്കിങ്"},
-  {word:"price",pos:"n.",meaning:"The amount of money for something",example:"What is the price of this?",translation:"വില"},
-  {word:"cheap",pos:"adj.",meaning:"Low in price",example:"This bag is cheap.",translation:"വിലകുറഞ്ഞ"},
-  {word:"expensive",pos:"adj.",meaning:"Costing a lot of money",example:"That watch is expensive.",translation:"വിലയേറിയ"},
-  {word:"discount",pos:"n.",meaning:"A reduction in price",example:"I got a ten percent discount.",translation:"കിഴിവ്"},
-  {word:"receipt",pos:"n.",meaning:"A paper showing you paid",example:"Keep your receipt safe.",translation:"രസീത്"},
-  {word:"appointment",pos:"n.",meaning:"A planned meeting at a fixed time",example:"I have a doctor appointment.",translation:"അപ്പോയ്ന്റ്മെന്റ്"},
-  {word:"medicine",pos:"n.",meaning:"A drug used to treat illness",example:"Take your medicine after eating.",translation:"മരുന്ന്"},
-  {word:"pain",pos:"n.",meaning:"An unpleasant physical feeling",example:"I have a pain in my back.",translation:"വേദന"},
-  {word:"fever",pos:"n.",meaning:"High body temperature due to illness",example:"She has a fever today.",translation:"പനി"},
-  {word:"exercise",pos:"v.",meaning:"To do physical activity for health",example:"Exercise for thirty minutes daily.",translation:"വ്യായാമം ചെയ്യുക"},
-  {word:"salary",pos:"n.",meaning:"Regular money paid for a job",example:"She earns a good salary.",translation:"ശമ്പളം"},
-  {word:"meeting",pos:"n.",meaning:"People gathering to discuss something",example:"I have a meeting at ten.",translation:"മീറ്റിങ്"},
-  {word:"office",pos:"n.",meaning:"A room or building for desk work",example:"I work in a big office.",translation:"ഓഫീസ്"},
-  {word:"boss",pos:"n.",meaning:"The person in charge of a workplace",example:"My boss is very supportive.",translation:"മേലധികാരി"},
-  {word:"colleague",pos:"n.",meaning:"A person you work with",example:"My colleague is very helpful.",translation:"സഹപ്രവർത്തകൻ"},
-  {word:"deadline",pos:"n.",meaning:"The latest time to finish something",example:"Submit it before the deadline.",translation:"അവസാന തീയ്യതി"},
-  {word:"complaint",pos:"n.",meaning:"Saying you are not happy with something",example:"I made a complaint to the manager.",translation:"പരാതി"},
-  {word:"directions",pos:"n.",meaning:"Instructions to find a place",example:"Can you give me directions?",translation:"വഴി നിർദ്ദേശം"},
-  {word:"map",pos:"n.",meaning:"A drawing that shows an area",example:"Use the map on your phone.",translation:"ഭൂപടം"},
-  {word:"station",pos:"n.",meaning:"A place where trains or buses stop",example:"The train station is nearby.",translation:"സ്റ്റേഷൻ"},
-  {word:"platform",pos:"n.",meaning:"The area where you board a train",example:"The train is at platform three.",translation:"പ്ലാറ്റ്ഫോം"},
-  {word:"delay",pos:"n.",meaning:"When something happens later than planned",example:"There is a delay of one hour.",translation:"വൈകൽ"},
-  {word:"arrive",pos:"v.",meaning:"To reach a destination",example:"We arrived at the hotel safely.",translation:"എത്തിച്ചേരുക"},
-  {word:"depart",pos:"v.",meaning:"To leave a place",example:"The flight departs at noon.",translation:"പുറപ്പെടുക"},
-  {word:"book",pos:"v.",meaning:"To reserve something in advance",example:"Book your seat early.",translation:"ബുക്ക് ചെയ്യുക"},
-  {word:"pay",pos:"v.",meaning:"To give money for something",example:"Pay at the front desk.",translation:"പണം കൊടുക്കുക"},
-  {word:"check in",pos:"v.",meaning:"To register on arrival",example:"Check in before three pm.",translation:"ചെക്ക് ഇൻ ചെയ്യുക"},
-  {word:"exchange",pos:"v.",meaning:"To swap one thing for another",example:"Exchange your currency here.",translation:"കൈമാറ്റം ചെയ്യുക"},
-  ],
-  B1_extra: [
-  {word:"achieve",pos:"v.",meaning:"To successfully reach a goal",example:"She achieved her dream of studying abroad.",translation:"നേടുക"},
-  {word:"affect",pos:"v.",meaning:"To have an impact on something",example:"Stress can affect your health.",translation:"ബാധിക്കുക"},
-  {word:"allow",pos:"v.",meaning:"To permit someone to do something",example:"They do not allow phones here.",translation:"അനുവദിക്കുക"},
-  {word:"apply",pos:"v.",meaning:"To make a formal request",example:"Apply for the job online.",translation:"അപേക്ഷിക്കുക"},
-  {word:"avoid",pos:"v.",meaning:"To keep away from something",example:"Avoid eating junk food daily.",translation:"ഒഴിവാക്കുക"},
-  {word:"believe",pos:"v.",meaning:"To think something is true",example:"I believe in hard work.",translation:"വിശ്വസിക്കുക"},
-  {word:"cause",pos:"v.",meaning:"To make something happen",example:"Pollution causes health problems.",translation:"കാരണമാകുക"},
-  {word:"change",pos:"v.",meaning:"To make or become different",example:"Technology has changed our lives.",translation:"മാറുക"},
-  {word:"choose",pos:"v.",meaning:"To pick one from several options",example:"Choose the answer carefully.",translation:"തിരഞ്ഞെടുക്കുക"},
-  {word:"complete",pos:"v.",meaning:"To finish something fully",example:"Please complete the form.",translation:"പൂർത്തിയാക്കുക"},
-  {word:"connect",pos:"v.",meaning:"To join or link two things",example:"Connect your phone to wifi.",translation:"ബന്ധിക്കുക"},
-  {word:"create",pos:"v.",meaning:"To make something new",example:"She created a new design.",translation:"സൃഷ്ടിക്കുക"},
-  {word:"decide",pos:"v.",meaning:"To make a choice after thinking",example:"Decide before the deadline.",translation:"തീരുമാനിക്കുക"},
-  {word:"develop",pos:"v.",meaning:"To grow or improve over time",example:"She developed her English skills.",translation:"വികസിക്കുക"},
-  {word:"discuss",pos:"v.",meaning:"To talk about something in detail",example:"Let us discuss the problem.",translation:"ചർച്ച ചെയ്യുക"},
-  {word:"enjoy",pos:"v.",meaning:"To get pleasure from something",example:"I enjoy listening to music.",translation:"ആസ്വദിക്കുക"},
-  {word:"explain",pos:"v.",meaning:"To make something clear",example:"Can you explain this word?",translation:"വ്യക്തമാക്കുക"},
-  {word:"focus",pos:"v.",meaning:"To concentrate on something",example:"Focus on your studies.",translation:"ശ്രദ്ധ കേന്ദ്രീകരിക്കുക"},
-  {word:"improve",pos:"v.",meaning:"To get better",example:"Practise daily to improve.",translation:"മെച്ചപ്പെടുക"},
-  {word:"increase",pos:"v.",meaning:"To become more in number",example:"Prices continue to increase.",translation:"വർദ്ധിക്കുക"},
-  {word:"manage",pos:"v.",meaning:"To be in charge of something",example:"She manages a large team.",translation:"കൈകാര്യം ചെയ്യുക"},
-  {word:"motivate",pos:"v.",meaning:"To make someone want to do something",example:"Praise can motivate employees.",translation:"പ്രചോദിപ്പിക്കുക"},
-  {word:"plan",pos:"v.",meaning:"To decide what to do in advance",example:"Plan your day the night before.",translation:"ആസൂത്രണം ചെയ്യുക"},
-  {word:"prepare",pos:"v.",meaning:"To get ready for something",example:"Prepare for your interview.",translation:"തയ്യാറാകുക"},
-  {word:"provide",pos:"v.",meaning:"To give or supply something",example:"We provide quality service.",translation:"നൽകുക"},
-  {word:"reduce",pos:"v.",meaning:"To make something smaller or less",example:"Reduce screen time daily.",translation:"കുറക്കുക"},
-  {word:"require",pos:"v.",meaning:"To need something",example:"This job requires good English.",translation:"ആവശ്യപ്പെടുക"},
-  {word:"share",pos:"v.",meaning:"To give part to others",example:"Share the information with us.",translation:"പങ്കിടുക"},
-  {word:"solve",pos:"v.",meaning:"To find an answer to a problem",example:"We need to solve this issue.",translation:"പരിഹരിക്കുക"},
-  {word:"suggest",pos:"v.",meaning:"To put forward an idea",example:"Can you suggest a good book?",translation:"നിർദ്ദേശിക്കുക"},
-  {word:"support",pos:"v.",meaning:"To help or encourage someone",example:"Thank you for your support.",translation:"പിന്തുണക്കുക"},
-  {word:"ability",pos:"n.",meaning:"The power or skill to do something",example:"She has the ability to lead.",translation:"കഴിവ്"},
-  {word:"advantage",pos:"n.",meaning:"A condition that helps you succeed",example:"Speaking English is an advantage.",translation:"മേന്മ"},
-  {word:"advice",pos:"n.",meaning:"Suggestions about what to do",example:"Can I give you some advice?",translation:"ഉപദേശം"},
-  {word:"anxiety",pos:"n.",meaning:"A feeling of worry and nervousness",example:"She felt anxiety before the exam.",translation:"ഉത്കണ്ഠ"},
-  {word:"attention",pos:"n.",meaning:"The act of focusing your mind",example:"Pay attention to the details.",translation:"ശ്രദ്ധ"},
-  {word:"attitude",pos:"n.",meaning:"The way you think or feel about something",example:"A positive attitude helps you succeed.",translation:"മനോഭാവം"},
-  {word:"challenge",pos:"n.",meaning:"Something difficult that tests you",example:"Learning English is a challenge.",translation:"വെല്ലുവിളി"},
-  {word:"confidence",pos:"n.",meaning:"Belief in your own ability",example:"Speak with confidence.",translation:"ആത്മവിശ്വാസം"},
-  {word:"culture",pos:"n.",meaning:"The customs and beliefs of a group",example:"Every country has its own culture.",translation:"സംസ്കാരം"},
-  {word:"decision",pos:"n.",meaning:"A choice made after thinking",example:"It was a difficult decision.",translation:"തീരുമാനം"},
-  {word:"education",pos:"n.",meaning:"The process of learning",example:"Education opens many doors.",translation:"വിദ്യാഭ്യാസം"},
-  {word:"environment",pos:"n.",meaning:"The natural world around us",example:"Protect the environment.",translation:"പരിസ്ഥിതി"},
-  {word:"experience",pos:"n.",meaning:"Knowledge from doing things",example:"Work experience is important.",translation:"അനുഭവം"},
-  {word:"goal",pos:"n.",meaning:"Something you aim to achieve",example:"Set clear goals for yourself.",translation:"ലക്ഷ്യം"},
-  {word:"information",pos:"n.",meaning:"Facts or knowledge about something",example:"I need more information.",translation:"വിവരം"},
-  {word:"internet",pos:"n.",meaning:"A global network of computers",example:"I work on the internet.",translation:"ഇന്റർനെറ്റ്"},
-  {word:"knowledge",pos:"n.",meaning:"Facts and skills you have learned",example:"Knowledge is power.",translation:"അറിവ്"},
-  {word:"language",pos:"n.",meaning:"A system of words for communication",example:"English is a global language.",translation:"ഭാഷ"},
-  {word:"mistake",pos:"n.",meaning:"Something done wrong",example:"Everyone makes mistakes.",translation:"തെറ്റ്"},
-  {word:"opportunity",pos:"n.",meaning:"A chance to do something",example:"This is a great opportunity.",translation:"അവസരം"},
-  {word:"problem",pos:"n.",meaning:"A difficult situation",example:"We need to solve this problem.",translation:"പ്രശ്നം"},
-  {word:"progress",pos:"n.",meaning:"Movement toward a goal",example:"You are making great progress.",translation:"പുരോഗതി"},
-  {word:"reason",pos:"n.",meaning:"A cause or explanation",example:"What is the reason for this?",translation:"കാരണം"},
-  {word:"result",pos:"n.",meaning:"The outcome of something",example:"The test results are out.",translation:"ഫലം"},
-  {word:"skill",pos:"n.",meaning:"An ability developed through practice",example:"Cooking is a useful skill.",translation:"നൈപുണ്യം"},
-  {word:"technology",pos:"n.",meaning:"Tools and machines from science",example:"Technology changes fast.",translation:"സാങ്കേതികവിദ്യ"},
-  {word:"training",pos:"n.",meaning:"Learning a skill through practice",example:"He completed his training.",translation:"പരിശീലനം"},
-  ],
-  B2_extra: [
-  {word:"analyse",pos:"v.",meaning:"To examine something in detail",example:"Analyse the data carefully.",translation:"വിശകലനം ചെയ്യുക"},
-  {word:"assess",pos:"v.",meaning:"To evaluate or judge something",example:"Assess the risks before starting.",translation:"വിലയിരുത്തുക"},
-  {word:"collaborate",pos:"v.",meaning:"To work together with others",example:"We collaborate with global teams.",translation:"സഹകരിക്കുക"},
-  {word:"delegate",pos:"v.",meaning:"To give tasks to others",example:"A good manager delegates well.",translation:"ചുമതല ഏൽപ്പിക്കുക"},
-  {word:"evaluate",pos:"v.",meaning:"To judge the value of something",example:"Evaluate the team performance.",translation:"മൂല്യനിർണ്ണയം ചെയ്യുക"},
-  {word:"generate",pos:"v.",meaning:"To produce or create something",example:"Generate new ideas regularly.",translation:"ഉൽപ്പാദിപ്പിക്കുക"},
-  {word:"identify",pos:"v.",meaning:"To recognise and name something",example:"Identify the main problem first.",translation:"തിരിച്ചറിയുക"},
-  {word:"implement",pos:"v.",meaning:"To put a plan into action",example:"We will implement the new policy.",translation:"നടപ്പിലാക്കുക"},
-  {word:"influence",pos:"v.",meaning:"To have an effect on someone",example:"Social media influences behaviour.",translation:"സ്വാധീനിക്കുക"},
-  {word:"invest",pos:"v.",meaning:"To put money in to get more back",example:"Invest in your education.",translation:"നിക്ഷേപിക്കുക"},
-  {word:"maintain",pos:"v.",meaning:"To keep something in good condition",example:"Maintain a healthy lifestyle.",translation:"നിലനിർത്തുക"},
-  {word:"negotiate",pos:"v.",meaning:"To discuss to reach an agreement",example:"Negotiate a better salary.",translation:"ചർച്ച ചെയ്ത് തീർക്കുക"},
-  {word:"overcome",pos:"v.",meaning:"To successfully deal with a problem",example:"Overcome your fear of speaking.",translation:"മറികടക്കുക"},
-  {word:"persuade",pos:"v.",meaning:"To convince someone to do something",example:"She persuaded him to apply.",translation:"ബോധ്യപ്പെടുത്തുക"},
-  {word:"prioritise",pos:"v.",meaning:"To deal with the most important first",example:"Prioritise your daily tasks.",translation:"മുൻഗണന നൽകുക"},
-  {word:"promote",pos:"v.",meaning:"To raise to a higher position",example:"She was promoted to manager.",translation:"ഉയർത്തുക"},
-  {word:"recommend",pos:"v.",meaning:"To suggest something as suitable",example:"I recommend this restaurant.",translation:"ശുപാർശ ചെയ്യുക"},
-  {word:"resolve",pos:"v.",meaning:"To find a solution to a problem",example:"Resolve the conflict quickly.",translation:"പരിഹരിക്കുക"},
-  {word:"strategy",pos:"n.",meaning:"A plan to achieve a goal",example:"Develop a clear strategy.",translation:"തന്ത്രം"},
-  {word:"budget",pos:"n.",meaning:"A financial plan for spending",example:"Stay within the project budget.",translation:"ബജറ്റ്"},
-  {word:"career",pos:"n.",meaning:"A long-term job in one field",example:"She has a successful career.",translation:"കരിയർ"},
-  {word:"commitment",pos:"n.",meaning:"Dedication to something",example:"Show commitment to your work.",translation:"സമർപ്പണം"},
-  {word:"competition",pos:"n.",meaning:"Rivalry between people or groups",example:"The competition was very tough.",translation:"മത്സരം"},
-  {word:"conflict",pos:"n.",meaning:"A serious disagreement",example:"Avoid conflict in the workplace.",translation:"സംഘർഷം"},
-  {word:"consequence",pos:"n.",meaning:"A result of an action",example:"Think about the consequences.",translation:"പരിണതഫലം"},
-  {word:"contract",pos:"n.",meaning:"A legal written agreement",example:"Sign the contract before starting.",translation:"കരാർ"},
-  {word:"efficiency",pos:"n.",meaning:"Doing something well without waste",example:"Improve your work efficiency.",translation:"കാര്യക്ഷമത"},
-  {word:"feedback",pos:"n.",meaning:"Comments about performance",example:"Ask for feedback regularly.",translation:"പ്രതികരണം"},
-  {word:"leadership",pos:"n.",meaning:"The ability to guide others",example:"Strong leadership is essential.",translation:"നേതൃത്വം"},
-  {word:"performance",pos:"n.",meaning:"How well someone does their job",example:"Her performance is excellent.",translation:"പ്രകടനം"},
-  {word:"productivity",pos:"n.",meaning:"The rate of output per effort",example:"Increase your daily productivity.",translation:"ഉൽപ്പാദനക്ഷമത"},
-  {word:"profit",pos:"n.",meaning:"Money earned after paying costs",example:"The company made good profit.",translation:"ലാഭം"},
-  {word:"proposal",pos:"n.",meaning:"A formal suggestion or plan",example:"Submit your proposal by Friday.",translation:"നിർദ്ദേശം"},
-  {word:"reputation",pos:"n.",meaning:"The opinion others have of you",example:"Build a strong reputation.",translation:"പ്രശസ്തി"},
-  {word:"responsibility",pos:"n.",meaning:"A duty you are required to do",example:"Take responsibility for your work.",translation:"ഉത്തരവാദിത്തം"},
-  {word:"revenue",pos:"n.",meaning:"Income earned by a business",example:"Increase the company revenue.",translation:"വരുമാനം"},
-  {word:"risk",pos:"n.",meaning:"A chance of something bad happening",example:"Every business has some risk.",translation:"അപകടസാദ്ധ്യത"},
-  ],
-  C1_extra: [
-  {word:"acknowledge",pos:"v.",meaning:"To accept or admit the truth of",example:"Acknowledge your mistakes openly.",translation:"അംഗീകരിക്കുക"},
-  {word:"articulate",pos:"v.",meaning:"To express thoughts clearly",example:"Articulate your ideas confidently.",translation:"വ്യക്തമായി പ്രകടിപ്പിക്കുക"},
-  {word:"clarify",pos:"v.",meaning:"To make something easier to understand",example:"Please clarify your statement.",translation:"വ്യക്തമാക്കുക"},
-  {word:"comprehend",pos:"v.",meaning:"To understand something fully",example:"Comprehend the text before answering.",translation:"ഗ്രഹിക്കുക"},
-  {word:"elaborate",pos:"v.",meaning:"To explain in more detail",example:"Can you elaborate on that point?",translation:"വിശദീകരിക്കുക"},
-  {word:"emphasise",pos:"v.",meaning:"To give special importance to",example:"Emphasise key points in your speech.",translation:"ഊന്നൽ നൽകുക"},
-  {word:"facilitate",pos:"v.",meaning:"To make a process easier",example:"Technology facilitates learning.",translation:"സുഗമമാക്കുക"},
-  {word:"integrate",pos:"v.",meaning:"To combine parts into a whole",example:"Integrate new skills into practice.",translation:"സംയോജിപ്പിക്കുക"},
-  {word:"interpret",pos:"v.",meaning:"To explain the meaning of",example:"Interpret the data accurately.",translation:"വ്യാഖ്യാനിക്കുക"},
-  {word:"justify",pos:"v.",meaning:"To give good reasons for something",example:"Justify your decision clearly.",translation:"ന്യായീകരിക്കുക"},
-  {word:"perceive",pos:"v.",meaning:"To become aware of through senses",example:"How do others perceive you?",translation:"ഗ്രഹിക്കുക"},
-  {word:"persist",pos:"v.",meaning:"To continue despite difficulty",example:"Persist even when things are hard.",translation:"നിലനിൽക്കുക"},
-  {word:"stimulate",pos:"v.",meaning:"To encourage activity or interest",example:"Reading stimulates the mind.",translation:"ഉത്തേജിപ്പിക്കുക"},
-  {word:"sustain",pos:"v.",meaning:"To keep something going",example:"Sustain your motivation daily.",translation:"നിലനിർത്തുക"},
-  {word:"ambiguity",pos:"n.",meaning:"Uncertainty in meaning",example:"Avoid ambiguity in writing.",translation:"അവ്യക്തത"},
-  {word:"coherence",pos:"n.",meaning:"Logical and consistent connection",example:"Ensure coherence in your essay.",translation:"ഐകരൂപ്യം"},
-  {word:"complexity",pos:"n.",meaning:"The state of being complicated",example:"The complexity of the issue is clear.",translation:"സങ്കീർണ്ണത"},
-  {word:"concept",pos:"n.",meaning:"An abstract idea or principle",example:"Explain the concept clearly.",translation:"ആശയം"},
-  {word:"credibility",pos:"n.",meaning:"The quality of being trusted",example:"Build your professional credibility.",translation:"വിശ്വാസ്യത"},
-  {word:"diversity",pos:"n.",meaning:"Variety of different things or people",example:"Diversity enriches every workplace.",translation:"വൈവിദ്ധ്യം"},
-  {word:"empathy",pos:"n.",meaning:"Understanding another person feelings",example:"Show empathy to your colleagues.",translation:"സഹാനുഭൂതി"},
-  {word:"framework",pos:"n.",meaning:"A structure that supports something",example:"Use a clear framework for essays.",translation:"ചട്ടക്കൂട്"},
-  {word:"hypothesis",pos:"n.",meaning:"A proposed explanation to be tested",example:"Test your hypothesis with data.",translation:"സിദ്ധാന്തം"},
-  {word:"innovation",pos:"n.",meaning:"A new method or idea",example:"Innovation drives business growth.",translation:"നൂതനാശയം"},
-  {word:"integrity",pos:"n.",meaning:"Being honest and having strong morals",example:"Act with integrity always.",translation:"സത്യസന്ധത"},
-  {word:"perspective",pos:"n.",meaning:"A point of view on something",example:"Consider different perspectives.",translation:"കാഴ്ചപ്പാട്"},
-  {word:"resilience",pos:"n.",meaning:"The ability to recover quickly",example:"Build resilience through challenges.",translation:"പ്രതിരോധ ശക്തി"},
-  {word:"synthesis",pos:"n.",meaning:"Combining elements to form a whole",example:"Write a synthesis of all sources.",translation:"സമന്വയം"},
-  {word:"validity",pos:"n.",meaning:"The quality of being logical and sound",example:"Question the validity of claims.",translation:"സാധുത"},
-  ],
-};
+  toasts:      [],};
 
 function reducer(state, action) {
   switch (action.type) {
@@ -8587,7 +8385,6 @@ function reducer(state, action) {
       try { localStorage.removeItem("ep_settings"); localStorage.removeItem("ep_user"); } catch {}
       revokeAdminSession();
       return { ...initialState, screen:"login" };
-      case "SET_TT_SCORE": return { ...state, ttScores: { ...state.ttScores, [action.payload.id]: action.payload.score } };
     }
     case "UPGRADE_PRO": {
       // ✅ FIX: Pro is ONLY activated by the admin (via ADMIN_ACTIVATE).
