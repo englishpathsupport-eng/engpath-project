@@ -3727,11 +3727,14 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
   const [active,setActive]=useState(null);
   const [phase, setPhase]=useState("idle");
   const [feedback,setFeedback]=useState(null);
-  const scores = state.ttScores || {};
+  const [scores, setScoresLocal] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("tt_scores") || "{}"); } catch(_) { return {}; }
+  });
   const setScores = (updater) => {
-    const next = typeof updater === "function" ? updater(scores) : updater;
-    Object.entries(next).forEach(([id, score]) => {
-      if (scores[id] !== score) dispatch({ type:"SET_TT_SCORE", payload:{ id, score } });
+    setScoresLocal(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      try { localStorage.setItem("tt_scores", JSON.stringify(next)); } catch(_) {}
+      return next;
     });
   };
   const tts = useTTS();
