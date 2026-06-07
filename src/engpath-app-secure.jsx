@@ -3733,6 +3733,8 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
   const startRecord = async (tt) => {
     setActive(tt.id); setPhase("recording"); setFeedback(null);
     tts.stop(); stt.reset();
+    // Small delay so any nearby audio (e.g. another device's TTS) fades before mic opens
+    await new Promise(r => setTimeout(r, 1000));
     await stt.start();
   };
 
