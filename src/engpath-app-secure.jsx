@@ -3727,7 +3727,12 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
   const [active,setActive]=useState(null);
   const [phase, setPhase]=useState("idle");
   const [feedback,setFeedback]=useState(null);
-  const [scores,setScores]=useState({});
+  const [scores,setScores]=useState(()=>{
+    try { return JSON.parse(localStorage.getItem("tt_scores")||"{}"); } catch(_){ return {}; }
+  });
+  useEffect(()=>{
+    try { localStorage.setItem("tt_scores", JSON.stringify(scores)); } catch(_){}
+  }, [scores]);
   const tts = useTTS();
   const stt = useSTT({ lang: state.settings.accent||"en-US" });
 
