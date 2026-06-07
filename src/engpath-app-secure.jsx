@@ -350,12 +350,12 @@ function useSTT({ lang = "en-US" } = {}) {
           return next;
         });
         clearTimeout(silenceRef.current);
-        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 1500);
+        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 2500);
       }
       if (inter) {
         setInterim(inter);
         clearTimeout(silenceRef.current);
-        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 1500);
+        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 2500);
       }
     };
 
