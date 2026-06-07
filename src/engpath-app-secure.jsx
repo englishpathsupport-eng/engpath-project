@@ -342,9 +342,7 @@ function useSTT({ lang = "en-US" } = {}) {
         const t = e.results[i][0].transcript;
         e.results[i].isFinal ? (fin += t + " ") : (inter += t);
       }
-      // Ignore if TTS is playing (prevents AI voice being transcribed)
-      const ttsPlaying = window.speechSynthesis?.speaking;
-      if (fin && !ttsPlaying) {
+      if (fin) {
         setTranscript(prev => {
           const next = fin.trim();
           txRef.current = next;
@@ -353,15 +351,10 @@ function useSTT({ lang = "en-US" } = {}) {
         clearTimeout(silenceRef.current);
         silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 2500);
       }
-      if (inter && !ttsPlaying) {
+      if (inter) {
         setInterim(inter);
         clearTimeout(silenceRef.current);
         silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 2500);
-      }
-      // If TTS playing, reset silence timer to keep recording alive
-      if (ttsPlaying) {
-        clearTimeout(silenceRef.current);
-        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 4000);
       }
     };
 
