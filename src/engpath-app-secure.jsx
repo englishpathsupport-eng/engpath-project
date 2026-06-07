@@ -3727,12 +3727,13 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
   const [active,setActive]=useState(null);
   const [phase, setPhase]=useState("idle");
   const [feedback,setFeedback]=useState(null);
-  const [scores,setScores]=useState(()=>{
-    try { return JSON.parse(localStorage.getItem("tt_scores")||"{}"); } catch(_){ return {}; }
-  });
-  useEffect(()=>{
-    try { localStorage.setItem("tt_scores", JSON.stringify(scores)); } catch(_){}
-  }, [scores]);
+  const scores = state.ttScores || {};
+  const setScores = (updater) => {
+    const next = typeof updater === "function" ? updater(scores) : updater;
+    Object.entries(next).forEach(([id, score]) => {
+      if (scores[id] !== score) dispatch({ type:"SET_TT_SCORE", payload:{ id, score } });
+    });
+  };
   const tts = useTTS();
   const stt = useSTT({ lang: state.settings.accent||"en-US" });
 
@@ -8365,6 +8366,7 @@ const initialState = {
   settings:    { ...DEFAULT_SETTINGS, ...(loadSettings() || {}) },
   progress:    { grammar: 42, vocabulary: 58, speaking: 30, writing: 45 },
   dailyUsage:  { pronunciation: 0, conversations: 0, aiChat: 0 },
+  ttScores:    {},
   adminConfig: { ...(loadAdminConfig() || DEFAULT_ADMIN) },
   toasts:      [],
 
@@ -8578,6 +8580,7 @@ function reducer(state, action) {
       try { localStorage.removeItem("ep_settings"); localStorage.removeItem("ep_user"); } catch {}
       revokeAdminSession();
       return { ...initialState, screen:"login" };
+      case "SET_TT_SCORE": return { ...state, ttScores: { ...state.ttScores, [action.payload.id]: action.payload.score } };
     }
     case "UPGRADE_PRO": {
       // ✅ FIX: Pro is ONLY activated by the admin (via ADMIN_ACTIVATE).
