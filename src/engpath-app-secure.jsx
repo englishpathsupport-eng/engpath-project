@@ -343,18 +343,26 @@ function useSTT({ lang = "en-US" } = {}) {
         e.results[i].isFinal ? (fin += t + " ") : (inter += t);
       }
       if (fin) {
-        setTranscript(prev => {
-          const next = fin.trim();
-          txRef.current = next;
-          return next;
-        });
-        clearTimeout(silenceRef.current);
-        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 2500);
+        const finText = fin.trim();
+        // If TTS is playing on same device, keep mic open but don't save transcript yet
+        if (window.speechSynthesis?.speaking) {
+          clearTimeout(silenceRef.current);
+          silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 4000);
+        } else {
+          setTranscript(prev => {
+            txRef.current = finText;
+            return finText;
+          });
+          clearTimeout(silenceRef.current);
+          silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 2500);
+        }
       }
       if (inter) {
-        setInterim(inter);
+        if (!window.speechSynthesis?.speaking) {
+          setInterim(inter);
+        }
         clearTimeout(silenceRef.current);
-        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, 2500);
+        silenceRef.current = setTimeout(() => { recRef.current?.stop(); }, window.speechSynthesis?.speaking ? 4000 : 2500);
       }
     };
 
