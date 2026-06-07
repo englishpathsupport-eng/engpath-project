@@ -3746,10 +3746,10 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
     stt.stop();
     setPhase("analysing");
     setTimeout(async () => {
-      let spoken = stt.getLatest() || "";
-      for (let i = 0; i < 3 && !spoken.trim(); i++) {
-        await new Promise(r => setTimeout(r, 400));
-        spoken = stt.getLatest() || "";
+      let spoken = stt.getLatest() || stt.transcript || "";
+      for (let i = 0; i < 5 && !spoken.trim(); i++) {
+        await new Promise(r => setTimeout(r, 500));
+        spoken = stt.getLatest() || stt.transcript || "";
       }
       if (!spoken.trim()) { setPhase("idle"); return; }
       const al = alignWords(tt.text, spoken);
