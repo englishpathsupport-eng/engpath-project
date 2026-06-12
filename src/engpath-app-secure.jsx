@@ -7194,22 +7194,30 @@ const ACCENTS = [
 ];
 
 const LANGUAGES = [
+  ["en","🇬🇧","English"],
   ["ml","🇮🇳","Malayalam"],
   ["hi","🇮🇳","Hindi"],
   ["ta","🇮🇳","Tamil"],
   ["te","🇮🇳","Telugu"],
   ["ar","🇸🇦","Arabic"],
-  ["fr","🇫🇷","French"],
-  ["de","🇩🇪","German"],
   ["es","🇪🇸","Spanish"],
-  ["zh","🇨🇳","Chinese"],
-  ["ja","🇯🇵","Japanese"],
+  ["fr","🇫🇷","French"],
   ["pt","🇧🇷","Portuguese"],
-  ["en","🇬🇧","English"],
+  ["zh","🇨🇳","Chinese"],
+  ["de","🇩🇪","German"],
+  ["ja","🇯🇵","Japanese"],
+  ["ko","🇰🇷","Korean"],
+  ["id","🇮🇩","Indonesian"],
+  ["vi","🇻🇳","Vietnamese"],
+  ["tr","🇹🇷","Turkish"],
+  ["it","🇮🇹","Italian"],
+  ["bn","🇧🇩","Bengali"],
+  ["ur","🇵🇰","Urdu"],
+  ["th","🇹🇭","Thai"],
 ];
 
 // ✅ FIX: Free users are limited to the first 5 languages
-const FREE_LANG_COUNT = 5;
+const FREE_LANG_COUNT = 10;
 
 const SPEEDS = [[0.5,"0.5×"],[0.75,"0.75×"],[1,"1×"],[1.25,"1.25×"],[1.5,"1.5×"],[1.75,"1.75×"]];
 const SETTINGS_LEVELS = ["A1","A2","B1","B2","C1"];
