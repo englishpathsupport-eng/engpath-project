@@ -7533,7 +7533,7 @@ const Settings = memo(function Settings({ state, dispatch }) {
       <Section title="Translation Language" icon="🌐" accent="var(--blue)">
         {!(isActivePro(user)) && (
           <div style={{ marginBottom:12, padding:"10px 14px", background:"var(--gold-soft)", border:"1px solid var(--gold-border)", borderRadius:16, fontSize:12, color:"var(--gold)", display:"flex", gap:7, alignItems:"center", fontWeight:500 }}>
-            🔒 <span><strong>5 languages free</strong> · Upgrade to Pro for all {LANGUAGES.length} languages</span>
+            🔒 <span><strong>{FREE_LANG_COUNT} languages free</strong> · Upgrade to Pro for all {LANGUAGES.length} languages</span>
           </div>
         )}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:8 }}>
