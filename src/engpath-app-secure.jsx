@@ -767,32 +767,6 @@ const LOCAL_DICT = {
   "give":  {phonetic:"/ɡɪv/",cefr:"A1",pos:"v.",definition:"To freely transfer something to someone",simple:"Give means you hand something to another person",examples:["Please give me your pen.","He gave her a gift."],synonyms:["hand","offer","provide"],antonyms:["take","receive","keep"]},
   "think": {phonetic:"/θɪŋk/",cefr:"A1",pos:"v.",definition:"To use your mind to form ideas and opinions",simple:"Think means using your brain to have ideas",examples:["I think you are right.","She is thinking about her future."],synonyms:["consider","believe","reflect"],antonyms:[]},
   "say":   {phonetic:"/seɪ/",cefr:"A1",pos:"v.",definition:"To speak words; to express in words",simple:"Say means to speak something out loud",examples:["What did she say?","I say thank you every time."],synonyms:["tell","speak","mention"],antonyms:[]},
-
-  "travel": {phonetic:"/ˈtræv.əl/",cefr:"A2",pos:"v.",definition:"To go from one place to another, especially over a long distance",simple:"Travel means moving from one place to another",examples:["I love to travel abroad.","She travels to work by train."],synonyms:["journey","trip","voyage"],antonyms:["stay","remain"]},
-  "hotel":  {phonetic:"/həʊˈtel/",cefr:"A2",pos:"n.",definition:"A place where people pay to sleep and eat meals",simple:"A hotel is a building where you pay to stay the night",examples:["We stayed in a nice hotel.","Book the hotel in advance."],synonyms:["inn","lodge","accommodation"],antonyms:[]},
-  "airport":{phonetic:"/ˈeə.pɔːt/",cefr:"A2",pos:"n.",definition:"A place where planes take off and land",simple:"An airport is where you go to catch a plane",examples:["Meet me at the airport.","The airport was very busy."],synonyms:["airfield","terminal","aerodrome"],antonyms:[]},
-  "ticket": {phonetic:"/ˈtɪk.ɪt/",cefr:"A2",pos:"n.",definition:"A piece of paper that shows you have paid to travel or enter somewhere",simple:"A ticket lets you get on a bus, train, or plane",examples:["Buy your ticket online.","I lost my train ticket."],synonyms:["pass","permit","voucher"],antonyms:[]},
-  "passport":{phonetic:"/ˈpɑːs.pɔːt/",cefr:"A2",pos:"n.",definition:"An official document that proves your identity when travelling abroad",simple:"You need a passport to travel to another country",examples:["Do not forget your passport.","My passport expires next year."],synonyms:["identity document","travel document"],antonyms:[]},
-  "money":  {phonetic:"/ˈmʌn.i/",cefr:"A2",pos:"n.",definition:"Coins and notes used to buy things",simple:"Money is what you use to pay for things",examples:["I need money for the bus.","She saved her money carefully."],synonyms:["cash","currency","funds"],antonyms:[]},
-  "shop":   {phonetic:"/ʃɒp/",cefr:"A2",pos:"n.",definition:"A building where you can buy goods",simple:"A shop is a place where things are sold",examples:["There is a shop near the school.","I went to the shop to buy bread."],synonyms:["store","market","outlet"],antonyms:[]},
-  "price":  {phonetic:"/praɪs/",cefr:"A2",pos:"n.",definition:"The amount of money needed to buy something",simple:"The price is how much something costs",examples:["What is the price of this bag?","The price of food has gone up."],synonyms:["cost","charge","fee"],antonyms:[]},
-  "cheap":  {phonetic:"/tʃiːp/",cefr:"A2",pos:"adj.",definition:"Low in price; not expensive",simple:"Cheap means something does not cost much money",examples:["This shirt is very cheap.","I found a cheap flight."],synonyms:["affordable","inexpensive","low-cost"],antonyms:["expensive","costly","pricey"]},
-  "expensive":{phonetic:"/ɪkˈspen.sɪv/",cefr:"A2",pos:"adj.",definition:"Costing a lot of money",simple:"Expensive means something costs a lot",examples:["That car is too expensive.","Eating out can be expensive."],synonyms:["costly","pricey","dear"],antonyms:["cheap","affordable","inexpensive"]},
-  "open":   {phonetic:"/ˈəʊ.pən/",cefr:"A2",pos:"adj.",definition:"Not closed; allowing people to enter or use",simple:"Open means you can go in or use it",examples:["The bank is open at nine.","Is the shop open today?"],synonyms:["available","accessible","unlocked"],antonyms:["closed","shut","locked"]},
-  "closed": {phonetic:"/kləʊzd/",cefr:"A2",pos:"adj.",definition:"Not open; not allowing people to enter",simple:"Closed means you cannot go in",examples:["The shop is closed today.","The library is closed on Sundays."],synonyms:["shut","locked","unavailable"],antonyms:["open","available","unlocked"]},
-  "early":  {phonetic:"/ˈɜː.li/",cefr:"A2",pos:"adv.",definition:"Before the usual or expected time",simple:"Early means before the normal time",examples:["She wakes up early every day.","Come early to get a good seat."],synonyms:["soon","ahead of time","beforehand"],antonyms:["late","tardily"]},
-  "late":   {phonetic:"/leɪt/",cefr:"A2",pos:"adv.",definition:"After the expected or usual time",simple:"Late means after the time it should happen",examples:["He arrived late to class.","Sorry I am late!"],synonyms:["overdue","delayed","behind"],antonyms:["early","on time","punctual"]},
-  "always": {phonetic:"/ˈɔːl.weɪz/",cefr:"A2",pos:"adv.",definition:"At all times; on every occasion",simple:"Always means every single time",examples:["She always smiles.","I always brush my teeth at night."],synonyms:["every time","constantly","forever"],antonyms:["never","rarely","seldom"]},
-  "sometimes":{phonetic:"/ˈsʌm.taɪmz/",cefr:"A2",pos:"adv.",definition:"On some occasions but not always",simple:"Sometimes means not every time, but a few times",examples:["I sometimes eat outside.","He sometimes forgets his keys."],synonyms:["occasionally","now and then","at times"],antonyms:["always","never"]},
-  "never":  {phonetic:"/ˈnev.ər/",cefr:"A2",pos:"adv.",definition:"At no time; not ever",simple:"Never means not even once",examples:["He never lies.","I have never been to Japan."],synonyms:["not ever","at no time"],antonyms:["always","ever","constantly"]},
-  "ask":    {phonetic:"/ɑːsk/",cefr:"A2",pos:"v.",definition:"To say something as a question in order to get information",simple:"Ask means to put a question to someone",examples:["Ask the teacher if you are unsure.","She asked for directions."],synonyms:["inquire","question","request"],antonyms:["answer","reply","respond"]},
-  "answer": {phonetic:"/ˈɑːn.sər/",cefr:"A2",pos:"v.",definition:"To say or write something in reply to a question",simple:"Answer means to reply when someone asks you something",examples:["Please answer my question.","He answered correctly."],synonyms:["reply","respond","react"],antonyms:["ask","question","ignore"]},
-  "learn":  {phonetic:"/lɜːn/",cefr:"A2",pos:"v.",definition:"To gain knowledge or a skill through study or experience",simple:"Learn means to get new knowledge or a skill",examples:["I want to learn English.","She learned to drive last year."],synonyms:["study","discover","master"],antonyms:["forget","ignore","unlearn"]},
-  "study":  {phonetic:"/ˈstʌd.i/",cefr:"A2",pos:"v.",definition:"To spend time reading and practising to learn something",simple:"Study means to work hard to learn something",examples:["She studies every evening.","I need to study for my exam."],synonyms:["learn","revise","practise"],antonyms:["ignore","forget","play"]},
-  "remember":{phonetic:"/rɪˈmem.bər/",cefr:"A2",pos:"v.",definition:"To keep something in your memory; to not forget",simple:"Remember means to keep something in your mind",examples:["Remember to bring your book.","I cannot remember his name."],synonyms:["recall","recollect","retain"],antonyms:["forget","overlook","ignore"]},
-  "forget": {phonetic:"/fəˈɡet/",cefr:"A2",pos:"v.",definition:"To fail to remember something",simple:"Forget means something leaves your memory",examples:["Do not forget the meeting.","I forgot my umbrella."],synonyms:["overlook","miss","omit"],antonyms:["remember","recall","recollect"]},
-  "help":   {phonetic:"/help/",cefr:"A2",pos:"v.",definition:"To make it easier for someone to do something",simple:"Help means to do something useful for another person",examples:["Can you help me, please?","She helped him carry the bags."],synonyms:["assist","support","aid"],antonyms:["hinder","obstruct","ignore"]},
-  "choose": {phonetic:"/tʃuːz/",cefr:"A2",pos:"v.",definition:"To pick one thing from several options",simple:"Choose means to decide which one you want",examples:["Choose the answer you think is right.","He chose the blue shirt."],synonyms:["select","pick","decide on"],antonyms:["reject","refuse","ignore"]},
 };
 
 // Free Dictionary API - no key needed
@@ -1699,54 +1673,26 @@ C1: [
   {word:"wane",pos:"v.",meaning:"To decrease gradually",example:"His interest began to wane.",translation:"ക്ഷീണിക്കുക"},
   {word:"zealous",pos:"adj.",meaning:"Having great energy for a cause",example:"A zealous worker.",translation:"ആവേശ"},
 ],
-  A2_extra: [
-  {word:"travel",pos:"v.",meaning:"To go from one place to another",example:"I love to travel abroad.",translation:"യാത്ര ചെയ്യുക"},
-  {word:"hotel",pos:"n.",meaning:"A place where you pay to stay",example:"We stayed in a nice hotel.",translation:"ഹോട്ടൽ"},
-  {word:"airport",pos:"n.",meaning:"A place where planes land and take off",example:"Meet me at the airport.",translation:"വിമാനത്താവളം"},
-  {word:"ticket",pos:"n.",meaning:"A paper that lets you travel or enter",example:"Buy your ticket online.",translation:"ടിക്കറ്റ്"},
-  {word:"passport",pos:"n.",meaning:"An official document for international travel",example:"Do not forget your passport.",translation:"പാസ്പോർട്ട്"},
-  {word:"money",pos:"n.",meaning:"Coins or notes used to buy things",example:"I need money for the bus.",translation:"പണം"},
-  {word:"shop",pos:"n.",meaning:"A place where you buy things",example:"There is a shop near the school.",translation:"കട"},
-  {word:"price",pos:"n.",meaning:"How much something costs",example:"What is the price of this bag?",translation:"വില"},
-  {word:"cheap",pos:"adj.",meaning:"Not expensive; low in price",example:"This shirt is very cheap.",translation:"വിലകുറഞ്ഞ"},
-  {word:"expensive",pos:"adj.",meaning:"Costing a lot of money",example:"That car is too expensive.",translation:"വിലയേറിയ"},
-  {word:"open",pos:"adj.",meaning:"Not closed; available to enter",example:"The bank is open at nine.",translation:"തുറന്ന"},
-  {word:"closed",pos:"adj.",meaning:"Not open; not available",example:"The shop is closed today.",translation:"അടച്ച"},
-  {word:"early",pos:"adv.",meaning:"Before the usual or expected time",example:"She wakes up early every day.",translation:"നേരത്തെ"},
-  {word:"late",pos:"adv.",meaning:"After the expected time",example:"He arrived late to class.",translation:"വൈകി"},
-  {word:"always",pos:"adv.",meaning:"At all times; every time",example:"She always smiles.",translation:"എപ്പോഴും"},
-  {word:"sometimes",pos:"adv.",meaning:"On some occasions but not always",example:"I sometimes eat outside.",translation:"ചിലപ്പോൾ"},
-  {word:"never",pos:"adv.",meaning:"At no time; not ever",example:"He never lies.",translation:"ഒരിക്കലും ഇല്ല"},
-  {word:"ask",pos:"v.",meaning:"To request information or help",example:"Ask the teacher if you are unsure.",translation:"ചോദിക്കുക"},
-  {word:"answer",pos:"v.",meaning:"To reply to a question",example:"Please answer my question.",translation:"ഉത്തരം പറയുക"},
-  {word:"learn",pos:"v.",meaning:"To gain knowledge or a skill",example:"I want to learn English.",translation:"പഠിക്കുക"},
-  {word:"study",pos:"v.",meaning:"To spend time reading or practising",example:"She studies every evening.",translation:"പഠിക്കുക"},
-  {word:"remember",pos:"v.",meaning:"To keep something in your memory",example:"Remember to bring your book.",translation:"ഓർക്കുക"},
-  {word:"forget",pos:"v.",meaning:"To fail to remember something",example:"Do not forget the meeting.",translation:"മറക്കുക"},
-  {word:"help",pos:"v.",meaning:"To make it easier for someone",example:"Can you help me, please?",translation:"സഹായിക്കുക"},
-  {word:"choose",pos:"v.",meaning:"To pick one from several options",example:"Choose the answer you think is right.",translation:"തിരഞ്ഞെടുക്കുക"}
-  ]
 };
 
 // Helper functions
 const LEVELS = ["A1", "A2", "B1", "B2", "C1"];
 
 function getWordsByLevel(level) {
-  const extra = level === "A2" ? (VOCAB["A2_extra"] || []) : [];
-  return [...(VOCAB[level] || []), ...extra];
+  return VOCAB[level] || [];
 }
 
 function getAllWords() {
-  return LEVELS.flatMap(l => l === "A2" ? [...(VOCAB[l] || []), ...(VOCAB["A2_extra"] || [])] : (VOCAB[l] || []));
+  return LEVELS.flatMap(l => VOCAB[l]);
 }
 
 function getTotalCount() {
-  return LEVELS.reduce((sum, l) => sum + (VOCAB[l]?.length || 0) + (l === "A2" ? (VOCAB["A2_extra"]?.length || 0) : 0), 0);
+  return LEVELS.reduce((sum, l) => sum + (VOCAB[l]?.length || 0), 0);
 }
 
 function searchWords(query, level = null) {
   const q = query.toLowerCase();
-  const source = level ? [...(VOCAB[level] || []), ...(level === "A2" ? (VOCAB["A2_extra"] || []) : [])] : getAllWords();
+  const source = level ? (VOCAB[level] || []) : getAllWords();
   return source.filter(w =>
     w.word.includes(q) ||
     w.meaning.toLowerCase().includes(q) ||
@@ -5739,7 +5685,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
         const stored = await window.storage?.get(STORAGE_KEY);
         if (stored?.value) { setWords(JSON.parse(stored.value)); return; }
       } catch {}
-      const seed = [...(VOCAB[level] || []), ...(level === "A2" ? (VOCAB["A2_extra"] || []) : [])];
+      const seed = VOCAB[level] || [];
       setWords(seed);
       try { await window.storage?.set(STORAGE_KEY, JSON.stringify(seed)); } catch {}
     })();
@@ -7258,6 +7204,8 @@ const LANGUAGES = [
   ["es","🇪🇸","Spanish"],
   ["zh","🇨🇳","Chinese"],
   ["ja","🇯🇵","Japanese"],
+  ["pt","🇧🇷","Portuguese"],
+  ["en","🇬🇧","English"],
 ];
 
 // ✅ FIX: Free users are limited to the first 5 languages
@@ -8343,7 +8291,8 @@ const initialState = {
   progress:    { grammar: 42, vocabulary: 58, speaking: 30, writing: 45 },
   dailyUsage:  { pronunciation: 0, conversations: 0, aiChat: 0 },
   adminConfig: { ...(loadAdminConfig() || DEFAULT_ADMIN) },
-  toasts:      [],};
+  toasts:      [],
+};
 
 function reducer(state, action) {
   switch (action.type) {
