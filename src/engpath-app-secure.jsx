@@ -5437,7 +5437,7 @@ const PictureSpeaking = memo(function PictureSpeaking({ state, dispatch }) {
               <div style={{ fontSize:14, color:"var(--text)", lineHeight:1.7, marginBottom:10 }}>
                 "{feedback.betterSentence}"
               </div>
-              <button onClick={() => tts.speak(feedback.betterSentence, { lang:state.settings.accent, rate:0.88 })}
+              <button onClick={() => tts.speak(feedback.betterSentence, { lang:state.settings.accent, rate:0.88, gender:state.settings.voice||"female" })}
                 style={{ display:"flex", gap:6, alignItems:"center", background:"var(--accent-soft)",
                   border:"none", cursor:"pointer", padding:"6px 14px", borderRadius:20,
                   fontSize:12, fontWeight:700, color:"var(--accent)" }}>
@@ -5640,7 +5640,7 @@ const Conversation = memo(function Conversation({ state, dispatch }) {
                   <span style={{ fontSize: 11, color: "var(--text-3)" }}>{line.note}</span>
                 )}
                 <button
-                  onClick={() => tts.speak(line.text, { lang: state.settings.accent })}
+                  onClick={() => tts.speak(line.text, { lang: state.settings.accent, gender:state.settings.voice||"female" })}
                   style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--accent)", padding: 0 }}
                 >
                   🔊
@@ -5884,7 +5884,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
               setFlip(newFlip);
               if (newFlip !== null && currentLang !== "ml") getTranslation(w.word, w.translation);
             }}
-            onSpeak={e => { e.stopPropagation(); tts.speak(`${w.word}. ${w.meaning}.`, { lang: state.settings.accent, rate: 0.88 }); }}
+            onSpeak={e => { e.stopPropagation(); tts.speak(`${w.word}. ${w.meaning}.`, { lang: state.settings.accent, rate: 0.88, gender:state.settings.voice||"female" }); }}
           />
           );
         })}
@@ -6299,7 +6299,7 @@ const Dictionary = memo(function Dictionary({ state, dispatch }) {
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button
-                  onClick={() => tts.speak(result.word, { lang: state.settings.accent, rate: 0.88 })}
+                  onClick={() => tts.speak(result.word, { lang: state.settings.accent, rate: 0.88, gender:state.settings.voice||"female" })}
                   style={{ width: 40, height: 40, borderRadius: 12, background: "var(--accent-soft)", border: "1px solid var(--accent-border)", cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" }}
                 >
                   {tts.speaking ? <div style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--accent)", borderTopColor: "transparent", animation: "spin .7s linear infinite" }} /> : "🔊"}
@@ -6349,7 +6349,7 @@ const Dictionary = memo(function Dictionary({ state, dispatch }) {
                     <span style={{ color: "var(--accent)", flexShrink: 0, marginTop: 1 }}>{'>'}</span>
                     <span style={{ fontSize: 13, color: "var(--text-2)", fontStyle: "italic", flex: 1 }}>"{ex}"</span>
                     <button
-                      onClick={() => tts.speak(ex, { lang: state.settings.accent, rate: 0.88 })}
+                      onClick={() => tts.speak(ex, { lang: state.settings.accent, rate: 0.88, gender:state.settings.voice||"female" })}
                       style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--text-3)", flexShrink: 0 }}
                     >🔊</button>
                   </div>
