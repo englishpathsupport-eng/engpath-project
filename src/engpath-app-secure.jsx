@@ -7082,8 +7082,8 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
   const fallback = voices.find(v => byLang(v));
   if (matched || fallback) utt.voice = matched || fallback;
   utt.pitch = isMale ? 0.8 : 1.2;
-  s.cancel();
-  s.speak(utt);
+  try { s.cancel(); } catch(_) {}
+  setTimeout(() => s.speak(utt), 50);
 }}
                 style={{ background:"none", border:"none", cursor:"pointer", fontSize:14, color:"var(--text-3)", flexShrink:0, marginBottom:6, padding:4, borderRadius:8, transition:"color .15s" }}
               >🔊</button>
