@@ -7066,14 +7066,12 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
   unlockAudio();
   const s = window.speechSynthesis;
   if (!s) return;
+  const clean = m.content.replace(/[✅❌💡📌*#`>]/g,"").replace(/\*\*([^*]+)\*\*/g,"$1").replace(/\*([^*]+)\*/g,"$1").trim();
+  const utt = new SpeechSynthesisUtterance(clean);
+  utt.lang = state.settings.accent || "en-US";
+  utt.rate = state.settings.speed || 0.9;
   s.cancel();
-  setTimeout(() => {
-    const clean = m.content.replace(/[✅❌💡📌*#`>]/g,"").replace(/\*\*([^*]+)\*\*/g,"$1").replace(/\*([^*]+)\*/g,"$1").trim();
-    const utt = new SpeechSynthesisUtterance(clean);
-    utt.lang = state.settings.accent || "en-US";
-    utt.rate = state.settings.speed || 0.9;
-    s.speak(utt);
-  }, 150);
+  s.speak(utt);
 }}
                 style={{ background:"none", border:"none", cursor:"pointer", fontSize:14, color:"var(--text-3)", flexShrink:0, marginBottom:6, padding:4, borderRadius:8, transition:"color .15s" }}
               >🔊</button>
