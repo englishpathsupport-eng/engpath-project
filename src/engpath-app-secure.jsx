@@ -7074,13 +7074,14 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
   const voices = s.getVoices();
   const gender = state.settings.voice || "female";
   const isMale = gender === "male";
-  const maleRe = /david|mark|daniel|fred|guy|aaron|brian|joey|matthew|justin|kevin|james|george|richard|tom/i;
-  const femRe = /zira|female|samantha|karen|victoria|aria|jenny|alice|heera|linda|susan|allison/i;
+  const maleRe = /david|mark|daniel|fred|guy|aaron|brian|joey|matthew|justin|kevin|james|george|richard|tom|male/i;
+  const femRe = /zira|female|samantha|karen|victoria|aria|jenny|alice|heera|linda|susan|allison|tessa/i;
   const langBase = (state.settings.accent || "en-US").slice(0,2);
   const byLang = v => v.lang && v.lang.startsWith(langBase);
   const matched = voices.find(v => byLang(v) && (isMale ? maleRe.test(v.name) : femRe.test(v.name)));
   const fallback = voices.find(v => byLang(v));
   if (matched || fallback) utt.voice = matched || fallback;
+  utt.pitch = isMale ? 0.8 : 1.2;
   s.cancel();
   s.speak(utt);
 }}
