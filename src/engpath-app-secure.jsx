@@ -29,9 +29,6 @@ function unlockAudio() {
   if (_audioUnlocked) return;
   _audioUnlocked = true;
   try {
-    // Only unlock Web Audio API context — do NOT call synth.speak() here
-    // because a silent utterance would queue before our real one.
-    // speechSynthesis is unlocked by the cancel()+speak() in speak() itself.
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const buf = ctx.createBuffer(1, 1, 22050);
     const src = ctx.createBufferSource();
@@ -39,7 +36,16 @@ function unlockAudio() {
     src.connect(ctx.destination);
     src.start(0);
     setTimeout(() => ctx.close(), 500);
-  } catch (_) { /* sandbox - ignore */ }
+  } catch (_) {}
+  try {
+    const s = window.speechSynthesis;
+    if (s) {
+      const u = new SpeechSynthesisUtterance("");
+      u.volume = 0;
+      s.speak(u);
+      setTimeout(() => s.cancel(), 100);
+    }
+  } catch (_) {}
 }
 
 /* ═══ useTTS.js ═══ */
