@@ -695,6 +695,7 @@ const LANG_LABELS = {
   ml:"Malayalam", hi:"Hindi", ta:"Tamil", te:"Telugu",
   ar:"Arabic",    fr:"French", de:"German", es:"Spanish",
   zh:"Chinese",   ja:"Japanese", ko:"Korean", pt:"Portuguese",
+  id:"Indonesian", vi:"Vietnamese", tr:"Turkish", it:"Italian", bn:"Bengali", ur:"Urdu", th:"Thai", en:"English",
 };
 
 export async function translateText(text, targetLang) {
@@ -963,7 +964,7 @@ Keep under 200 words. Use clear formatting.`;
 // ── Vocabulary AI generator ──────────────────────────────────────
 export async function generateVocabWords(level, existingWords = [], count = 50, nativeLang = "ml") {
   const existing = existingWords.slice(-20).join(", ");
-  const LANG_NAMES = {ml:"Malayalam",hi:"Hindi",ta:"Tamil",te:"Telugu",ar:"Arabic",fr:"French",de:"German",es:"Spanish",zh:"Chinese",ja:"Japanese",ko:"Korean",pt:"Portuguese"};
+  const LANG_NAMES = {ml:"Malayalam",hi:"Hindi",ta:"Tamil",te:"Telugu",ar:"Arabic",fr:"French",de:"German",es:"Spanish",zh:"Chinese",ja:"Japanese",ko:"Korean",pt:"Portuguese",id:"Indonesian",vi:"Vietnamese",tr:"Turkish",it:"Italian",bn:"Bengali",ur:"Urdu",th:"Thai",en:"English"};
   const langName = LANG_NAMES[nativeLang] || "Hindi";
   const prompt = `Generate ${count} useful ${level} CEFR English vocabulary words. Do NOT repeat: [${existing}].
 Return ONLY valid JSON array, no markdown, no extra text:
@@ -5760,7 +5761,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
     return isPro ? base : base.slice(0, FREE_VOCAB_LIMIT);
   }, [words, search, posFilter, isPro]);
 
-  const LANG_NAMES = { ml:"Malayalam",hi:"Hindi",ta:"Tamil",te:"Telugu",ar:"Arabic",fr:"French",de:"German",es:"Spanish",zh:"Chinese",ja:"Japanese",ko:"Korean",pt:"Portuguese" };
+  const LANG_NAMES = { ml:"Malayalam",hi:"Hindi",ta:"Tamil",te:"Telugu",ar:"Arabic",fr:"French",de:"German",es:"Spanish",zh:"Chinese",ja:"Japanese",ko:"Korean",pt:"Portuguese",id:"Indonesian",vi:"Vietnamese",tr:"Turkish",it:"Italian",bn:"Bengali",ur:"Urdu",th:"Thai",en:"English" };
 
   const pct = Math.min(100, Math.round((words.length / 1500) * 100));
 
@@ -6183,7 +6184,7 @@ const Dictionary = memo(function Dictionary({ state, dispatch }) {
   });
   const tts = useTTS();
 
-  const LANG_MAP = { ml:"Malayalam",hi:"Hindi",ta:"Tamil",ar:"Arabic",fr:"French",de:"German",es:"Spanish",zh:"Chinese",ja:"Japanese",ko:"Korean" };
+  const LANG_MAP = { ml:"Malayalam",hi:"Hindi",ta:"Tamil",te:"Telugu",ar:"Arabic",fr:"French",de:"German",es:"Spanish",zh:"Chinese",ja:"Japanese",ko:"Korean",pt:"Portuguese",id:"Indonesian",vi:"Vietnamese",tr:"Turkish",it:"Italian",bn:"Bengali",ur:"Urdu",th:"Thai",en:"English" };
 
   const search = async (word) => {
     const q = (word || query).trim().toLowerCase();
@@ -6712,7 +6713,7 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
 
   const tts        = useTTS();
   // Auto STT language from user settings
-  const sttLangMap = { ml:"ml-IN", hi:"hi-IN", ta:"ta-IN", te:"te-IN", ar:"ar-SA", fr:"fr-FR", de:"de-DE", es:"es-ES", zh:"zh-CN", ja:"ja-JP", tl:"fil-PH" };
+  const sttLangMap = { ml:"ml-IN", hi:"hi-IN", ta:"ta-IN", te:"te-IN", ar:"ar-SA", fr:"fr-FR", de:"de-DE", es:"es-ES", zh:"zh-CN", ja:"ja-JP", tl:"fil-PH", ko:"ko-KR", pt:"pt-BR", id:"id-ID", vi:"vi-VN", tr:"tr-TR", it:"it-IT", bn:"bn-BD", ur:"ur-PK", th:"th-TH", en:"en-US" };
   const sttLang    = sttLangMap[state.settings.lang] || state.settings.accent || "en-US";
   const sttEn      = useSTT({ lang: sttLang });
   const sttNative  = useSTT({ lang: sttLang });
@@ -7176,7 +7177,7 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
         </div>
 
         <div style={{ display:"flex", justifyContent:"space-between", marginTop:5, padding:"0 4px", fontSize:10, color:"var(--text-3)" }}>
-          <span>🎙 {({"ml":"Malayalam","hi":"Hindi","ta":"Tamil","te":"Telugu","ar":"Arabic","fr":"French","de":"German","es":"Spanish","zh":"Chinese","ja":"Japanese","tl":"Tagalog"})[state.settings.lang] || "English"} mic · AI replies in English</span>
+          <span>🎙 {({"ml":"Malayalam","hi":"Hindi","ta":"Tamil","te":"Telugu","ar":"Arabic","fr":"French","de":"German","es":"Spanish","zh":"Chinese","ja":"Japanese","tl":"Tagalog","ko":"Korean","pt":"Portuguese","id":"Indonesian","vi":"Vietnamese","tr":"Turkish","it":"Italian","bn":"Bengali","ur":"Urdu","th":"Thai","en":"English"})[state.settings.lang] || "English"} mic · AI replies in English</span>
           <span style={{ color:modeData.color, fontWeight:600 }}>{modeData.icon} {modeData.label}</span>
         </div>
       </div>
