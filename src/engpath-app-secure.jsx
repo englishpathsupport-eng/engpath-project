@@ -3697,7 +3697,7 @@ const AIFeedbackCard = memo(function AIFeedbackCard({ feedback, target, onRetry,
             <div style={{ fontSize:9, fontWeight:800, color:"var(--accent)", textTransform:"uppercase", letterSpacing:".06em", marginBottom:3 }}>🌟 Native Version</div>
             <div style={{ fontSize:12, color:"var(--text)", fontStyle:"italic", lineHeight:1.5 }}>"{naturalVersion}"</div>
           </div>
-          <button onClick={() => { if(tts.speaking){tts.stop();}else{tts.speak(naturalVersion,{lang:settings?.accent||"en-US",rate:.9, gender:state.settings?.voice||"female"});} }} style={{ flexShrink:0, width:32, height:32, borderRadius:10, background:tts.speaking?"var(--red)":"var(--accent)", border:"none", cursor:"pointer", fontSize:13, color:"#fff", display:"flex", alignItems:"center", justifyContent:"center" }}>{tts.speaking?"⏹":"🔊"}</button>
+          <button onClick={() => { if(tts.speaking){tts.stop();}else{ const s=window.speechSynthesis; if(s){try{s.cancel();}catch(_){}} window._safeSpeak(naturalVersion, settings?.accent||"en-US", 0.9); } }} style={{ flexShrink:0, width:32, height:32, borderRadius:10, background:tts.speaking?"var(--red)":"var(--accent)", border:"none", cursor:"pointer", fontSize:13, color:"#fff", display:"flex", alignItems:"center", justifyContent:"center" }}>{tts.speaking?"⏹":"🔊"}</button>
         </div>
       )}
 
