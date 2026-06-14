@@ -128,7 +128,7 @@ function useTTS() {
     const langBase = lang.slice(0, 5);
     const langRoot = lang.slice(0, 2);
     const femRe  = /female|samantha|karen|victoria|moira|aria|jenny|zira|alice|allison|ava|joanna|kendra|kimberly|salli|ivy|olivia|heera|susan|linda/i;
-    const malRe  = /male|david|daniel|fred|rishi|mark|guy|aaron|brian|joey|matthew|justin|kevin|james|george|richard|tom/i;
+    const malRe  = /male|david|daniel|fred|rishi|ravi|mark|guy|aaron|brian|joey|matthew|justin|kevin|james|george|richard|tom/i;
     const re     = gender === "female" ? femRe : malRe;
     const byLang = v => v.lang && (v.lang.startsWith(langBase) || v.lang.startsWith(langRoot));
     const isHQ   = v => /google|natural|neural|enhanced|wavenet|studio|premium/i.test(v.name);
