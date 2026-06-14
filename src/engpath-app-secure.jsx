@@ -25,7 +25,7 @@ if (typeof window !== "undefined") {
       let v = null;
       if (isMale) {
         // Male: prefer voices with male/guy/man in name, or deeper sounding ones
-        v = langVoices.find(x => /male|guy|man|david|james|mark|daniel|alex|fred|albert|bruce|junior/i.test(x.name));
+        v = langVoices.find(x => /male|guy|man|david|james|mark|daniel|alex|fred|albert|bruce|junior|ravi|thomas|george|arthur/i.test(x.name));
         // Fallback: pick last voice (often male on many systems)
         if (!v && langVoices.length > 1) v = langVoices[langVoices.length - 1];
       } else {
