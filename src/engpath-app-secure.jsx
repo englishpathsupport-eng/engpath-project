@@ -11,14 +11,22 @@ import { useState, useEffect, useRef, useReducer, useCallback, useMemo, memo } f
 let _audioUnlocked = false;
 /* ─ window._safeSpeak: reliable one-shot TTS for Android ─ */
 if (typeof window !== "undefined") {
-  window._safeSpeak = function(text, lang, rate) {
+  window._safeSpeak = function(text, lang, rate, gender) {
     const synth = window.speechSynthesis;
     if (!synth || !text) return;
     try { synth.cancel(); } catch(_) {}
     try { if (synth.paused) synth.resume(); } catch(_) {}
     const u = new SpeechSynthesisUtterance(text.trim().slice(0, 200));
     u.lang = lang || "en-US"; u.rate = rate || 0.9;
-    try { const vv=synth.getVoices(); const v=vv.find(x=>x.lang.startsWith(u.lang)); if(v) u.voice=v; } catch(_){}
+    try {
+      const vv = synth.getVoices();
+      const isMale = (gender||"female") === "male";
+      // Try to find gender-matching voice
+      let v = vv.find(x => x.lang.startsWith(u.lang) && (isMale ? /male/i.test(x.name) : /female/i.test(x.name)));
+      // Fallback: any voice for that lang
+      if (!v) v = vv.find(x => x.lang.startsWith(u.lang));
+      if (v) u.voice = v;
+    } catch(_) {}
     synth.speak(u);
   };
 }
@@ -3633,7 +3641,7 @@ const AIFeedbackCard = memo(function AIFeedbackCard({ feedback, target, onRetry,
             </div>
           )}
           <div style={{ display:"flex", gap:5 }}>
-            {tts && target && <button onClick={() => { if(tts.speaking){tts.stop();}else{ const s=window.speechSynthesis; if(s){try{s.cancel();}catch(_){}} window._safeSpeak(target, settings?.accent||"en-US", 0.88); } }} style={{ width:32,height:32,borderRadius:10,background:tts.speaking?"var(--red-soft)":"var(--accent-soft)",border:tts.speaking?"1px solid var(--red-border)":"1px solid var(--accent-border)",cursor:"pointer",fontSize:14,color:tts.speaking?"var(--red)":"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center" }}>{tts.speaking?"⏹":"🔊"}</button>}
+            {tts && target && <button onClick={() => { if(tts.speaking){tts.stop();}else{ const s=window.speechSynthesis; if(s){try{s.cancel();}catch(_){}} window._safeSpeak(target, settings?.accent||"en-US", 0.88, settings?.voice||state?.settings?.voice||"female"); } }} style={{ width:32,height:32,borderRadius:10,background:tts.speaking?"var(--red-soft)":"var(--accent-soft)",border:tts.speaking?"1px solid var(--red-border)":"1px solid var(--accent-border)",cursor:"pointer",fontSize:14,color:tts.speaking?"var(--red)":"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center" }}>{tts.speaking?"⏹":"🔊"}</button>}
             {onRetry && <button onClick={onRetry} style={{ width:32,height:32,borderRadius:10,background:"var(--surf-2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:13,color:"var(--text-2)",display:"flex",alignItems:"center",justifyContent:"center" }}>🔄</button>}
           </div>
         </div>
@@ -3695,7 +3703,7 @@ const AIFeedbackCard = memo(function AIFeedbackCard({ feedback, target, onRetry,
             <div style={{ fontSize:9, fontWeight:800, color:"var(--accent)", textTransform:"uppercase", letterSpacing:".06em", marginBottom:3 }}>🌟 Native Version</div>
             <div style={{ fontSize:12, color:"var(--text)", fontStyle:"italic", lineHeight:1.5 }}>"{naturalVersion}"</div>
           </div>
-          <button onClick={() => { if(tts.speaking){tts.stop();}else{ const s=window.speechSynthesis; if(s){try{s.cancel();}catch(_){}} window._safeSpeak(naturalVersion, settings?.accent||"en-US", 0.9); } }} style={{ flexShrink:0, width:32, height:32, borderRadius:10, background:tts.speaking?"var(--red)":"var(--accent)", border:"none", cursor:"pointer", fontSize:13, color:"#fff", display:"flex", alignItems:"center", justifyContent:"center" }}>{tts.speaking?"⏹":"🔊"}</button>
+          <button onClick={() => { if(tts.speaking){tts.stop();}else{ const s=window.speechSynthesis; if(s){try{s.cancel();}catch(_){}} window._safeSpeak(naturalVersion, settings?.accent||"en-US", 0.9, settings?.voice||state?.settings?.voice||"female"); } }} style={{ flexShrink:0, width:32, height:32, borderRadius:10, background:tts.speaking?"var(--red)":"var(--accent)", border:"none", cursor:"pointer", fontSize:13, color:"#fff", display:"flex", alignItems:"center", justifyContent:"center" }}>{tts.speaking?"⏹":"🔊"}</button>
         </div>
       )}
 
@@ -3868,7 +3876,7 @@ const ShadowingMode = memo(function ShadowingMode({ state, dispatch }) {
     if(!isPro){dispatch({type:"SET_SCREEN",payload:"upgrade"});return;}
     setPhase("countdown"); setCountdown(3); setFeedback(null); stt.reset(); setDayComplete(false);
     let c=3;
-    const tick=()=>{ c--; setCountdown(c); if(c<=0){setPhase("playing");const synth=window.speechSynthesis;if(synth){try{synth.cancel();}catch(_){}}setTimeout(()=>tts.speak(sentence,{lang:state.settings.accent||"en-US",rate:state.settings.speed||0.9}),80);}else{ctRef.current=setTimeout(tick,1000);} };
+    const tick=()=>{ c--; setCountdown(c); if(c<=0){setPhase("playing");const synth=window.speechSynthesis;if(synth){try{synth.cancel();}catch(_){}}const s=window.speechSynthesis;if(s){try{s.cancel();}catch(_){}}window._safeSpeak(sentence,state.settings.accent||"en-US",state.settings.speed||0.9,state.settings.voice||"female");}else{ctRef.current=setTimeout(tick,1000);} };
     ctRef.current=setTimeout(tick,1000);
   },[isPro,sentence,tts,stt,state.settings,dispatch]);
 
@@ -4140,7 +4148,7 @@ const GrammarExercisesTab = memo(function GrammarExercisesTab({ state, dispatch 
     <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:16 }}>
       <button onClick={()=>setTopic(null)} style={{ width:34,height:34,borderRadius:12,background:"var(--surf-2)",border:"1px solid var(--border)",cursor:"pointer",color:"var(--text-2)",display:"flex",alignItems:"center",justifyContent:"center" }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15,18 9,12 15,6"/></svg></button>
       <div style={{ flex:1 }}><div style={{ fontFamily:"'Poppins',sans-serif",fontSize:14,fontWeight:700,color:"var(--text)" }}>{topic}</div><div style={{ fontSize:11,color:"var(--text-3)" }}>Question {current+1} of {qs.length}</div></div>
-      <button onClick={()=>{const s=window.speechSynthesis;if(s){try{s.cancel();}catch(_){}}setTimeout(()=>tts.speak(q.q.replace("___","blank"),{lang:state.settings.accent||"en-US",rate:.88}),80);}} style={{ background:"none",border:"none",cursor:"pointer",fontSize:20,color:"var(--accent)" }}>🔊</button>
+      <button onClick={()=>{const s=window.speechSynthesis;if(s){try{s.cancel();}catch(_){}}window._safeSpeak(q.q.replace("___","blank"),state.settings.accent||"en-US",.88,state.settings.voice||"female");}} style={{ background:"none",border:"none",cursor:"pointer",fontSize:20,color:"var(--accent)" }}>🔊</button>
     </div>
     <div style={{ height:5,background:"var(--border-2)",borderRadius:999,overflow:"hidden",marginBottom:20 }}><div style={{ height:"100%",width:`${(current/qs.length)*100}%`,background:"linear-gradient(90deg,var(--accent),var(--blue))",borderRadius:999,transition:"width .4s" }} /></div>
     <div style={{ padding:"20px",background:"var(--surf)",border:"1px solid var(--border)",borderRadius:20,marginBottom:14,boxShadow:"var(--shadow-card)" }}>
