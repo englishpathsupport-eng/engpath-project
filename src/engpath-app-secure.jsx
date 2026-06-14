@@ -3633,7 +3633,7 @@ const AIFeedbackCard = memo(function AIFeedbackCard({ feedback, target, onRetry,
             </div>
           )}
           <div style={{ display:"flex", gap:5 }}>
-            {tts && target && <button onClick={() => { if(tts.speaking){tts.stop();}else{tts.speak(target,{lang:settings?.accent||"en-US",rate:.88, gender:state.settings?.voice||"female"});} }} style={{ width:32,height:32,borderRadius:10,background:tts.speaking?"var(--red-soft)":"var(--accent-soft)",border:tts.speaking?"1px solid var(--red-border)":"1px solid var(--accent-border)",cursor:"pointer",fontSize:14,color:tts.speaking?"var(--red)":"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center" }}>{tts.speaking?"⏹":"🔊"}</button>}
+            {tts && target && <button onClick={() => { if(tts.speaking){tts.stop();}else{tts.speak(target,{lang:settings?.accent||"en-US",rate:.88, gender:settings?.voice||"female"});} }} style={{ width:32,height:32,borderRadius:10,background:tts.speaking?"var(--red-soft)":"var(--accent-soft)",border:tts.speaking?"1px solid var(--red-border)":"1px solid var(--accent-border)",cursor:"pointer",fontSize:14,color:tts.speaking?"var(--red)":"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center" }}>{tts.speaking?"⏹":"🔊"}</button>}
             {onRetry && <button onClick={onRetry} style={{ width:32,height:32,borderRadius:10,background:"var(--surf-2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:13,color:"var(--text-2)",display:"flex",alignItems:"center",justifyContent:"center" }}>🔄</button>}
           </div>
         </div>
