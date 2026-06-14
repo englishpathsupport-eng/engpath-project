@@ -7993,6 +7993,9 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
   const [genMsg,     setGenMsg]    = useState("");
   const [txCache,    setTxCache]   = useState({});
   const [txLoading,  setTxLoading] = useState({});
+  const [favourites, setFavourites]= useState(() => { try { return JSON.parse(localStorage.getItem("ep_favourites")||"[]"); } catch { return []; } });
+  const [memoTips,   setMemoTips]  = useState({});
+  const [loadingTip, setLoadingTip]= useState({});
   const tts = useTTS();
   const STORAGE_KEY = `ep_vocab_${level}`;
   const currentLang = state.settings.lang || "ml";
@@ -8049,6 +8052,36 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
       getTranslation(w.word, w.translation);
     }
   }, [flip, currentLang]);
+
+  // Toggle favourite
+  const toggleFavourite = useCallback((word) => {
+    setFavourites(prev => {
+      const next = prev.includes(word) ? prev.filter(w => w !== word) : [...prev, word];
+      localStorage.setItem("ep_favourites", JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  // Fetch AI memory tip
+  const fetchMemoTip = useCallback(async (word, meaning) => {
+    if (memoTips[word] || loadingTip[word]) return;
+    setLoadingTip(prev => ({ ...prev, [word]: true }));
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 120,
+          messages: [{ role: "user", content: `Give ONE very short clever memory trick (max 15 words) to remember the English word "${word}" (${meaning}). Only the tip, no intro.` }]
+        })
+      });
+      const data = await res.json();
+      const tip = data?.content?.[0]?.text?.trim() || "";
+      if (tip) setMemoTips(prev => ({ ...prev, [word]: tip }));
+    } catch {}
+    setLoadingTip(prev => ({ ...prev, [word]: false }));
+  }, [memoTips, loadingTip]);
 
   // AI: add 50 more words - Pro only
   const loadMore = useCallback(async () => {
@@ -8180,7 +8213,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
 
       {/* Flip cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
-        {filtered.slice(0, isPro ? 200 : 100).map((w, i) => {
+        {filtered.slice(0, isPro ? filtered.length : 200).map((w, i) => {
           const cacheKey = `${currentLang}:${w.word}`;
           const translationText = currentLang === "ml"
             ? w.translation
@@ -8198,12 +8231,17 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
             isLoadingTx={isLoadingTx}
             tts={tts}
             settings={state.settings}
+            isFav={favourites.includes(w.word)}
+            memoTip={memoTips[w.word] || ""}
+            loadingTip={!!loadingTip[w.word]}
             onFlip={() => {
               const newFlip = isFlipped ? null : i;
               setFlip(newFlip);
               if (newFlip !== null && currentLang !== "ml") getTranslation(w.word, w.translation);
+              if (newFlip !== null) fetchMemoTip(w.word, w.meaning);
             }}
             onSpeak={e => { e.stopPropagation(); tts.speak(`${w.word}. ${w.meaning}.`, { lang: state.settings.accent, rate: 0.88, gender:state.settings.voice||"female" }); }}
+            onFav={e => { e.stopPropagation(); toggleFavourite(w.word); }}
           />
           );
         })}
@@ -8224,26 +8262,34 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
 });
 
 /* ── VocabCard - memoized so only the flipped card re-renders ── */
-const VocabCard = memo(function VocabCard({ w, i, isFlipped, translationText, isLoadingTx, tts, settings, onFlip, onSpeak }) {
+const VocabCard = memo(function VocabCard({ w, i, isFlipped, translationText, isLoadingTx, tts, settings, onFlip, onSpeak, isFav, onFav, memoTip, loadingTip }) {
   return (
-    <div onClick={onFlip} style={{ cursor:"pointer", perspective:900, height:148, animation:`fadeUp .22s ease ${Math.min(i*0.025,0.4)}s both` }}>
-      <div style={{ position:"relative", height:"100%", transformStyle:"preserve-3d", transform:isFlipped?"rotateY(180deg)":"none", transition:"transform .45s cubic-bezier(.4,0,.2,1)" }}>
+    <div onClick={onFlip} style={{ cursor:"pointer", perspective:900, minHeight:148, animation:`fadeUp .22s ease ${Math.min(i*0.025,0.4)}s both` }}>
+      <div style={{ position:"relative", minHeight:148, transformStyle:"preserve-3d", transform:isFlipped?"rotateY(180deg)":"none", transition:"transform .45s cubic-bezier(.4,0,.2,1)" }}>
 
         {/* ── Front ── */}
         <div style={{ position:"absolute", inset:0, backfaceVisibility:"hidden",
-          background:"var(--surf)", border:"1px solid var(--border)", borderRadius:20,
+          background:"var(--surf)", border: isFav ? "1.5px solid #f43f5e" : "1px solid var(--border)", borderRadius:20,
           padding:"14px 14px 12px", display:"flex", flexDirection:"column", justifyContent:"space-between",
-          boxShadow:"var(--shadow-card)" }}>
+          boxShadow: isFav ? "0 4px 16px rgba(244,63,94,.15)" : "var(--shadow-card)" }}>
           <div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
               <div style={{ fontFamily:"'Poppins',sans-serif", fontSize:19, fontWeight:700, color:"var(--text)", lineHeight:1.2 }}>
                 {w.word}
               </div>
-              <span style={{ fontSize:9, fontWeight:700, padding:"3px 8px", borderRadius:999,
-                background:"var(--surf-2)", color:"var(--text-3)", border:"1px solid var(--border)",
-                flexShrink:0, marginLeft:6 }}>
-                {w.pos}
-              </span>
+              <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                <button onClick={onFav} style={{
+                  width:26, height:26, borderRadius:999, border:"none", cursor:"pointer",
+                  background: isFav ? "rgba(244,63,94,.12)" : "var(--surf-2)",
+                  color: isFav ? "#f43f5e" : "var(--text-3)",
+                  display:"flex", alignItems:"center", justifyContent:"center", fontSize:13,
+                  transition:"all .2s", flexShrink:0,
+                }}>{isFav ? "❤️" : "🤍"}</button>
+                <span style={{ fontSize:9, fontWeight:700, padding:"3px 8px", borderRadius:999,
+                  background:"var(--surf-2)", color:"var(--text-3)", border:"1px solid var(--border)", flexShrink:0 }}>
+                  {w.pos}
+                </span>
+              </div>
             </div>
             {w.ipa && (
               <div style={{ fontSize:11, color:"var(--text-3)", fontFamily:"monospace", letterSpacing:".02em" }}>
@@ -8263,21 +8309,37 @@ const VocabCard = memo(function VocabCard({ w, i, isFlipped, translationText, is
         </div>
 
         {/* ── Back ── */}
-        <div style={{ position:"absolute", inset:0, backfaceVisibility:"hidden", transform:"rotateY(180deg)",
+        <div style={{ position:isFlipped?"relative":"absolute", inset:0, backfaceVisibility:"hidden", transform:"rotateY(180deg)",
           background:"linear-gradient(135deg, var(--accent-soft), var(--blue-soft))",
           border:"1.5px solid var(--accent-border)", borderRadius:20, padding:"13px 14px",
           boxShadow:"0 4px 20px rgba(108,92,231,.12)" }}>
-          <div style={{ fontSize:11, color:"var(--accent)", fontWeight:700, marginBottom:6, lineHeight:1.5 }}>
+          <div style={{ fontSize:11, color:"var(--accent)", fontWeight:700, marginBottom:5, lineHeight:1.5 }}>
             {w.meaning}
           </div>
-          <div style={{ fontFamily:"'Inter',sans-serif", fontSize:12, color:"var(--text-2)", fontStyle:"italic", marginBottom:8, lineHeight:1.6 }}>
-            "{w.example}"
+          <div style={{ fontSize:11, color:"var(--text-2)", fontStyle:"italic", marginBottom:7, lineHeight:1.6,
+            background:"rgba(255,255,255,.4)", borderRadius:10, padding:"5px 8px", border:"1px solid var(--accent-border)" }}>
+            📝 "{w.example}"
           </div>
-          <div style={{ fontSize:12, color:"var(--text)", fontWeight:600, display:"flex", alignItems:"center", gap:5 }}>
+          <div style={{ fontSize:11, color:"var(--text)", fontWeight:600, display:"flex", alignItems:"center", gap:5, marginBottom:6 }}>
             {isLoadingTx
               ? <span style={{ color:"var(--text-3)", fontSize:10, fontWeight:400 }}>Translating...</span>
-              : <span style={{ background:"var(--surf)", padding:"3px 8px", borderRadius:999, fontSize:11, border:"1px solid var(--border)" }}>{translationText}</span>
+              : <span style={{ background:"var(--surf)", padding:"3px 8px", borderRadius:999, fontSize:11, border:"1px solid var(--border)" }}>🌐 {translationText}</span>
             }
+          </div>
+          <div style={{ fontSize:10, lineHeight:1.5, minHeight:18 }}>
+            {loadingTip
+              ? <span style={{ color:"var(--text-3)", fontStyle:"italic" }}>🧠 Getting memory tip...</span>
+              : memoTip
+                ? <span style={{ color:"#d97706", background:"rgba(251,191,36,.15)", padding:"4px 8px", borderRadius:8, border:"1px solid rgba(251,191,36,.3)", display:"block" }}>🧠 {memoTip}</span>
+                : null
+            }
+          </div>
+          <div style={{ display:"flex", justifyContent:"flex-end", marginTop:6 }}>
+            <button onClick={onFav} style={{
+              fontSize:10, padding:"3px 10px", borderRadius:999, border:"none", cursor:"pointer",
+              background: isFav ? "rgba(244,63,94,.15)" : "var(--surf)",
+              color: isFav ? "#f43f5e" : "var(--text-3)", fontWeight:600, transition:"all .2s",
+            }}>{isFav ? "❤️ Saved" : "🤍 Save"}</button>
           </div>
         </div>
       </div>
