@@ -21,18 +21,27 @@ if (typeof window !== "undefined") {
     try {
       const vv = synth.getVoices();
       const isMale = (gender||"female") === "male";
+      // All English voices
+      const enVoices = vv.filter(x => x.lang.startsWith("en"));
+      // Same-lang voices
       const langVoices = vv.filter(x => x.lang.startsWith(u.lang) || x.lang.startsWith(u.lang.split('-')[0]));
       let v = null;
       if (isMale) {
-        // Male: prefer voices with male/guy/man in name, or deeper sounding ones
-        v = langVoices.find(x => /male|guy|man|david|james|mark|daniel|alex|fred|albert|bruce|junior|ravi|thomas|george|arthur/i.test(x.name));
-        // Fallback: pick last voice (often male on many systems)
+        // Try same-lang male first
+        v = langVoices.find(x => /male|ravi|david|james|mark|daniel|alex|fred|albert|bruce|junior|thomas|george|arthur/i.test(x.name));
+        // Try any English male
+        if (!v) v = enVoices.find(x => /male|ravi|david|james|mark|daniel|alex|fred|albert|bruce|junior|thomas|george|arthur/i.test(x.name));
+        // Fallback: last voice in lang (often male)
         if (!v && langVoices.length > 1) v = langVoices[langVoices.length - 1];
+        if (!v && enVoices.length > 1) v = enVoices[enVoices.length - 1];
       } else {
-        // Female: prefer voices with female/woman in name
-        v = langVoices.find(x => /female|woman|samantha|victoria|karen|susan|zira|google us english/i.test(x.name));
-        // Fallback: pick first voice (often female on many systems)
+        // Try same-lang female first
+        v = langVoices.find(x => /female|heera|samantha|victoria|karen|susan|zira|google us english/i.test(x.name));
+        // Try any English female
+        if (!v) v = enVoices.find(x => /female|heera|samantha|victoria|karen|susan|zira|google us english/i.test(x.name));
+        // Fallback: first voice
         if (!v && langVoices.length > 0) v = langVoices[0];
+        if (!v && enVoices.length > 0) v = enVoices[0];
       }
       if (!v && langVoices.length > 0) v = langVoices[0];
       if (v) u.voice = v;
