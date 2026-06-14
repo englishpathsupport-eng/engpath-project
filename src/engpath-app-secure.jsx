@@ -21,10 +21,20 @@ if (typeof window !== "undefined") {
     try {
       const vv = synth.getVoices();
       const isMale = (gender||"female") === "male";
-      // Try to find gender-matching voice
-      let v = vv.find(x => x.lang.startsWith(u.lang) && (isMale ? /male/i.test(x.name) : /female/i.test(x.name)));
-      // Fallback: any voice for that lang
-      if (!v) v = vv.find(x => x.lang.startsWith(u.lang));
+      const langVoices = vv.filter(x => x.lang.startsWith(u.lang) || x.lang.startsWith(u.lang.split('-')[0]));
+      let v = null;
+      if (isMale) {
+        // Male: prefer voices with male/guy/man in name, or deeper sounding ones
+        v = langVoices.find(x => /male|guy|man|david|james|mark|daniel|alex|fred|albert|bruce|junior/i.test(x.name));
+        // Fallback: pick last voice (often male on many systems)
+        if (!v && langVoices.length > 1) v = langVoices[langVoices.length - 1];
+      } else {
+        // Female: prefer voices with female/woman in name
+        v = langVoices.find(x => /female|woman|samantha|victoria|karen|susan|zira|google us english/i.test(x.name));
+        // Fallback: pick first voice (often female on many systems)
+        if (!v && langVoices.length > 0) v = langVoices[0];
+      }
+      if (!v && langVoices.length > 0) v = langVoices[0];
       if (v) u.voice = v;
     } catch(_) {}
     synth.speak(u);
