@@ -729,13 +729,46 @@ const LANG_LABELS = {
   id:"Indonesian", vi:"Vietnamese", tr:"Turkish", it:"Italian", bn:"Bengali", ur:"Urdu", th:"Thai", en:"English",
 };
 
+// ── Supabase cache helpers ──
+const SB_URL = "https://oiobzjwwzmbjbimijryj.supabase.co";
+const SB_KEY = "sb_publishable_NUUO7h2t5Y0w7w28sUtPjQ_c0mkgPar";
+
+async function sbGet(table, filters) {
+  try {
+    const params = Object.entries(filters).map(([k,v]) => `${k}=eq.${encodeURIComponent(v)}`).join("&");
+    const res = await fetch(`${SB_URL}/rest/v1/${table}?${params}&limit=1`, {
+      headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+    });
+    const data = await res.json();
+    return data?.[0] || null;
+  } catch { return null; }
+}
+
+async function sbInsert(table, row) {
+  try {
+    await fetch(`${SB_URL}/rest/v1/${table}`, {
+      method: "POST",
+      headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "ignore-duplicates" },
+      body: JSON.stringify(row)
+    });
+  } catch {}
+}
+
 export async function translateText(text, targetLang) {
+  if (!targetLang || targetLang === "ml") return text;
+  // Check Supabase cache first
+  const cached = await sbGet("translation_cache", { word: text, language: targetLang });
+  if (cached?.translation) return cached.translation;
+  // Call Claude API
   const label = LANG_LABELS[targetLang] || "Malayalam";
-  return callClaude(
+  const translation = await callClaude(
     `You are a professional translator. Reply ONLY with the ${label} translation, nothing else.`,
     `Translate to ${label}: "${text}"`,
     120
   );
+  // Save to Supabase cache
+  if (translation) await sbInsert("translation_cache", { word: text, language: targetLang, translation });
+  return translation || text;
 }
 
 export async function detectLanguage(text) {
@@ -8055,19 +8088,40 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
   }, [flip, currentLang]);
 
   // Toggle favourite
-  const toggleFavourite = useCallback((word) => {
+  const toggleFavourite = useCallback(async (word) => {
     setFavourites(prev => {
       const next = prev.includes(word) ? prev.filter(w => w !== word) : [...prev, word];
       localStorage.setItem("ep_favourites", JSON.stringify(next));
       return next;
     });
-  }, []);
+    // Sync to Supabase
+    const userId = state.user?.id || localStorage.getItem("ep_user_id") || "guest";
+    const isFav = favourites.includes(word);
+    if (!isFav) {
+      await sbInsert("user_favourites", { user_id: userId, word });
+    } else {
+      try {
+        await fetch(`${SB_URL}/rest/v1/user_favourites?user_id=eq.${userId}&word=eq.${encodeURIComponent(word)}`, {
+          method: "DELETE",
+          headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+        });
+      } catch {}
+    }
+  }, [favourites, state.user]);
 
   // Fetch AI memory tip
   const fetchMemoTip = useCallback(async (word, meaning) => {
     if (memoTips[word] || loadingTip[word]) return;
     setLoadingTip(prev => ({ ...prev, [word]: true }));
     try {
+      // Check Supabase cache first - no API cost!
+      const cached = await sbGet("memory_tips_cache", { word });
+      if (cached?.tip) {
+        setMemoTips(prev => ({ ...prev, [word]: cached.tip }));
+        setLoadingTip(prev => ({ ...prev, [word]: false }));
+        return;
+      }
+      // Call API if not cached
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -8078,7 +8132,11 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
       });
       const data = await res.json();
       const tip = data?.content?.[0]?.text?.trim() || "";
-      if (tip) setMemoTips(prev => ({ ...prev, [word]: tip }));
+      if (tip) {
+        setMemoTips(prev => ({ ...prev, [word]: tip }));
+        // Save to Supabase cache for future users!
+        await sbInsert("memory_tips_cache", { word, tip });
+      }
     } catch {}
     setLoadingTip(prev => ({ ...prev, [word]: false }));
   }, [memoTips, loadingTip]);
