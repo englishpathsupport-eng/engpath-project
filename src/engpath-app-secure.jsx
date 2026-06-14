@@ -8004,6 +8004,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
   useEffect(() => {
     setTxCache({});
     setFlip(null);
+    setMemoTips({});
   }, [currentLang]);
 
   // Load from storage or seeds
@@ -8067,11 +8068,10 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
     if (memoTips[word] || loadingTip[word]) return;
     setLoadingTip(prev => ({ ...prev, [word]: true }));
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",
           max_tokens: 120,
           messages: [{ role: "user", content: `Give ONE very short clever memory trick (max 15 words) to remember the English word "${word}" (${meaning}). Only the tip, no intro.` }]
         })
@@ -8237,8 +8237,10 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
             onFlip={() => {
               const newFlip = isFlipped ? null : i;
               setFlip(newFlip);
-              if (newFlip !== null && currentLang !== "ml") getTranslation(w.word, w.translation);
-              if (newFlip !== null) fetchMemoTip(w.word, w.meaning);
+              if (newFlip !== null) {
+                if (currentLang !== "ml") getTranslation(w.word, w.translation);
+                fetchMemoTip(w.word, w.meaning);
+              }
             }}
             onSpeak={e => { e.stopPropagation(); tts.speak(`${w.word}. ${w.meaning}.`, { lang: state.settings.accent, rate: 0.88, gender:state.settings.voice||"female" }); }}
             onFav={e => { e.stopPropagation(); toggleFavourite(w.word); }}
@@ -8313,28 +8315,38 @@ const VocabCard = memo(function VocabCard({ w, i, isFlipped, translationText, is
           background:"linear-gradient(135deg, var(--accent-soft), var(--blue-soft))",
           border:"1.5px solid var(--accent-border)", borderRadius:20, padding:"13px 14px",
           boxShadow:"0 4px 20px rgba(108,92,231,.12)" }}>
-          <div style={{ fontSize:11, color:"var(--accent)", fontWeight:700, marginBottom:5, lineHeight:1.5 }}>
+          {/* Meaning */}
+          <div style={{ fontSize:12, color:"var(--accent)", fontWeight:700, marginBottom:6, lineHeight:1.5 }}>
             {w.meaning}
           </div>
-          <div style={{ fontSize:11, color:"var(--text-2)", fontStyle:"italic", marginBottom:7, lineHeight:1.6,
-            background:"rgba(255,255,255,.4)", borderRadius:10, padding:"5px 8px", border:"1px solid var(--accent-border)" }}>
-            📝 "{w.example}"
+
+          {/* Example sentence - prominent */}
+          <div style={{ fontSize:12, color:"var(--text)", fontStyle:"italic", marginBottom:6, lineHeight:1.6,
+            background:"rgba(255,255,255,.5)", borderRadius:10, padding:"6px 10px",
+            border:"1px solid var(--accent-border)", borderLeft:"3px solid var(--accent)" }}>
+            📝 <strong style={{fontStyle:"normal",color:"var(--accent)"}}>Example:</strong> "{w.example}"
           </div>
-          <div style={{ fontSize:11, color:"var(--text)", fontWeight:600, display:"flex", alignItems:"center", gap:5, marginBottom:6 }}>
+
+          {/* Translation */}
+          <div style={{ fontSize:12, color:"var(--text)", fontWeight:600, marginBottom:5 }}>
             {isLoadingTx
               ? <span style={{ color:"var(--text-3)", fontSize:10, fontWeight:400 }}>Translating...</span>
-              : <span style={{ background:"var(--surf)", padding:"3px 8px", borderRadius:999, fontSize:11, border:"1px solid var(--border)" }}>🌐 {translationText}</span>
+              : <span style={{ background:"var(--surf)", padding:"3px 10px", borderRadius:999, fontSize:12, border:"1px solid var(--border)" }}>🌐 {translationText}</span>
             }
           </div>
-          <div style={{ fontSize:10, lineHeight:1.5, minHeight:18 }}>
+
+          {/* Memory tip */}
+          <div style={{ fontSize:10, lineHeight:1.5 }}>
             {loadingTip
-              ? <span style={{ color:"var(--text-3)", fontStyle:"italic" }}>🧠 Getting memory tip...</span>
+              ? <span style={{ color:"var(--text-3)", fontStyle:"italic", fontSize:10 }}>🧠 Loading tip...</span>
               : memoTip
-                ? <span style={{ color:"#d97706", background:"rgba(251,191,36,.15)", padding:"4px 8px", borderRadius:8, border:"1px solid rgba(251,191,36,.3)", display:"block" }}>🧠 {memoTip}</span>
+                ? <div style={{ color:"#92400e", background:"rgba(251,191,36,.2)", padding:"5px 8px", borderRadius:8, border:"1px solid rgba(251,191,36,.4)", fontSize:10, lineHeight:1.5 }}>🧠 <strong>Tip:</strong> {memoTip}</div>
                 : null
             }
           </div>
-          <div style={{ display:"flex", justifyContent:"flex-end", marginTop:6 }}>
+
+          {/* Save button */}
+          <div style={{ display:"flex", justifyContent:"flex-end", marginTop:5 }}>
             <button onClick={onFav} style={{
               fontSize:10, padding:"3px 10px", borderRadius:999, border:"none", cursor:"pointer",
               background: isFav ? "rgba(244,63,94,.15)" : "var(--surf)",
