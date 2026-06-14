@@ -15,13 +15,11 @@ if (typeof window !== "undefined") {
     const synth = window.speechSynthesis;
     if (!synth || !text) return;
     try { synth.cancel(); } catch(_) {}
-    setTimeout(function() {
     try { if (synth.paused) synth.resume(); } catch(_) {}
     const u = new SpeechSynthesisUtterance(text.trim().slice(0, 200));
     u.lang = lang || "en-US"; u.rate = rate || 0.9;
     try { const vv=synth.getVoices(); const v=vv.find(x=>x.lang.startsWith(u.lang)); if(v) u.voice=v; } catch(_){}
     synth.speak(u);
-    }, 90);
   };
 }
 
