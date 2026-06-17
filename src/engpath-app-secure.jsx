@@ -9175,20 +9175,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
   useEffect(() => {
     setFlip(null); setSearch(""); setPosFilter("All");
     (async () => {
-      try {
-        const stored = await window.storage?.get(STORAGE_KEY);
-        if (stored?.value) {
-          const parsed = JSON.parse(stored.value);
-          const seed = VOCAB[level] || [];
-          // If stored has more words than seed (old AI-generated cache), use seed
-          if (parsed.length > seed.length) {
-            setWords(seed);
-            await window.storage?.set(STORAGE_KEY, JSON.stringify(seed));
-            return;
-          }
-          setWords(parsed); return;
-        }
-      } catch {}
+      // Always use seed words - no old cache
       const seed = VOCAB[level] || [];
       setWords(seed);
       try { await window.storage?.set(STORAGE_KEY, JSON.stringify(seed)); } catch {}
