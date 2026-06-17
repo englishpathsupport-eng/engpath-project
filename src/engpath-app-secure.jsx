@@ -9177,18 +9177,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
     (async () => {
       try {
         const stored = await window.storage?.get(STORAGE_KEY);
-        if (stored?.value) {
-          const parsed = JSON.parse(stored.value);
-          // If stored words exceed seed words, clear and reload fresh
-          const seed = VOCAB[level] || [];
-          if (parsed.length > seed.length) {
-            await window.storage?.set(STORAGE_KEY, JSON.stringify(seed));
-            setWords(seed);
-            return;
-          }
-          setWords(parsed);
-          return;
-        }
+        if (stored?.value) { setWords(JSON.parse(stored.value)); return; }
       } catch {}
       const seed = VOCAB[level] || [];
       setWords(seed);
@@ -9376,7 +9365,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
           style={{ marginBottom:14, padding:"13px 16px", background:"linear-gradient(135deg,#6C5CE7,#4DA3FF)", borderRadius:20, display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer", boxShadow:"0 6px 20px rgba(108,92,231,.3)" }}>
           <div>
             <div style={{ fontSize:13, fontWeight:700, color:"#fff", fontFamily:"'Poppins',sans-serif" }}>📚 {Math.min(words.length, FREE_VOCAB_LIMIT)} / 200 words per level (Free)</div>
-            <div style={{ fontSize:11, color:"rgba(255,255,255,.8)", marginTop:2 }}>Upgrade for 800 words per level & AI generation</div>
+            <div style={{ fontSize:11, color:"rgba(255,255,255,.8)", marginTop:2 }}>Upgrade for 1500+ words & AI generation</div>
           </div>
           <span style={{ fontSize:11, fontWeight:700, color:"#fff", background:"rgba(255,255,255,.2)", padding:"5px 12px", borderRadius:999, backdropFilter:"blur(4px)" }}>⭐ Pro</span>
         </div>
