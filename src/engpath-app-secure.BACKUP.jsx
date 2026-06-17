@@ -3056,8 +3056,6 @@ const Waveform = memo(function Waveform({ active, color = "var(--accent)", bars 
         }} />
       ))}
     </div>
-  );
-});
 
 
 /* ═══════════════════════════════════════════════════════════════
