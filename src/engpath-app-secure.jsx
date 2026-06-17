@@ -9524,15 +9524,7 @@ const VocabCard = memo(function VocabCard({ w, i, isFlipped, translationText, is
             }
           </div>
 
-          {/* Memory tip */}
-          <div style={{ fontSize:10, lineHeight:1.5 }}>
-            {loadingTip
-              ? <span style={{ color:"var(--text-3)", fontStyle:"italic", fontSize:10 }}>🧠 Loading tip...</span>
-              : memoTip
-                ? <div style={{ color:"#92400e", background:"rgba(251,191,36,.2)", padding:"5px 8px", borderRadius:8, border:"1px solid rgba(251,191,36,.4)", fontSize:10, lineHeight:1.5 }}>🧠 <strong>Tip:</strong> {memoTip}</div>
-                : null
-            }
-          </div>
+
 
           {/* Save button */}
           <div style={{ display:"flex", justifyContent:"flex-end", marginTop:5 }}>
