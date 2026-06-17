@@ -9161,7 +9161,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
   const [memoTips,   setMemoTips]  = useState({});
   const [loadingTip, setLoadingTip]= useState({});
   const tts = useTTS();
-  const STORAGE_KEY = `ep_vocab_${level}`;
+  const STORAGE_KEY = `ep_vocab_v2_${level}`;
   const currentLang = state.settings.lang || "ml";
 
   // Reset translation cache when language changes
