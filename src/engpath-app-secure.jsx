@@ -9310,7 +9310,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
 
   const LANG_NAMES = { ml:"Malayalam",hi:"Hindi",ta:"Tamil",te:"Telugu",ar:"Arabic",fr:"French",de:"German",es:"Spanish",zh:"Chinese",ja:"Japanese",ko:"Korean",pt:"Portuguese",id:"Indonesian",vi:"Vietnamese",tr:"Turkish",it:"Italian",bn:"Bengali",ur:"Urdu",th:"Thai",en:"English" };
 
-  const pct = Math.min(100, Math.round((words.length / 1500) * 100));
+  const pct = Math.min(100, Math.round((words.length / 800) * 100));
 
   return (
     <div style={{ padding: "16px", maxWidth: 680, margin: "0 auto", animation: "fadeUp .3s ease" }}>
@@ -9332,7 +9332,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
       <Card padding="14px 16px" style={{ marginBottom:16 }}>
         <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
           <span style={{ fontSize:12, fontWeight:600, color:"var(--text)", fontFamily:"'Poppins',sans-serif" }}>📚 Word Bank Progress</span>
-          <span style={{ fontSize:12, fontWeight:700, color:LEVEL_COLORS[level]||"var(--accent)" }}>{words.length} / 1500</span>
+          <span style={{ fontSize:12, fontWeight:700, color:LEVEL_COLORS[level]||"var(--accent)" }}>{words.length} / 800</span>
         </div>
         <div style={{ height:8, background:"var(--border-2)", borderRadius:999, overflow:"hidden" }}>
           <div style={{ height:"100%", width:`${pct}%`, background:LEVEL_COLORS[level]||"var(--accent)", borderRadius:999, transition:"width .7s cubic-bezier(.4,0,.2,1)", boxShadow:`0 0 8px ${LEVEL_COLORS[level]||"var(--accent)"}60` }} />
@@ -9364,7 +9364,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
         <div onClick={()=>dispatch({type:"SET_SCREEN",payload:"upgrade"})}
           style={{ marginBottom:14, padding:"13px 16px", background:"linear-gradient(135deg,#6C5CE7,#4DA3FF)", borderRadius:20, display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer", boxShadow:"0 6px 20px rgba(108,92,231,.3)" }}>
           <div>
-            <div style={{ fontSize:13, fontWeight:700, color:"#fff", fontFamily:"'Poppins',sans-serif" }}>📚 {Math.min(words.length, FREE_VOCAB_LIMIT)} / 200 words (Free)</div>
+            <div style={{ fontSize:13, fontWeight:700, color:"#fff", fontFamily:"'Poppins',sans-serif" }}>📚 {Math.min(words.length, FREE_VOCAB_LIMIT)} / 200 words per level (Free)</div>
             <div style={{ fontSize:11, color:"rgba(255,255,255,.8)", marginTop:2 }}>Upgrade for 1500+ words & AI generation</div>
           </div>
           <span style={{ fontSize:11, fontWeight:700, color:"#fff", background:"rgba(255,255,255,.2)", padding:"5px 12px", borderRadius:999, backdropFilter:"blur(4px)" }}>⭐ Pro</span>
