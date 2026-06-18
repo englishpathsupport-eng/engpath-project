@@ -9307,7 +9307,8 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
 
   const LANG_NAMES = { ml:"Malayalam",hi:"Hindi",ta:"Tamil",te:"Telugu",ar:"Arabic",fr:"French",de:"German",es:"Spanish",zh:"Chinese",ja:"Japanese",ko:"Korean",pt:"Portuguese",id:"Indonesian",vi:"Vietnamese",tr:"Turkish",it:"Italian",bn:"Bengali",ur:"Urdu",th:"Thai",en:"English" };
 
-  const pct = Math.min(100, Math.round((words.length / 800) * 100));
+  const freeLimit = level==="A1" ? 100 : 50;
+  const pct = isPro ? Math.min(100, Math.round((words.length / 800) * 100)) : Math.min(100, Math.round((Math.min(words.length, freeLimit) / freeLimit) * 100));
 
   return (
     <div style={{ padding: "16px", maxWidth: 680, margin: "0 auto", animation: "fadeUp .3s ease" }}>
@@ -9329,7 +9330,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
       <Card padding="14px 16px" style={{ marginBottom:16 }}>
         <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
           <span style={{ fontSize:12, fontWeight:600, color:"var(--text)", fontFamily:"'Poppins',sans-serif" }}>📚 Word Bank Progress</span>
-          <span style={{ fontSize:12, fontWeight:700, color:LEVEL_COLORS[level]||"var(--accent)" }}>{words.length} / 800</span>
+          <span style={{ fontSize:12, fontWeight:700, color:LEVEL_COLORS[level]||"var(--accent)" }}>{isPro ? `${words.length} / 800` : `${Math.min(words.length, freeLimit)} / ${freeLimit}`}</span>
         </div>
         <div style={{ height:8, background:"var(--border-2)", borderRadius:999, overflow:"hidden" }}>
           <div style={{ height:"100%", width:`${pct}%`, background:LEVEL_COLORS[level]||"var(--accent)", borderRadius:999, transition:"width .7s cubic-bezier(.4,0,.2,1)", boxShadow:`0 0 8px ${LEVEL_COLORS[level]||"var(--accent)"}60` }} />
