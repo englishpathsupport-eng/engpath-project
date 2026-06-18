@@ -9146,7 +9146,7 @@ const Conversation = memo(function Conversation({ state, dispatch }) {
 /* ═══ Vocabulary.jsx ═══ */
 const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
   const isPro    = isActivePro(state.user);
-  const FREE_VOCAB_LIMIT = 200; // free users see 200 words per level
+  const FREE_VOCAB_LIMIT = level === "A1" ? 100 : 50; // free: A1=100, others=50
 
   const [level,      setLevel]     = useState(state.user.level.slice(0, 2) || "B1");
   const [words,      setWords]     = useState([]);
@@ -9361,7 +9361,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
         <div onClick={()=>dispatch({type:"SET_SCREEN",payload:"upgrade"})}
           style={{ marginBottom:14, padding:"13px 16px", background:"linear-gradient(135deg,#6C5CE7,#4DA3FF)", borderRadius:20, display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer", boxShadow:"0 6px 20px rgba(108,92,231,.3)" }}>
           <div>
-            <div style={{ fontSize:13, fontWeight:700, color:"#fff", fontFamily:"'Poppins',sans-serif" }}>📚 {Math.min(words.length, FREE_VOCAB_LIMIT)} / 200 words per level (Free)</div>
+            <div style={{ fontSize:13, fontWeight:700, color:"#fff", fontFamily:"'Poppins',sans-serif" }}>📚 {Math.min(words.length, FREE_VOCAB_LIMIT)} / {level==="A1"?100:50} words this level (Free)</div>
             <div style={{ fontSize:11, color:"rgba(255,255,255,.8)", marginTop:2 }}>Upgrade for 800 words per level & AI generation</div>
           </div>
           <span style={{ fontSize:11, fontWeight:700, color:"#fff", background:"rgba(255,255,255,.2)", padding:"5px 12px", borderRadius:999, backdropFilter:"blur(4px)" }}>⭐ Pro</span>
@@ -9399,7 +9399,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
 
       {/* Flip cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
-        {filtered.slice(0, isPro ? filtered.length : 200).map((w, i) => {
+        {filtered.slice(0, isPro ? filtered.length : FREE_VOCAB_LIMIT).map((w, i) => {
           const cacheKey = `${currentLang}:${w.word}`;
           const translationText = currentLang === "ml"
             ? w.translation
