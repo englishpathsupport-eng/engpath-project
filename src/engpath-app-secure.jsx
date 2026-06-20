@@ -9159,6 +9159,8 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
   const [txLoading,  setTxLoading] = useState({});
   const [favourites, setFavourites]= useState(() => { try { return JSON.parse(localStorage.getItem("ep_favourites")||"[]"); } catch { return []; } });
   const [memoTips,   setMemoTips]  = useState({});
+  const [listView,   setListView]  = useState(false);
+  const [showFavs,   setShowFavs]  = useState(false);
   const [loadingTip, setLoadingTip]= useState({});
   const tts = useTTS();
   const STORAGE_KEY = `ep_vocab_v2_${level}`;
@@ -9351,10 +9353,12 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
             {l}
           </button>
         ))}
-        <Button variant={isPro?"secondary":"primary"} size="sm" icon={isPro?"⚡":"🔒"} loading={generating} onClick={loadMore} disabled={generating}
-          style={{ borderRadius:16, whiteSpace:"nowrap", fontSize:11 }}>
-          {isPro ? (generating ? "..." : "+AI") : "AI+"}
-        </Button>
+        <button onClick={()=>setListView(v=>!v)} style={{ padding:"8px 12px", borderRadius:16, border:"1px solid var(--border)", background:listView?"var(--accent)":"var(--surf-2)", color:listView?"#fff":"var(--text-2)", cursor:"pointer", fontSize:11, fontWeight:700 }}>
+          {listView?"🃏":"📋"}
+        </button>
+        <button onClick={()=>setShowFavs(v=>!v)} style={{ padding:"8px 12px", borderRadius:16, border:"1px solid var(--border)", background:showFavs?"var(--gold)":"var(--surf-2)", color:showFavs?"#fff":"var(--text-2)", cursor:"pointer", fontSize:11, fontWeight:700 }}>
+          {showFavs?"❤️":"🤍"}
+        </button>
       </div>
 
       {/* Free limit banner */}
