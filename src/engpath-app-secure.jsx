@@ -10555,12 +10555,39 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
 
   // Init welcome on mode change
   useEffect(() => {
-    setMessages([{
+    const welcomeMsg = {
       id:      "welcome",
       role:    "assistant",
       content: modeData.welcome(state.user.level),
-    }]);
+    };
+    const proUser = isActivePro(state.user);
+    if (!proUser) {
+      setMessages([welcomeMsg]);
+      return;
+    }
+    (async () => {
+      try {
+        const res = await window.storage?.get(`ai_chat:${mode}`, false);
+        const saved = res?.value ? JSON.parse(res.value) : null;
+        if (saved && Array.isArray(saved) && saved.length > 0) {
+          setMessages(saved);
+        } else {
+          setMessages([welcomeMsg]);
+        }
+      } catch {
+        setMessages([welcomeMsg]);
+      }
+    })();
   }, [mode]);
+  // Persist chat history for Pro users only (last 30 messages per mode)
+  useEffect(() => {
+    const proUser = isActivePro(state.user);
+    if (!proUser || messages.length === 0) return;
+    const toSave = messages.slice(-30);
+    (async () => {
+      try { await window.storage?.set(`ai_chat:${mode}`, JSON.stringify(toSave), false); } catch {}
+    })();
+  }, [messages, mode, state.user]);
 
   // When voice mode turns off, stop everything
   useEffect(() => {
@@ -10701,6 +10728,19 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
         >
           🎧 {voiceMode ? "Voice ON" : "Voice"}
         </button>
+        {isPro && messages.length > 1 && (
+          <button
+            onClick={async () => {
+              const welcomeMsg = { id:"welcome", role:"assistant", content: modeData.welcome(state.user.level) };
+              setMessages([welcomeMsg]);
+              try { await window.storage?.set(`ai_chat:${mode}`, JSON.stringify([welcomeMsg]), false); } catch {}
+            }}
+            title="Start a new chat"
+            style={{ padding:"6px 11px", borderRadius:999, background:"var(--surf-2)", border:"1px solid var(--border)", cursor:"pointer", fontSize:11, color:"var(--text-2)", fontWeight:600 }}
+          >
+            🗑️ New
+          </button>
+        )}
         <button
           onClick={() => setShowModes(m => !m)}
           style={{ padding:"6px 11px", borderRadius:999, background:"var(--surf-2)", border:"1px solid var(--border)", cursor:"pointer", fontSize:11, color:"var(--text-2)", fontWeight:600 }}
