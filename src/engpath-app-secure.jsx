@@ -9405,27 +9405,41 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
 
       {/* List or Flip-card view */}
       {listView ? (
-        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+        <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
           {filtered.slice(0, isPro || showFavs ? filtered.length : (level==="A1"?100:50)).map((w, i) => {
             const isFlipped = flip === i;
+            const cacheKey = `${currentLang}:${w.word}`;
+            const translationText = currentLang === "ml" ? w.translation : (txCache[cacheKey] ?? w.translation);
+            const isLoadingTx = !!txLoading[w.word];
             return (
-              <div key={`${w.word}-${i}`} onClick={() => setFlip(isFlipped ? null : i)}
-                style={{ background:"var(--surf)", border:"1px solid var(--border)", borderRadius:14, padding:"10px 14px", cursor:"pointer", animation:`fadeUp .18s ease ${Math.min(i*0.015,0.3)}s both` }}>
+              <div key={`${w.word}-${i}`} onClick={() => {
+                  const newFlip = isFlipped ? null : i;
+                  setFlip(newFlip);
+                  if (newFlip !== null && currentLang !== "ml") getTranslation(w.word, w.translation);
+                }}
+                style={{ background:"var(--surf)", border:"1px solid var(--border)", borderRadius:12, padding:"8px 12px", cursor:"pointer", animation:`fadeUp .15s ease ${Math.min(i*0.01,0.25)}s both` }}>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                      <span style={{ fontWeight:800, fontSize:14, color:"var(--text)" }}>{w.word}</span>
-                      {w.pos && <span style={{ fontSize:10, color:"var(--text-3)", background:"var(--surf-2)", padding:"2px 7px", borderRadius:999 }}>{w.pos}</span>}
+                    <div style={{ display:"flex", alignItems:"center", gap:7 }}>
+                      <span style={{ fontWeight:800, fontSize:13.5, color:"var(--text)" }}>{w.word}</span>
+                      {w.pos && <span style={{ fontSize:9.5, color:"var(--text-3)", background:"var(--surf-2)", padding:"1.5px 6px",borderRadius:999 }}>{w.pos}</span>}
                     </div>
-                    {isFlipped && <div style={{ fontSize:12, color:"var(--text-2)", marginTop:4, lineHeight:1.5 }}>{w.meaning}</div>}
+                    {isFlipped && (
+                      <div style={{ marginTop:3 }}>
+                        <div style={{ fontSize:11.5, color:"var(--text-2)", lineHeight:1.4 }}>{w.meaning}</div>
+                        <div style={{ fontSize:11.5, color:"var(--accent)", lineHeight:1.4, marginTop:1 }}>
+                          {isLoadingTx ? "..." : translationText}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                  <div style={{ display:"flex", gap:5, flexShrink:0 }}>
                     <button onClick={e => { e.stopPropagation(); toggleFavourite(w.word); }}
-                      style={{ width:28, height:28, borderRadius:10, border:"none", background:"transparent", cursor:"pointer", fontSize:14 }}>
+                      style={{ width:26, height:26, borderRadius:9, border:"none", background:"transparent", cursor:"pointer", fontSize:13 }}>
                       {favourites.includes(w.word) ? "❤️" : "🤍"}
                     </button>
                     <button onClick={e => { e.stopPropagation(); tts.speak(`${w.word}. ${w.meaning}.`, { lang: state.settings.accent, rate: 0.88, gender:state.settings.voice||"female" }); }}
-                      style={{ width:28, height:28, borderRadius:10, border:"none", background:"var(--accent-soft)", cursor:"pointer", fontSize:12 }}>
+                      style={{ width:26, height:26, borderRadius:9, border:"none", background:"var(--accent-soft)", cursor:"pointer", fontSize:11 }}>
                       🔊
                     </button>
                   </div>
