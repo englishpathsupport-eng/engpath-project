@@ -1008,17 +1008,14 @@ Mention 1 thing done well and 1 thing to improve.`;
 }
 
 // ── Grammar lesson ───────────────────────────────────────────────
-const GRAMMAR_LANG_NAMES = {"ml":"Malayalam","hi":"Hindi","ta":"Tamil","te":"Telugu","ar":"Arabic","fr":"French","de":"German","es":"Spanish","zh":"Chinese","ja":"Japanese","ko":"Korean","pt":"Portuguese","id":"Indonesian","vi":"Vietnamese","tr":"Turkish","it":"Italian","bn":"Bengali","ur":"Urdu","th":"Thai","en":"English"};
-export async function getGrammarLesson(topic, level, nativeLang = "ml") {
-  const langName = GRAMMAR_LANG_NAMES[nativeLang] || "the learner's native language";
+export async function getGrammarLesson(topic, level) {
   const prompt = `Teach "${topic}" grammar for ${level} English learners.
 Include:
 1. Core rule (1-2 sentences)
 2. Formula/pattern (e.g. Subject + has/have + past participle)
 3. Three ✅ correct examples
 4. Two ❌ common mistakes with corrections
-5. One 💡 tip for ${langName} speakers learning English
-
+5. One 💡 practical tip or memory trick for remembering this rule
 Keep under 200 words. Use clear formatting.`;
   return callClaude(
     "Expert English grammar teacher. Be clear and practical. Use ✅ and ❌ examples.",
@@ -9656,26 +9653,77 @@ function markdownToHtml(md) {
 }
 /* ═══ Grammar.jsx ═══ */
 const GRAMMAR_LEVELS = ["A1", "A2", "B1", "B2", "C1"];
-
+const GRAMMAR_MAX_VERSIONS = 5;
 const Grammar = memo(function Grammar({ state, dispatch }) {
   const [selected,    setSelected]    = useState(null);
   const [content,     setContent]     = useState("");
   const [loading,     setLoading]     = useState(false);
   const [tab,         setTab]         = useState("A1");
   const [grammarView, setGrammarView] = useState("topics"); // "topics" | "exercises"
+  const [verIdx,      setVerIdx]      = useState(0);
   const tts   = useTTS();
   const isPro = isActivePro(state.user);
-
+  const cacheKey = (topic, v) => `grammar:${topic.id || topic.title}:${topic.level}:v${v}`;
+  const loadCachedVersion = async (topic, v) => {
+    try {
+      const res = await window.storage?.get(cacheKey(topic, v), true);
+      return res?.value || null;
+    } catch { return null; }
+  };
+  const saveCachedVersion = async (topic, v, text) => {
+    try { await window.storage?.set(cacheKey(topic, v), text, true); } catch {}
+  };
   const loadTopic = async (topic) => {
     setSelected(topic);
     setLoading(true);
     setContent("");
+    setVerIdx(0);
     try {
-      const text = await getGrammarLesson(topic.title, topic.level, state.settings.lang || "ml");
-      setContent(text || "Could not load this lesson. Please try again.");
+      const cached = await loadCachedVersion(topic, 1);
+      if (cached) {
+        setContent(cached);
+        setLoading(false);
+        return;
+      }
+      const text = await getGrammarLesson(topic.title, topic.level);
+      if (text) {
+        setContent(text);
+        await saveCachedVersion(topic, 1, text);
+      } else {
+        setContent("Could not load this lesson. Please try again.");
+      }
     } catch {
       setContent("Network error. Please check your connection.");
     }
+    setLoading(false);
+  };
+  const regenerate = async () => {
+    if (!selected) return;
+    setLoading(true);
+    try {
+      const nextV = verIdx + 1;
+      if (nextV < GRAMMAR_MAX_VERSIONS) {
+        const cached = await loadCachedVersion(selected, nextV + 1);
+        if (cached) {
+          setContent(cached);
+          setVerIdx(nextV);
+        } else {
+          const text = await getGrammarLesson(selected.title, selected.level);
+          if (text) {
+            setContent(text);
+            await saveCachedVersion(selected, nextV + 1, text);
+            setVerIdx(nextV);
+          }
+        }
+      } else {
+        const cycleV = (verIdx % GRAMMAR_MAX_VERSIONS) + 1;
+        const cached = await loadCachedVersion(selected, cycleV);
+        if (cached) {
+          setContent(cached);
+          setVerIdx(verIdx + 1);
+        }
+      }
+    } catch {}
     setLoading(false);
   };
 
@@ -9853,7 +9901,7 @@ const Grammar = memo(function Grammar({ state, dispatch }) {
       )}
 
       {!loading && content && (
-        <Button variant="secondary" onClick={() => loadTopic(selected)} style={{ marginTop: 10 }}>
+        <Button variant="secondary" onClick={regenerate} style={{ marginTop: 10 }}>
           🔄 Regenerate
         </Button>
       )}
