@@ -6169,13 +6169,12 @@ const WotdCard = memo(function WotdCard({ settings = {}, dispatch }) {
                   <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,.7)", textTransform:"uppercase" }}>Word of the Day</span>
                   <span style={{ fontSize:9, fontWeight:800, padding:"1px 7px", borderRadius:20, background:"rgba(255,255,255,.2)", color:"#fff" }}>{displayWord.cefr}</span>
                 </div>
-                <span style={{ fontSize:10, color:"rgba(255,255,255,.6)" }}>Tap to reveal</span>
               </div>
               <div>
                 <div style={{ fontFamily:"'Poppins',sans-serif", fontSize:30, fontWeight:700, color:"#fff", marginBottom:3 }}>{displayWord.word}</div>
                 <div style={{ fontSize:12, color:"rgba(255,255,255,.75)", fontStyle:"italic" }}>{displayWord.ipa} · {displayWord.pos}</div>
               </div>
-              <div style={{ fontSize:11, color:"rgba(255,255,255,.55)" }}>Tap card to see meaning</div>
+              <div style={{ fontSize:11, color:"rgba(255,255,255,.55)" }}>Tap to reveal meaning</div>
             </div>
             <div style={{
               position:"absolute", inset:0, backfaceVisibility:"hidden",
