@@ -9295,7 +9295,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
     setTimeout(() => setGenMsg(""), 3500);
   }, [isPro, level, words, dispatch]);
 
-  const allPos  = useMemo(() => ["All", ...[...new Set(words.map(w => w.pos))]], [words]);
+  const allPos  = useMemo(() => ["All", ...[...new Set(words.map(w => w.pos).filter(Boolean))]], [words]);
   const filtered = useMemo(() => {
     const base = words.filter(w => {
       const q = search.toLowerCase();
