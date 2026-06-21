@@ -9295,17 +9295,18 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
     setTimeout(() => setGenMsg(""), 3500);
   }, [isPro, level, words, dispatch]);
 
-  const allPos  = useMemo(() => ["All", ...[...new Set(words.map(w => w.pos).filter(Boolean))]], [words]);
+  const unlockedPool = useMemo(() => isPro ? words : words.slice(0, level==="A1"?100:50), [words, isPro, level]);
+  const allPos  = useMemo(() => ["All", ...[...new Set(unlockedPool.map(w => w.pos).filter(Boolean))]], [unlockedPool]);
   const filtered = useMemo(() => {
-    const base = words.filter(w => {
+    // Free users: only ever browse within their unlocked word pool for this level
+    const pool = (isPro || showFavs) ? words : words.slice(0, level==="A1"?100:50);
+    return pool.filter(w => {
       const q = search.toLowerCase();
       const matchQ = !q || w.word.includes(q) || w.meaning.toLowerCase().includes(q);
       const matchP = posFilter === "All" || w.pos === posFilter;
       const matchF = !showFavs || favourites.includes(w.word);
       return matchQ && matchP && matchF;
     });
-    // Free users: show max words per level
-    return (isPro || showFavs) ? base : base.slice(0, level==="A1"?100:50);
   }, [words, search, posFilter, isPro, showFavs, favourites, level]);
 
   const LANG_NAMES = { ml:"Malayalam",hi:"Hindi",ta:"Tamil",te:"Telugu",ar:"Arabic",fr:"French",de:"German",es:"Spanish",zh:"Chinese",ja:"Japanese",ko:"Korean",pt:"Portuguese",id:"Indonesian",vi:"Vietnamese",tr:"Turkish",it:"Italian",bn:"Bengali",ur:"Urdu",th:"Thai",en:"English" };
