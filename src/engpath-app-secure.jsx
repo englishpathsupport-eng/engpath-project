@@ -1008,14 +1008,16 @@ Mention 1 thing done well and 1 thing to improve.`;
 }
 
 // ── Grammar lesson ───────────────────────────────────────────────
-export async function getGrammarLesson(topic, level) {
+const GRAMMAR_LANG_NAMES = {"ml":"Malayalam","hi":"Hindi","ta":"Tamil","te":"Telugu","ar":"Arabic","fr":"French","de":"German","es":"Spanish","zh":"Chinese","ja":"Japanese","ko":"Korean","pt":"Portuguese","id":"Indonesian","vi":"Vietnamese","tr":"Turkish","it":"Italian","bn":"Bengali","ur":"Urdu","th":"Thai","en":"English"};
+export async function getGrammarLesson(topic, level, nativeLang = "ml") {
+  const langName = GRAMMAR_LANG_NAMES[nativeLang] || "the learner's native language";
   const prompt = `Teach "${topic}" grammar for ${level} English learners.
 Include:
 1. Core rule (1-2 sentences)
 2. Formula/pattern (e.g. Subject + has/have + past participle)
 3. Three ✅ correct examples
 4. Two ❌ common mistakes with corrections
-5. One 💡 tip for Malayalam/South Asian speakers
+5. One 💡 tip for ${langName} speakers learning English
 
 Keep under 200 words. Use clear formatting.`;
   return callClaude(
@@ -9669,7 +9671,7 @@ const Grammar = memo(function Grammar({ state, dispatch }) {
     setLoading(true);
     setContent("");
     try {
-      const text = await getGrammarLesson(topic.title, topic.level);
+      const text = await getGrammarLesson(topic.title, topic.level, state.settings.lang || "ml");
       setContent(text || "Could not load this lesson. Please try again.");
     } catch {
       setContent("Network error. Please check your connection.");
