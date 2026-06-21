@@ -9178,7 +9178,6 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
       // Always use seed words - no old cache
       const seed = VOCAB[level] || [];
       setWords(seed);
-      try { await window.storage?.set(STORAGE_KEY, JSON.stringify(seed)); } catch {}
     })();
   }, [level]);
 
@@ -9283,7 +9282,6 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
     if (newWords.length) {
       const merged = [...words, ...newWords];
       setWords(merged);
-      try { await window.storage?.set(STORAGE_KEY, JSON.stringify(merged)); } catch {}
       setGenMsg(`v Added ${newWords.length} words! Total: ${merged.length}`);
       dispatch({ type: "ADD_XP", payload: 15 });
     } else {
@@ -9663,15 +9661,14 @@ const Grammar = memo(function Grammar({ state, dispatch }) {
   const [verIdx,      setVerIdx]      = useState(0);
   const tts   = useTTS();
   const isPro = isActivePro(state.user);
-  const cacheKey = (topic, v) => `grammar:${topic.id || topic.title}:${topic.level}:v${v}`;
   const loadCachedVersion = async (topic, v) => {
     try {
-      const res = await window.storage?.get(cacheKey(topic, v), true);
-      return res?.value || null;
+      const row = await sbGet("grammar_cache", { topic: topic.title, level: topic.level, version: v });
+      return row?.content || null;
     } catch { return null; }
   };
   const saveCachedVersion = async (topic, v, text) => {
-    try { await window.storage?.set(cacheKey(topic, v), text, true); } catch {}
+    try { await sbInsert("grammar_cache", { topic: topic.title, level: topic.level, version: v, content: text }); } catch {}
   };
   const loadTopic = async (topic) => {
     setSelected(topic);
@@ -10565,28 +10562,23 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
       setMessages([welcomeMsg]);
       return;
     }
-    (async () => {
-      try {
-        const res = await window.storage?.get(`ai_chat:${mode}`, false);
-        const saved = res?.value ? JSON.parse(res.value) : null;
-        if (saved && Array.isArray(saved) && saved.length > 0) {
-          setMessages(saved);
-        } else {
-          setMessages([welcomeMsg]);
-        }
-      } catch {
+    try {
+      const saved = JSON.parse(localStorage.getItem(`ep_ai_chat_${mode}`) || "null");
+      if (saved && Array.isArray(saved) && saved.length > 0) {
+        setMessages(saved);
+      } else {
         setMessages([welcomeMsg]);
       }
-    })();
+    } catch {
+      setMessages([welcomeMsg]);
+    }
   }, [mode]);
   // Persist chat history for Pro users only (last 30 messages per mode)
   useEffect(() => {
     const proUser = isActivePro(state.user);
     if (!proUser || messages.length === 0) return;
     const toSave = messages.slice(-30);
-    (async () => {
-      try { await window.storage?.set(`ai_chat:${mode}`, JSON.stringify(toSave), false); } catch {}
-    })();
+    try { localStorage.setItem(`ep_ai_chat_${mode}`, JSON.stringify(toSave)); } catch {}
   }, [messages, mode, state.user]);
 
   // When voice mode turns off, stop everything
@@ -10726,19 +10718,21 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
             boxShadow: voiceMode ? "0 3px 12px rgba(108,92,231,.35)" : "none",
           }}
         >
-          🎧 {voiceMode ? "Voice ON" : "Voice"}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+          {voiceMode ? "Voice ON" : "Voice"}
         </button>
         {isPro && messages.length > 1 && (
           <button
             onClick={async () => {
               const welcomeMsg = { id:"welcome", role:"assistant", content: modeData.welcome(state.user.level) };
               setMessages([welcomeMsg]);
-              try { await window.storage?.set(`ai_chat:${mode}`, JSON.stringify([welcomeMsg]), false); } catch {}
+              try { localStorage.setItem(`ep_ai_chat_${mode}`, JSON.stringify([welcomeMsg])); } catch {}
             }}
             title="Start a new chat"
-            style={{ padding:"6px 11px", borderRadius:999, background:"var(--surf-2)", border:"1px solid var(--border)", cursor:"pointer", fontSize:11, color:"var(--text-2)", fontWeight:600 }}
+            style={{ padding:"6px 11px", borderRadius:999, background:"var(--surf-2)", border:"1px solid var(--border)", cursor:"pointer", fontSize:11, color:"var(--text-2)", fontWeight:600, display:"flex", alignItems:"center", gap:4 }}
           >
-            🗑️ New
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            New
           </button>
         )}
         <button
