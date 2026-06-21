@@ -9603,6 +9603,55 @@ const VocabCard = memo(function VocabCard({ w, i, isFlipped, translationText, is
   );
 });
 
+/* ── Lightweight Markdown renderer for lesson content ── */
+function markdownToHtml(md) {
+  if (!md) return "";
+  let html = md
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  // Tables: convert | a | b | rows into HTML tables
+  const lines = html.split("\n");
+  let out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i+1])) {
+      // table start
+      const headerCells = line.split("|").map(c => c.trim()).filter(c => c.length);
+      let rows = [];
+      i += 2;
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
+        rows.push(lines[i].split("|").map(c => c.trim()).filter((c,idx,arr) => !(idx===0 && c==="") && !(idx===arr.length-1 && c==="")));
+        i++;
+      }
+      let tbl = '<table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px">';
+      tbl += '<thead><tr>' + headerCells.map(h => `<th style="text-align:left;padding:8px 10px;border-bottom:2px solid var(--border);color:var(--accent);font-weight:700">${h}</th>`).join("") + '</tr></thead>';
+      tbl += '<tbody>' + rows.map(r => '<tr>' + r.map(c => `<td style="padding:7px 10px;border-bottom:1px solid var(--border)">${c}</td>`).join("") + '</tr>').join("") + '</tbody></table>';
+      out.push(tbl);
+      continue;
+    }
+    out.push(line);
+    i++;
+  }
+  html = out.join("\n");
+
+  html = html
+    .replace(/^### (.*)$/gm, '<h4 style="font-size:14px;font-weight:700;color:var(--text);margin:14px 0 6px">$1</h4>')
+    .replace(/^## (.*)$/gm, '<h3 style="font-size:16px;font-weight:800;color:var(--accent);margin:18px 0 8px">$1</h3>')
+    .replace(/^# (.*)$/gm, '<h2 style="font-size:19px;font-weight:800;color:var(--text);margin:6px 0 12px">$1</h2>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--text)">$1</strong>')
+    .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code style="background:var(--surf-2);padding:2px 6px;border-radius:6px;font-size:12.5px">$1</code>')
+    .replace(/^---$/gm, '<hr style="border:none;border-top:1px solid var(--border);margin:16px 0"/>')
+    .replace(/^✅\s*(.*)$/gm, '<div style="display:flex;gap:8px;align-items:flex-start;margin:4px 0"><span style="color:#22C55E">✅</span><span>$1</span></div>')
+    .replace(/^❌\s*(.*)$/gm, '<div style="display:flex;gap:8px;align-items:flex-start;margin:4px 0"><span style="color:#EF4444">❌</span><span>$1</span></div>')
+    .replace(/^\d+\.\s+(.*)$/gm, '<div style="margin:6px 0;padding-left:4px">$1</div>')
+    .replace(/^-\s+(.*)$/gm, '<div style="margin:4px 0 4px 14px">• $1</div>')
+    .replace(/\n{2,}/g, '</p><p style="margin:10px 0">')
+    .replace(/\n/g, '<br/>');
+
+  return `<div style="margin:0">${html}</div>`;
+}
 /* ═══ Grammar.jsx ═══ */
 const GRAMMAR_LEVELS = ["A1", "A2", "B1", "B2", "C1"];
 
@@ -9795,9 +9844,8 @@ const Grammar = memo(function Grammar({ state, dispatch }) {
               Loading AI lesson...
             </div>
           ) : (
-            <div style={{ fontSize: 14, lineHeight: 1.9, color: "var(--text)", whiteSpace: "pre-wrap" }}>
-              {content}
-            </div>
+            <div style={{ fontSize: 14, lineHeight: 1.9, color: "var(--text)" }}
+              dangerouslySetInnerHTML={{ __html: markdownToHtml(content) }} />
           )}
         </Card>
       )}
