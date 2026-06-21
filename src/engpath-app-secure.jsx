@@ -9301,11 +9301,12 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
       const q = search.toLowerCase();
       const matchQ = !q || w.word.includes(q) || w.meaning.toLowerCase().includes(q);
       const matchP = posFilter === "All" || w.pos === posFilter;
-      return matchQ && matchP;
+      const matchF = !showFavs || favourites.includes(w.word);
+      return matchQ && matchP && matchF;
     });
-    // Free users: show max 200 words
-    return isPro ? base : base.slice(0, level==="A1"?100:50);
-  }, [words, search, posFilter, isPro]);
+    // Free users: show max words per level
+    return (isPro || showFavs) ? base : base.slice(0, level==="A1"?100:50);
+  }, [words, search, posFilter, isPro, showFavs, favourites, level]);
 
   const LANG_NAMES = { ml:"Malayalam",hi:"Hindi",ta:"Tamil",te:"Telugu",ar:"Arabic",fr:"French",de:"German",es:"Spanish",zh:"Chinese",ja:"Japanese",ko:"Korean",pt:"Portuguese",id:"Indonesian",vi:"Vietnamese",tr:"Turkish",it:"Italian",bn:"Bengali",ur:"Urdu",th:"Thai",en:"English" };
 
@@ -9402,9 +9403,40 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
         Showing <strong style={{ color:"var(--accent)" }}>{filtered.length}</strong> words
       </div>
 
-      {/* Flip cards */}
+      {/* List or Flip-card view */}
+      {listView ? (
+        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+          {filtered.slice(0, isPro || showFavs ? filtered.length : (level==="A1"?100:50)).map((w, i) => {
+            const isFlipped = flip === i;
+            return (
+              <div key={`${w.word}-${i}`} onClick={() => setFlip(isFlipped ? null : i)}
+                style={{ background:"var(--surf)", border:"1px solid var(--border)", borderRadius:14, padding:"10px 14px", cursor:"pointer", animation:`fadeUp .18s ease ${Math.min(i*0.015,0.3)}s both` }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <span style={{ fontWeight:800, fontSize:14, color:"var(--text)" }}>{w.word}</span>
+                      {w.pos && <span style={{ fontSize:10, color:"var(--text-3)", background:"var(--surf-2)", padding:"2px 7px", borderRadius:999 }}>{w.pos}</span>}
+                    </div>
+                    {isFlipped && <div style={{ fontSize:12, color:"var(--text-2)", marginTop:4, lineHeight:1.5 }}>{w.meaning}</div>}
+                  </div>
+                  <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                    <button onClick={e => { e.stopPropagation(); toggleFavourite(w.word); }}
+                      style={{ width:28, height:28, borderRadius:10, border:"none", background:"transparent", cursor:"pointer", fontSize:14 }}>
+                      {favourites.includes(w.word) ? "❤️" : "🤍"}
+                    </button>
+                    <button onClick={e => { e.stopPropagation(); tts.speak(`${w.word}. ${w.meaning}.`, { lang: state.settings.accent, rate: 0.88, gender:state.settings.voice||"female" }); }}
+                      style={{ width:28, height:28, borderRadius:10, border:"none", background:"var(--accent-soft)", cursor:"pointer", fontSize:12 }}>
+                      🔊
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
-        {filtered.slice(0, isPro ? filtered.length : (level==="A1"?100:50)).map((w, i) => {
+        {filtered.slice(0, isPro || showFavs ? filtered.length : (level==="A1"?100:50)).map((w, i) => {
           const cacheKey = `${currentLang}:${w.word}`;
           const translationText = currentLang === "ml"
             ? w.translation
@@ -9440,12 +9472,21 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
         })}
       </div>
 
+      )}
+
       {filtered.length > (isPro ? 200 : 100) && (
         <div style={{ textAlign: "center", padding: 16, fontSize: 12, color: "var(--text-3)" }}>
           Showing {isPro ? 200 : 100} of {filtered.length}. Narrow your search to see more.
         </div>
       )}
-      {filtered.length === 0 && (
+      {filtered.length === 0 && showFavs && (
+        <div style={{ textAlign: "center", padding: 40, color: "var(--text-3)", fontSize: 14 }}>
+          <div style={{ fontSize:38, marginBottom:10 }}>🤍</div>
+          <div style={{ fontWeight:700, marginBottom:4, color:"var(--text-2)" }}>No saved words yet</div>
+          <div>Tap the heart icon on any word to save it here</div>
+        </div>
+      )}
+      {filtered.length === 0 && !showFavs && (
         <div style={{ textAlign: "center", padding: 40, color: "var(--text-3)", fontSize: 14 }}>
           No words found for "{search}"
         </div>
