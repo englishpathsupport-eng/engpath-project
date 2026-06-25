@@ -12541,17 +12541,10 @@ const TopBar = memo(function TopBar({ screen, onNav, user }) {
           </span>
         ) : (
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <div style={{
-              width: 28, height: 28, borderRadius: 12,
-              background: "linear-gradient(135deg, #6C5CE7, #7C4DFF)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 14, boxShadow: "0 3px 10px rgba(108,92,231,.4)",
-            }}>
-              ✦
-            </div>
-            <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 17, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em" }}>
-              EngPath
-            </span>
+            <img src="/ep-logo.jpg" alt="EngPath" style={{
+              width: 32, height: 32, borderRadius: 10, objectFit: "cover",
+              boxShadow: "0 2px 8px rgba(0,0,0,.15)",
+            }} />
           </div>
         )}
       </div>
@@ -13040,13 +13033,10 @@ const LoginPage = memo(function LoginPage({ dispatch }) {
     }}>
       {/* ── Logo ── */}
       <div style={{ textAlign: "center", marginBottom: 28 }}>
-        <div style={{
-          fontFamily: "'Poppins',sans-serif", fontSize: 38, fontWeight: 900,
-          background: "linear-gradient(135deg,var(--accent),var(--blue))",
-          WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", marginBottom: 6,
-        }}>
-          EngPath
-        </div>
+        <img src="/ep-logo.jpg" alt="EngPath" style={{
+          width: 90, height: 90, borderRadius: 22, objectFit: "cover",
+          boxShadow: "0 4px 20px rgba(0,0,0,.15)", marginBottom: 10,
+        }} />
         <div style={{ fontSize: 13, color: "var(--text-2)" }}>AI-Powered English Coach 🇬🇧</div>
       </div>
 
