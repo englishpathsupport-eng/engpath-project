@@ -12540,11 +12540,17 @@ const TopBar = memo(function TopBar({ screen, onNav, user }) {
             {title}
           </span>
         ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <img src="/ep-logo.jpg" alt="EngPath" style={{
               width: 32, height: 32, borderRadius: 10, objectFit: "cover",
-              boxShadow: "0 2px 8px rgba(0,0,0,.15)",
+              boxShadow: "0 2px 8px rgba(0,0,0,.10)",
             }} />
+            <span style={{
+              fontFamily: "'Poppins', sans-serif", fontSize: 17, fontWeight: 700,
+              background: "linear-gradient(135deg, #2563EB, #22C55E)",
+              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+              letterSpacing: "-0.02em",
+            }}>EngPath</span>
           </div>
         )}
       </div>
@@ -13034,10 +13040,20 @@ const LoginPage = memo(function LoginPage({ dispatch }) {
       {/* ── Logo ── */}
       <div style={{ textAlign: "center", marginBottom: 28 }}>
         <img src="/ep-logo.jpg" alt="EngPath" style={{
-          width: 90, height: 90, borderRadius: 22, objectFit: "cover",
-          boxShadow: "0 4px 20px rgba(0,0,0,.15)", marginBottom: 10,
+          width: 88, height: 88, borderRadius: 22, objectFit: "cover",
+          boxShadow: "0 6px 24px rgba(37,99,235,.20)", marginBottom: 12,
         }} />
-        <div style={{ fontSize: 13, color: "var(--text-2)" }}>AI-Powered English Coach 🇬🇧</div>
+        <div style={{
+          fontFamily: "'Poppins', sans-serif", fontSize: 28, fontWeight: 700,
+          background: "linear-gradient(135deg, #2563EB, #22C55E)",
+          WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+          marginBottom: 4, letterSpacing: "-0.02em",
+        }}>EngPath</div>
+        <div style={{
+          fontFamily: "'Poppins', sans-serif", fontSize: 13, fontWeight: 600,
+          color: "#4F46E5", marginBottom: 2,
+        }}>Learn. Speak. Grow.</div>
+        <div style={{ fontSize: 12, color: "var(--text-2)" }}>AI-Powered English Coach 🇬🇧</div>
       </div>
 
       {/* ── Card ── */}
