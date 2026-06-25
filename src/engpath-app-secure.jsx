@@ -10535,8 +10535,9 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
   const [messages,  setMessages]  = useState([]);
   const [input,     setInput]     = useState("");
   const [loading,   setLoading]   = useState(false);
-  const [showModes, setShowModes] = useState(false);
-  const [voiceMode, setVoiceMode] = useState(false); // ChatGPT voice chat toggle
+  const [showModes,   setShowModes]   = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [voiceMode,   setVoiceMode]   = useState(false); // ChatGPT voice chat toggle
   const [voiceGender, setVoiceGender] = useState(state.settings.voice || "female");
 
   const tts        = useTTS();
@@ -10811,19 +10812,39 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
           {voiceMode ? "Voice ON" : "Voice"}
         </button>
-        {isPro && messages.length > 1 && (
-          <button
-            onClick={async () => {
-              const welcomeMsg = { id:"welcome", role:"assistant", content: modeData.welcome(state.user.level) };
-              setMessages([welcomeMsg]);
-              try { localStorage.setItem(`ep_ai_chat_${mode}`, JSON.stringify([welcomeMsg])); } catch {}
-            }}
-            title="Start a new chat"
-            style={{ padding:"6px 11px", borderRadius:999, background:"var(--surf-2)", border:"1px solid var(--border)", cursor:"pointer", fontSize:11, color:"var(--text-2)", fontWeight:600, display:"flex", alignItems:"center", gap:4 }}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            New
-          </button>
+        {isPro && (
+          <>
+            {messages.length > 1 && (
+              <button
+                onClick={() => {
+                  // Save current chat to history before clearing
+                  try {
+                    const histKey = `ep_ai_hist_${mode}`;
+                    const existing = JSON.parse(localStorage.getItem(histKey) || "[]");
+                    const entry = { id: Date.now(), date: new Date().toLocaleDateString(), preview: messages.find(m=>m.role==="user")?.content?.slice(0,40) || "Chat", msgs: messages.slice(-30) };
+                    const updated = [entry, ...existing].slice(0, 10); // keep last 10 conversations
+                    localStorage.setItem(histKey, JSON.stringify(updated));
+                  } catch {}
+                  const welcomeMsg = { id:"welcome", role:"assistant", content: modeData.welcome(state.user.level) };
+                  setMessages([welcomeMsg]);
+                  try { localStorage.setItem(`ep_ai_chat_${mode}`, JSON.stringify([welcomeMsg])); } catch {}
+                }}
+                title="Start a new chat"
+                style={{ padding:"6px 11px", borderRadius:999, background:"var(--surf-2)", border:"1px solid var(--border)", cursor:"pointer", fontSize:11, color:"var(--text-2)", fontWeight:600, display:"flex", alignItems:"center", gap:4 }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                New
+              </button>
+            )}
+            <button
+              onClick={() => setShowHistory(h => !h)}
+              title="Chat history"
+              style={{ padding:"6px 11px", borderRadius:999, background: showHistory ? "var(--accent)" : "var(--surf-2)", border:"1px solid var(--border)", cursor:"pointer", fontSize:11, color: showHistory ? "#fff" : "var(--text-2)", fontWeight:600, display:"flex", alignItems:"center", gap:4 }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              History
+            </button>
+          </>
         )}
         <button
           onClick={() => setShowModes(m => !m)}
@@ -10855,21 +10876,47 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
         </div>
       )}
 
+      {/* History panel */}
+      {showHistory && isPro && (
+        <div style={{ background:"var(--surf)", borderBottom:"1px solid var(--border)", padding:"12px 14px", flexShrink:0, maxHeight:220, overflowY:"auto" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+            <span style={{ fontSize:12, fontWeight:700, color:"var(--text)", fontFamily:"'Poppins',sans-serif" }}>Previous Chats</span>
+            <button onClick={() => setShowHistory(false)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:16, color:"var(--text-3)" }}>✕</button>
+          </div>
+          {(() => {
+            try {
+              const hist = JSON.parse(localStorage.getItem(`ep_ai_hist_${mode}`) || "[]");
+              if (!hist.length) return <p style={{ fontSize:12, color:"var(--text-3)", textAlign:"center", padding:"12px 0" }}>No previous chats yet. Start chatting and tap New to save!</p>;
+              return hist.map((h, idx) => (
+                <div key={h.id || idx}
+                  onClick={() => { setMessages(h.msgs); setShowHistory(false); try { localStorage.setItem(`ep_ai_chat_${mode}`, JSON.stringify(h.msgs)); } catch {} }}
+                  style={{ padding:"10px 12px", borderRadius:12, background:"var(--surf-2)", border:"1px solid var(--border)", marginBottom:6, cursor:"pointer", transition:"all .15s" }}
+                >
+                  <div style={{ fontSize:11, color:"var(--text-3)", marginBottom:3 }}>{h.date}</div>
+                  <div style={{ fontSize:13, color:"var(--text)", fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{h.preview || "Chat session"}...</div>
+                  <div style={{ fontSize:11, color:"#2563EB", marginTop:3, fontWeight:600 }}>{h.msgs?.length || 0} messages</div>
+                </div>
+              ));
+            } catch { return null; }
+          })()}
+        </div>
+      )}
       {/* Messages */}
       <div style={{ flex:1, overflowY:"auto", padding:"16px 14px", display:"flex", flexDirection:"column", gap:12 }}>
 
         {/* Quick prompts - modern suggestion chips */}
         {messages.length <= 1 && (
           <div style={{ marginBottom:4 }}>
-            <p style={{ fontSize:11, color:"var(--text-3)", marginBottom:8, fontWeight:500 }}>Suggested questions:</p>
+            <p style={{ fontSize:11, color:"var(--text-3)", marginBottom:8, fontWeight:600 }}>Suggested questions:</p>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
               {(QUICK_PROMPTS[mode] || []).map(q => (
                 <button key={q} onClick={() => send(q)}
                   style={{
-                    padding:"7px 13px", borderRadius:999,
-                    background:"var(--surf)", border:"1.5px solid var(--border)",
-                    fontSize:12, cursor:"pointer", color:"var(--text-2)", fontWeight:500,
-                    transition:"all .18s", boxShadow:"var(--shadow-sm)",
+                    padding:"8px 14px", borderRadius:999,
+                    background:"linear-gradient(135deg,#EEF2FF,#F0F9FF)",
+                    border:"1.5px solid #C7D2FE",
+                    fontSize:12, cursor:"pointer", color:"#4F46E5", fontWeight:600,
+                    transition:"all .18s", boxShadow:"0 1px 4px rgba(79,70,229,0.08)",
                   }}>
                   {q}
                 </button>
@@ -10896,17 +10943,17 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
             {/* Message bubble */}
             <div style={{
               maxWidth:"78%",
-              padding: m.role==="user" ? "11px 15px" : "13px 15px",
+              padding: m.role==="user" ? "11px 16px" : "13px 16px",
               borderRadius: m.role==="user" ? "20px 6px 20px 20px" : "6px 20px 20px 20px",
               background: m.role==="user"
-                ? "linear-gradient(135deg, #6C5CE7, #7C4DFF)"
+                ? "linear-gradient(135deg, #2563EB, #4F46E5)"
                 : "var(--surf)",
-              border: m.role==="user" ? "none" : "1px solid var(--border)",
+              border: m.role==="user" ? "none" : "1.5px solid var(--border)",
               color: m.role==="user" ? "#fff" : "var(--text)",
               fontSize:14, lineHeight:1.8,
               boxShadow: m.role==="user"
-                ? "0 4px 16px rgba(108,92,231,.35)"
-                : "var(--shadow-sm)",
+                ? "0 4px 16px rgba(37,99,235,.28)"
+                : "0 2px 8px rgba(0,0,0,0.06)",
               animation:"fadeUp .22s ease",
               fontFamily:"'Inter',sans-serif",
             }}>
