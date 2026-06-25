@@ -10878,23 +10878,43 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
 
       {/* History panel */}
       {showHistory && isPro && (
-        <div style={{ background:"var(--surf)", borderBottom:"1px solid var(--border)", padding:"12px 14px", flexShrink:0, maxHeight:220, overflowY:"auto" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-            <span style={{ fontSize:12, fontWeight:700, color:"var(--text)", fontFamily:"'Poppins',sans-serif" }}>Previous Chats</span>
-            <button onClick={() => setShowHistory(false)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:16, color:"var(--text-3)" }}>✕</button>
+        <div style={{ background:"var(--surf)", borderBottom:"1px solid var(--border)", padding:"14px 16px", flexShrink:0, maxHeight:260, overflowY:"auto" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <div style={{ width:28, height:28, borderRadius:8, background:"linear-gradient(135deg,#2563EB,#4F46E5)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+              <span style={{ fontSize:13, fontWeight:700, color:"var(--text)", fontFamily:"'Poppins',sans-serif" }}>Previous Chats</span>
+            </div>
+            <button onClick={() => setShowHistory(false)} style={{ background:"var(--surf-2)", border:"1px solid var(--border)", cursor:"pointer", width:26, height:26, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", color:"var(--text-3)", fontSize:13 }}>✕</button>
           </div>
           {(() => {
             try {
               const hist = JSON.parse(localStorage.getItem(`ep_ai_hist_${mode}`) || "[]");
-              if (!hist.length) return <p style={{ fontSize:12, color:"var(--text-3)", textAlign:"center", padding:"12px 0" }}>No previous chats yet. Start chatting and tap New to save!</p>;
-              return hist.map((h, idx) => (
+              const recent = hist.filter(h => Date.now() - h.id < 30*24*60*60*1000).slice(0,20);
+              if (!recent.length) return (
+                <div style={{ textAlign:"center", padding:"20px 0" }}>
+                  <div style={{ fontSize:24, marginBottom:6 }}>💬</div>
+                  <p style={{ fontSize:12, color:"var(--text-3)", margin:0 }}>No previous chats yet.</p>
+                  <p style={{ fontSize:11, color:"var(--text-3)", margin:"4px 0 0" }}>Start chatting and tap <strong>+ New</strong> to save!</p>
+                </div>
+              );
+              return recent.map((h, idx) => (
                 <div key={h.id || idx}
                   onClick={() => { setMessages(h.msgs); setShowHistory(false); try { localStorage.setItem(`ep_ai_chat_${mode}`, JSON.stringify(h.msgs)); } catch {} }}
-                  style={{ padding:"10px 12px", borderRadius:12, background:"var(--surf-2)", border:"1px solid var(--border)", marginBottom:6, cursor:"pointer", transition:"all .15s" }}
+                  style={{ padding:"11px 14px", borderRadius:14, background:"var(--surf-2)", border:"1.5px solid var(--border)", marginBottom:8, cursor:"pointer", transition:"all .18s", display:"flex", alignItems:"center", gap:12 }}
                 >
-                  <div style={{ fontSize:11, color:"var(--text-3)", marginBottom:3 }}>{h.date}</div>
-                  <div style={{ fontSize:13, color:"var(--text)", fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{h.preview || "Chat session"}...</div>
-                  <div style={{ fontSize:11, color:"#2563EB", marginTop:3, fontWeight:600 }}>{h.msgs?.length || 0} messages</div>
+                  <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#EEF2FF,#E0E7FF)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, color:"var(--text)", fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{h.preview || "Chat session"}...</div>
+                    <div style={{ display:"flex", gap:8, marginTop:3, alignItems:"center" }}>
+                      <span style={{ fontSize:11, color:"var(--text-3)" }}>{h.date}</span>
+                      <span style={{ fontSize:11, color:"#2563EB", fontWeight:600, background:"#EEF2FF", padding:"1px 7px", borderRadius:999 }}>{h.msgs?.length || 0} msgs</span>
+                    </div>
+                  </div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                 </div>
               ));
             } catch { return null; }
