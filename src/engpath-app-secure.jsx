@@ -6441,6 +6441,96 @@ const Home = memo(function Home({ state, dispatch }) {
         ))}
       </div>
 
+      {/* ── Today's Learning Path ── */}
+      <div style={{ marginBottom:16 }}>
+        <div style={{ fontFamily:"'Poppins',sans-serif", fontSize:15, fontWeight:700, color:"var(--text)", marginBottom:12 }}>
+          📚 Today's Learning Path
+        </div>
+        <div style={{ background:"var(--surf)", borderRadius:20, border:"1px solid var(--border)", padding:"16px", boxShadow:"var(--shadow-card)" }}>
+          {[
+            { step:1, label:"Vocabulary", icon:"📖", screen:"vocabulary", done: (dailyUsage.vocabulary||0)>0 },
+            { step:2, label:"Speaking", icon:"🎙", screen:"practice", done: (dailyUsage.pronunciation||0)>0 },
+            { step:3, label:"AI Conversation", icon:"🤖", screen:"chatbot", done: (dailyUsage.aiChat||0)>0 },
+          ].map((item, idx) => (
+            <div key={item.step} onClick={()=>nav(item.screen)} style={{ display:"flex", alignItems:"center", gap:12, cursor:"pointer", padding:"8px 0", borderBottom: idx<2 ? "1px solid var(--border)" : "none" }}>
+              <div style={{ width:36, height:36, borderRadius:999, background: item.done ? "var(--green)" : "linear-gradient(135deg,#2563EB,#4F46E5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0, boxShadow: item.done ? "0 2px 8px rgba(34,197,94,.3)" : "0 2px 8px rgba(37,99,235,.3)" }}>
+                {item.done ? "✅" : item.icon}
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:"var(--text)", fontFamily:"'Poppins',sans-serif" }}>Step {item.step}: {item.label}</div>
+                <div style={{ fontSize:11, color:"var(--text-3)", marginTop:1 }}>{item.done ? "Completed ✓" : "Tap to start"}</div>
+              </div>
+              <div style={{ fontSize:16, color:"var(--text-3)" }}>›</div>
+            </div>
+          ))}
+          <div style={{ marginTop:12, height:6, background:"var(--border-2)", borderRadius:999, overflow:"hidden" }}>
+            <div style={{ height:"100%", borderRadius:999, background:"linear-gradient(90deg,#2563EB,#22C55E)", transition:"width 1s ease",
+              width:`${Math.round((((dailyUsage.vocabulary||0)>0?1:0)+((dailyUsage.pronunciation||0)>0?1:0)+((dailyUsage.aiChat||0)>0?1:0))/3*100)}%` }} />
+          </div>
+          <div style={{ fontSize:11, color:"var(--text-3)", marginTop:6, textAlign:"right" }}>
+            {Math.round((((dailyUsage.vocabulary||0)>0?1:0)+((dailyUsage.pronunciation||0)>0?1:0)+((dailyUsage.aiChat||0)>0?1:0))/3*100)}% Complete
+          </div>
+        </div>
+      </div>
+
+      {/* ── Daily Goal + Achievements Row ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+        {/* Daily Goal */}
+        <div style={{ background:"var(--surf)", borderRadius:20, border:"1px solid var(--border)", padding:"14px", boxShadow:"var(--shadow-card)" }}>
+          <div style={{ fontSize:12, fontWeight:700, color:"var(--text)", fontFamily:"'Poppins',sans-serif", marginBottom:10 }}>🎯 Daily Goal</div>
+          <div style={{ display:"flex", justifyContent:"center", marginBottom:8 }}>
+            <svg width="64" height="64" viewBox="0 0 64 64">
+              <circle cx="32" cy="32" r="26" fill="none" stroke="var(--border-2)" strokeWidth="6"/>
+              <circle cx="32" cy="32" r="26" fill="none" stroke="#2563EB" strokeWidth="6"
+                strokeDasharray={`${Math.min(100,(dailyUsage.pronunciation||0)/5*100) * 1.634} 163.4`}
+                strokeLinecap="round" transform="rotate(-90 32 32)" style={{transition:"stroke-dasharray 1s ease"}}/>
+              <text x="32" y="37" textAnchor="middle" fontSize="14" fontWeight="700" fill="var(--text)">{dailyUsage.pronunciation||0}/5</text>
+            </svg>
+          </div>
+          <div style={{ fontSize:11, color:"var(--text-3)", textAlign:"center" }}>Speaking sessions</div>
+        </div>
+
+        {/* Achievements */}
+        <div style={{ background:"var(--surf)", borderRadius:20, border:"1px solid var(--border)", padding:"14px", boxShadow:"var(--shadow-card)" }}>
+          <div style={{ fontSize:12, fontWeight:700, color:"var(--text)", fontFamily:"'Poppins',sans-serif", marginBottom:10 }}>🏆 Achievements</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+            {[
+              { icon:"🎯", label:"First Lesson", done: user.xp>0 },
+              { icon:"🔥", label:"3-Day Streak", done: user.streak>=3 },
+              { icon:"📚", label:"Vocab Master", done: user.xp>=100 },
+              { icon:"🎙", label:"Speaker", done: (dailyUsage.pronunciation||0)>=3 },
+            ].map(a => (
+              <div key={a.label} style={{ textAlign:"center", opacity: a.done ? 1 : 0.4 }}>
+                <div style={{ fontSize:20 }}>{a.icon}</div>
+                <div style={{ fontSize:9, color:"var(--text-3)", marginTop:2, lineHeight:1.2 }}>{a.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Weekly Progress ── */}
+      <div style={{ background:"var(--surf)", borderRadius:20, border:"1px solid var(--border)", padding:"16px", marginBottom:16, boxShadow:"var(--shadow-card)" }}>
+        <div style={{ fontFamily:"'Poppins',sans-serif", fontSize:14, fontWeight:700, color:"var(--text)", marginBottom:14 }}>📊 Weekly Progress</div>
+        <div style={{ display:"flex", alignItems:"flex-end", gap:6, height:60 }}>
+          {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((day, i) => {
+            const today = new Date().getDay();
+            const dayIdx = i===0?1:i===1?2:i===2?3:i===3?4:i===4?5:i===5?6:0;
+            const isToday = dayIdx === today;
+            const hasData = isToday;
+            const height = isToday ? Math.max(20, (user.xp%100||10)) : Math.floor(Math.random()*0+10);
+            return (
+              <div key={day} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+                <div style={{ width:"100%", background: isToday ? "linear-gradient(180deg,#2563EB,#4F46E5)" : "var(--border-2)", borderRadius:6,
+                  height: isToday ? `${Math.min(50,Math.max(12,(user.xp%100||10)/2))}px` : "12px",
+                  transition:"height .5s ease", boxShadow: isToday ? "0 2px 8px rgba(37,99,235,.4)" : "none" }} />
+                <div style={{ fontSize:9, color: isToday ? "var(--accent)" : "var(--text-3)", fontWeight: isToday ? 700 : 400 }}>{day}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Word of the Day */}
       <WotdCard settings={state.settings} dispatch={dispatch} />
     </div>
