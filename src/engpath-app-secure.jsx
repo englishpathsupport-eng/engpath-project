@@ -10537,6 +10537,7 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
   const [loading,   setLoading]   = useState(false);
   const [showModes,   setShowModes]   = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [histSearch,  setHistSearch]  = useState("");
   const [voiceMode,   setVoiceMode]   = useState(false); // ChatGPT voice chat toggle
   const [voiceGender, setVoiceGender] = useState(state.settings.voice || "female");
 
@@ -10886,23 +10887,23 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
               </div>
               <span style={{ fontSize:13, fontWeight:700, color:"var(--text)", fontFamily:"'Poppins',sans-serif" }}>Previous Chats</span>
             </div>
-            <button onClick={() => setShowHistory(false)} style={{ background:"var(--surf-2)", border:"1px solid var(--border)", cursor:"pointer", width:26, height:26, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", color:"var(--text-3)", fontSize:13 }}>✕</button>
+            <button onClick={() => { setShowHistory(false); setHistSearch(""); }} style={{ background:"var(--surf-2)", border:"1px solid var(--border)", cursor:"pointer", width:26, height:26, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", color:"var(--text-3)", fontSize:13 }}>✕</button>
           </div>
           {/* Search bar */}
           <div style={{ position:"relative", marginBottom:10 }}>
             <svg style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)" }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input
               placeholder="Search chats..."
-              id="hist-search"
-              onChange={e => { const el = document.getElementById('hist-search'); el._val = e.target.value; el.dispatchEvent(new Event('_rerender')); }}
+              value={histSearch}
+              onChange={e => setHistSearch(e.target.value)}
               style={{ width:"100%", padding:"8px 10px 8px 30px", borderRadius:10, border:"1.5px solid var(--border)", background:"var(--surf-2)", fontSize:12, color:"var(--text)", outline:"none", boxSizing:"border-box" }}
             />
+            {histSearch && <button onClick={() => setHistSearch("")} style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:"var(--text-3)", fontSize:14 }}>✕</button>}
           </div>
           {(() => {
             try {
               const hist = JSON.parse(localStorage.getItem(`ep_ai_hist_${mode}`) || "[]");
-              const searchEl = document.getElementById('hist-search');
-              const q = (searchEl?._val || "").toLowerCase();
+              const q = histSearch.toLowerCase();
               const recent = hist
                 .filter(h => Date.now() - h.id < 30*24*60*60*1000)
                 .filter(h => !q || (h.preview||"").toLowerCase().includes(q))
