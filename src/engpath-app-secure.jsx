@@ -10878,8 +10878,8 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
 
       {/* History panel */}
       {showHistory && isPro && (
-        <div style={{ background:"var(--surf)", borderBottom:"1px solid var(--border)", padding:"14px 16px", flexShrink:0, maxHeight:260, overflowY:"auto" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+        <div style={{ background:"var(--surf)", borderBottom:"1px solid var(--border)", padding:"14px 16px", flexShrink:0, maxHeight:320, overflowY:"auto" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <div style={{ width:28, height:28, borderRadius:8, background:"linear-gradient(135deg,#2563EB,#4F46E5)", display:"flex", alignItems:"center", justifyContent:"center" }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -10888,33 +10888,61 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
             </div>
             <button onClick={() => setShowHistory(false)} style={{ background:"var(--surf-2)", border:"1px solid var(--border)", cursor:"pointer", width:26, height:26, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", color:"var(--text-3)", fontSize:13 }}>✕</button>
           </div>
+          {/* Search bar */}
+          <div style={{ position:"relative", marginBottom:10 }}>
+            <svg style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)" }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input
+              placeholder="Search chats..."
+              id="hist-search"
+              onChange={e => { const el = document.getElementById('hist-search'); el._val = e.target.value; el.dispatchEvent(new Event('_rerender')); }}
+              style={{ width:"100%", padding:"8px 10px 8px 30px", borderRadius:10, border:"1.5px solid var(--border)", background:"var(--surf-2)", fontSize:12, color:"var(--text)", outline:"none", boxSizing:"border-box" }}
+            />
+          </div>
           {(() => {
             try {
               const hist = JSON.parse(localStorage.getItem(`ep_ai_hist_${mode}`) || "[]");
-              const recent = hist.filter(h => Date.now() - h.id < 30*24*60*60*1000).slice(0,20);
+              const searchEl = document.getElementById('hist-search');
+              const q = (searchEl?._val || "").toLowerCase();
+              const recent = hist
+                .filter(h => Date.now() - h.id < 30*24*60*60*1000)
+                .filter(h => !q || (h.preview||"").toLowerCase().includes(q))
+                .slice(0,20);
               if (!recent.length) return (
                 <div style={{ textAlign:"center", padding:"20px 0" }}>
                   <div style={{ fontSize:24, marginBottom:6 }}>💬</div>
-                  <p style={{ fontSize:12, color:"var(--text-3)", margin:0 }}>No previous chats yet.</p>
-                  <p style={{ fontSize:11, color:"var(--text-3)", margin:"4px 0 0" }}>Start chatting and tap <strong>+ New</strong> to save!</p>
+                  <p style={{ fontSize:12, color:"var(--text-3)", margin:0 }}>{q ? "No chats match your search." : "No previous chats yet."}</p>
+                  {!q && <p style={{ fontSize:11, color:"var(--text-3)", margin:"4px 0 0" }}>Start chatting and tap <strong>+ New</strong> to save!</p>}
                 </div>
               );
               return recent.map((h, idx) => (
-                <div key={h.id || idx}
-                  onClick={() => { setMessages(h.msgs); setShowHistory(false); try { localStorage.setItem(`ep_ai_chat_${mode}`, JSON.stringify(h.msgs)); } catch {} }}
-                  style={{ padding:"11px 14px", borderRadius:14, background:"var(--surf-2)", border:"1.5px solid var(--border)", marginBottom:8, cursor:"pointer", transition:"all .18s", display:"flex", alignItems:"center", gap:12 }}
-                >
-                  <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#EEF2FF,#E0E7FF)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <div key={h.id || idx} style={{ padding:"11px 14px", borderRadius:14, background:"var(--surf-2)", border:"1.5px solid var(--border)", marginBottom:8, transition:"all .18s", display:"flex", alignItems:"center", gap:12 }}>
+                  <div onClick={() => { setMessages(h.msgs); setShowHistory(false); try { localStorage.setItem(`ep_ai_chat_${mode}`, JSON.stringify(h.msgs)); } catch {} }}
+                    style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#EEF2FF,#E0E7FF)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, cursor:"pointer" }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                   </div>
-                  <div style={{ flex:1, minWidth:0 }}>
+                  <div onClick={() => { setMessages(h.msgs); setShowHistory(false); try { localStorage.setItem(`ep_ai_chat_${mode}`, JSON.stringify(h.msgs)); } catch {} }}
+                    style={{ flex:1, minWidth:0, cursor:"pointer" }}>
                     <div style={{ fontSize:13, color:"var(--text)", fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{h.preview || "Chat session"}...</div>
                     <div style={{ display:"flex", gap:8, marginTop:3, alignItems:"center" }}>
                       <span style={{ fontSize:11, color:"var(--text-3)" }}>{h.date}</span>
                       <span style={{ fontSize:11, color:"#2563EB", fontWeight:600, background:"#EEF2FF", padding:"1px 7px", borderRadius:999 }}>{h.msgs?.length || 0} msgs</span>
                     </div>
                   </div>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  <button
+                    onClick={() => {
+                      try {
+                        const all = JSON.parse(localStorage.getItem(`ep_ai_hist_${mode}`) || "[]");
+                        const updated = all.filter(x => x.id !== h.id);
+                        localStorage.setItem(`ep_ai_hist_${mode}`, JSON.stringify(updated));
+                        setShowHistory(false);
+                        setTimeout(() => setShowHistory(true), 10);
+                      } catch {}
+                    }}
+                    style={{ background:"#FEF2F2", border:"1px solid #FECACA", cursor:"pointer", width:28, height:28, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}
+                    title="Delete this chat"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                  </button>
                 </div>
               ));
             } catch { return null; }
