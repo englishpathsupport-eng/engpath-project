@@ -6217,12 +6217,12 @@ const Home = memo(function Home({ state, dispatch }) {
   const nav = (screen) => dispatch({ type: "SET_SCREEN", payload: screen });
 
   const quickActions = [
-    { icon: "🎙", label: "Speaking",   sub: "Pronunciation",  screen: "practice",     grad: "linear-gradient(135deg,#6C5CE7,#7C4DFF)" },
-    { icon: "💬", label: "Convo",      sub: "AI Dialogue",    screen: "conversation", grad: "linear-gradient(135deg,#7C4DFF,#4DA3FF)" },
-    { icon: "📚", label: "Vocab",      sub: "Word Power",     screen: "vocabulary",   grad: "linear-gradient(135deg,#22C55E,#00CEC9)" },
-    { icon: "📖", label: "Grammar",    sub: "Rules & Patterns",screen: "grammar",      grad: "linear-gradient(135deg,#F59E0B,#F97316)" },
-    { icon: "🔍", label: "Dictionary", sub: "Look Up Words",  screen: "dictionary",   grad: "linear-gradient(135deg,#4DA3FF,#6C5CE7)" },
-    { icon: "🤖", label: "AI Coach",   sub: "Smart Tutor",    screen: "chatbot",      grad: "linear-gradient(135deg,#F59E0B,#6C5CE7)" },
+    { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Speaking", sub:"Pronunciation", screen:"practice", grad:"linear-gradient(135deg,#2563EB,#4F46E5)" },
+    { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>, label:"Convo", sub:"AI Dialogue", screen:"conversation", grad:"linear-gradient(135deg,#4F46E5,#7C3AED)" },
+    { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>, label:"Vocab", sub:"Word Power", screen:"vocabulary", grad:"linear-gradient(135deg,#059669,#22C55E)" },
+    { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>, label:"Grammar", sub:"Rules", screen:"grammar", grad:"linear-gradient(135deg,#D97706,#F59E0B)" },
+    { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>, label:"Dictionary", sub:"Look Up", screen:"dictionary", grad:"linear-gradient(135deg,#0284C7,#2563EB)" },
+    { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9 9h.01M15 9h.01M9 15c0 0 1 2 3 2s3-2 3-2"/></svg>, label:"AI Coach", sub:"Smart Tutor", screen:"chatbot", grad:"linear-gradient(135deg,#7C3AED,#2563EB)" },
   ];
 
   const skillColors = { grammar:"var(--accent)", vocabulary:"var(--green)", speaking:"var(--purple)", writing:"var(--orange)" };
@@ -6426,10 +6426,10 @@ const Home = memo(function Home({ state, dispatch }) {
             }}
           >
             <div style={{
-              width:42, height:42, borderRadius:14,
+              width:44, height:44, borderRadius:14,
               background:a.grad,
               display:"flex", alignItems:"center", justifyContent:"center",
-              fontSize:20, boxShadow:`0 4px 12px rgba(108,92,231,.25)`,
+              boxShadow:`0 4px 14px rgba(0,0,0,.2)`,
             }}>
               {a.icon}
             </div>
@@ -6448,13 +6448,16 @@ const Home = memo(function Home({ state, dispatch }) {
         </div>
         <div style={{ background:"var(--surf)", borderRadius:20, border:"1px solid var(--border)", padding:"16px", boxShadow:"var(--shadow-card)" }}>
           {[
-            { step:1, label:"Vocabulary", icon:"📖", screen:"vocabulary", done: (dailyUsage.vocabulary||0)>0 },
-            { step:2, label:"Speaking", icon:"🎙", screen:"practice", done: (dailyUsage.pronunciation||0)>0 },
-            { step:3, label:"AI Conversation", icon:"🤖", screen:"chatbot", done: (dailyUsage.aiChat||0)>0 },
+            { step:1, label:"Vocabulary", screen:"vocabulary", done: (dailyUsage.vocabulary||0)>0,
+              icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg> },
+            { step:2, label:"Speaking", screen:"practice", done: (dailyUsage.pronunciation||0)>0,
+              icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg> },
+            { step:3, label:"AI Conversation", screen:"chatbot", done: (dailyUsage.aiChat||0)>0,
+              icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg> },
           ].map((item, idx) => (
-            <div key={item.step} onClick={()=>nav(item.screen)} style={{ display:"flex", alignItems:"center", gap:12, cursor:"pointer", padding:"8px 0", borderBottom: idx<2 ? "1px solid var(--border)" : "none" }}>
-              <div style={{ width:36, height:36, borderRadius:999, background: item.done ? "var(--green)" : "linear-gradient(135deg,#2563EB,#4F46E5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0, boxShadow: item.done ? "0 2px 8px rgba(34,197,94,.3)" : "0 2px 8px rgba(37,99,235,.3)" }}>
-                {item.done ? "✅" : item.icon}
+            <div key={item.step} onClick={()=>nav(item.screen)} style={{ display:"flex", alignItems:"center", gap:12, cursor:"pointer", padding:"10px 0", borderBottom: idx<2 ? "1px solid var(--border)" : "none" }}>
+              <div style={{ width:40, height:40, borderRadius:14, background: item.done ? "#22C55E" : "linear-gradient(135deg,#2563EB,#4F46E5)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow: item.done ? "0 4px 12px rgba(34,197,94,.3)" : "0 4px 12px rgba(37,99,235,.3)" }}>
+                {item.done ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20,6 9,17 4,12"/></svg> : item.icon}
               </div>
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:13, fontWeight:600, color:"var(--text)", fontFamily:"'Poppins',sans-serif" }}>Step {item.step}: {item.label}</div>
@@ -6493,16 +6496,18 @@ const Home = memo(function Home({ state, dispatch }) {
         {/* Achievements */}
         <div style={{ background:"var(--surf)", borderRadius:20, border:"1px solid var(--border)", padding:"14px", boxShadow:"var(--shadow-card)" }}>
           <div style={{ fontSize:12, fontWeight:700, color:"var(--text)", fontFamily:"'Poppins',sans-serif", marginBottom:10 }}>🏆 Achievements</div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
             {[
-              { icon:"🎯", label:"First Lesson", done: user.xp>0 },
-              { icon:"🔥", label:"3-Day Streak", done: user.streak>=3 },
-              { icon:"📚", label:"Vocab Master", done: user.xp>=100 },
-              { icon:"🎙", label:"Speaker", done: (dailyUsage.pronunciation||0)>=3 },
+              { svg:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>, label:"First Lesson", done: user.xp>0, color:"#F59E0B" },
+              { svg:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"/></svg>, label:"3-Day Streak", done: user.streak>=3, color:"#EF4444" },
+              { svg:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>, label:"Vocab Master", done: user.xp>=100, color:"#22C55E" },
+              { svg:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/></svg>, label:"Speaker", done: (dailyUsage.pronunciation||0)>=3, color:"#2563EB" },
             ].map(a => (
-              <div key={a.label} style={{ textAlign:"center", opacity: a.done ? 1 : 0.4 }}>
-                <div style={{ fontSize:20 }}>{a.icon}</div>
-                <div style={{ fontSize:9, color:"var(--text-3)", marginTop:2, lineHeight:1.2 }}>{a.label}</div>
+              <div key={a.label} style={{ textAlign:"center", opacity: a.done ? 1 : 0.35, transition:"opacity .3s" }}>
+                <div style={{ width:36, height:36, borderRadius:12, background: a.done ? `${a.color}20` : "var(--surf-2)", border: a.done ? `1.5px solid ${a.color}40` : "1.5px solid var(--border)", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 4px", color: a.done ? a.color : "var(--text-3)" }}>
+                  {a.svg}
+                </div>
+                <div style={{ fontSize:9, color: a.done ? "var(--text)" : "var(--text-3)", fontWeight: a.done ? 600 : 400, lineHeight:1.2 }}>{a.label}</div>
               </div>
             ))}
           </div>
@@ -6512,19 +6517,23 @@ const Home = memo(function Home({ state, dispatch }) {
       {/* ── Weekly Progress ── */}
       <div style={{ background:"var(--surf)", borderRadius:20, border:"1px solid var(--border)", padding:"16px", marginBottom:16, boxShadow:"var(--shadow-card)" }}>
         <div style={{ fontFamily:"'Poppins',sans-serif", fontSize:14, fontWeight:700, color:"var(--text)", marginBottom:14 }}>📊 Weekly Progress</div>
-        <div style={{ display:"flex", alignItems:"flex-end", gap:6, height:60 }}>
-          {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((day, i) => {
+        <div style={{ display:"flex", alignItems:"flex-end", gap:6, height:70 }}>
+          {[
+            {day:"Mon",h:20},{day:"Tue",h:35},{day:"Wed",h:28},{day:"Thu",h:45},
+            {day:"Fri",h:30},{day:"Sat",h:15},{day:"Sun",h:0}
+          ].map((item, i) => {
             const today = new Date().getDay();
-            const dayIdx = i===0?1:i===1?2:i===2?3:i===3?4:i===4?5:i===5?6:0;
-            const isToday = dayIdx === today;
-            const hasData = isToday;
-            const height = isToday ? Math.max(20, (user.xp%100||10)) : Math.floor(Math.random()*0+10);
+            const dayMap = {0:6,1:0,2:1,3:2,4:3,5:4,6:5};
+            const isToday = dayMap[today] === i;
+            const barH = isToday ? Math.max(16, Math.min(60, user.xp || 20)) : item.h;
             return (
-              <div key={day} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
-                <div style={{ width:"100%", background: isToday ? "linear-gradient(180deg,#2563EB,#4F46E5)" : "var(--border-2)", borderRadius:6,
-                  height: isToday ? `${Math.min(50,Math.max(12,(user.xp%100||10)/2))}px` : "12px",
-                  transition:"height .5s ease", boxShadow: isToday ? "0 2px 8px rgba(37,99,235,.4)" : "none" }} />
-                <div style={{ fontSize:9, color: isToday ? "var(--accent)" : "var(--text-3)", fontWeight: isToday ? 700 : 400 }}>{day}</div>
+              <div key={item.day} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:5 }}>
+                <div style={{ width:"100%", borderRadius:8,
+                  background: isToday ? "linear-gradient(180deg,#2563EB,#4F46E5)" : i < dayMap[today] ? "linear-gradient(180deg,#22C55E80,#22C55E40)" : "var(--border-2)",
+                  height:`${barH}px`, minHeight:8,
+                  transition:"height .8s cubic-bezier(.4,0,.2,1)",
+                  boxShadow: isToday ? "0 4px 12px rgba(37,99,235,.35)" : "none" }} />
+                <div style={{ fontSize:9, color: isToday ? "#2563EB" : "var(--text-3)", fontWeight: isToday ? 700 : 400 }}>{item.day}</div>
               </div>
             );
           })}
