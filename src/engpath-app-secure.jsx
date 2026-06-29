@@ -6276,9 +6276,9 @@ const Home = memo(function Home({ state, dispatch }) {
         {/* Stats row */}
         <div style={{ display:"flex", gap:8, marginBottom:14, position:"relative", zIndex:1 }}>
           {[
-            { icon:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>, label:"Level", value:user.level },
-            { icon:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13,2 3,14 12,14 11,22 21,10 12,10 13,2"/></svg>, label:"XP", value:user.xp.toLocaleString() },
-            { icon:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"/></svg>, label:"Streak", value:`${user.streak}d` },
+            { icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="rgba(255,215,0,.95)"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>, label:"Level", value:user.level },
+            { icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="rgba(255,200,0,.95)"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>, label:"XP", value:user.xp.toLocaleString() },
+            { icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="rgba(255,100,50,.95)"><path d="M12 23c4.97 0 9-4.03 9-9 0-4.17-5-11-7.5-14.5C11 3 6 9.83 6 14c0 4.97 4.03 9 6 9z"/></svg>, label:"Streak", value:`${user.streak}d` },
           ].map(s => (
             <div key={s.label} style={{
               flex:1, background:"rgba(255,255,255,.15)", borderRadius:16,
