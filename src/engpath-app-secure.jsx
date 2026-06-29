@@ -6246,9 +6246,59 @@ const Home = memo(function Home({ state, dispatch }) {
         <div style={{ position:"absolute", top:-30, right:-30, width:120, height:120, borderRadius:"50%", background:"rgba(255,255,255,.08)", pointerEvents:"none" }} />
         <div style={{ position:"absolute", bottom:-20, left:-20, width:90, height:90, borderRadius:"50%", background:"rgba(255,255,255,.06)", pointerEvents:"none" }} />
 
+        {/* Illustration - right side */}
+        <div style={{ position:"absolute", right:0, top:0, bottom:0, width:160, zIndex:0, pointerEvents:"none", overflow:"hidden" }}>
+          <svg viewBox="0 0 160 200" width="160" height="200" style={{ position:"absolute", bottom:0, right:-10 }}>
+            {/* Body */}
+            <ellipse cx="80" cy="185" rx="45" ry="18" fill="rgba(0,0,0,.15)"/>
+            {/* Hoodie body */}
+            <rect x="45" y="110" width="70" height="75" rx="20" fill="#7C3AED"/>
+            {/* Neck */}
+            <rect x="70" y="95" width="20" height="20" rx="8" fill="#FDBCB4"/>
+            {/* Head */}
+            <ellipse cx="80" cy="80" rx="28" ry="30" fill="#FDBCB4"/>
+            {/* Hair */}
+            <ellipse cx="80" cy="58" rx="30" ry="18" fill="#3D1F00"/>
+            <rect x="52" y="58" width="10" height="35" rx="5" fill="#3D1F00"/>
+            <rect x="98" y="58" width="10" height="35" rx="5" fill="#3D1F00"/>
+            {/* Eyes */}
+            <ellipse cx="70" cy="82" rx="5" ry="6" fill="#fff"/>
+            <ellipse cx="90" cy="82" rx="5" ry="6" fill="#fff"/>
+            <ellipse cx="71" cy="83" rx="3" ry="4" fill="#3D1F00"/>
+            <ellipse cx="91" cy="83" rx="3" ry="4" fill="#3D1F00"/>
+            <ellipse cx="72" cy="82" rx="1" ry="1.5" fill="#fff"/>
+            <ellipse cx="92" cy="82" rx="1" ry="1.5" fill="#fff"/>
+            {/* Smile */}
+            <path d="M73 93 Q80 99 87 93" stroke="#c0856a" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+            {/* Arms */}
+            <rect x="22" y="115" width="25" height="14" rx="7" fill="#7C3AED" transform="rotate(20 35 122)"/>
+            <rect x="113" y="115" width="25" height="14" rx="7" fill="#7C3AED" transform="rotate(-20 125 122)"/>
+            {/* Hands */}
+            <ellipse cx="30" cy="137" rx="9" ry="7" fill="#FDBCB4"/>
+            <ellipse cx="130" cy="137" rx="9" ry="7" fill="#FDBCB4"/>
+            {/* Book */}
+            <rect x="35" y="138" width="90" height="55" rx="4" fill="#1E40AF"/>
+            <rect x="35" y="138" width="45" height="55" rx="4" fill="#2563EB"/>
+            <line x1="80" y1="138" x2="80" y2="193" stroke="#1E3A8A" strokeWidth="2"/>
+            {/* Book lines */}
+            <line x1="42" y1="152" x2="72" y2="152" stroke="rgba(255,255,255,.4)" strokeWidth="1.5"/>
+            <line x1="42" y1="160" x2="72" y2="160" stroke="rgba(255,255,255,.4)" strokeWidth="1.5"/>
+            <line x1="42" y1="168" x2="72" y2="168" stroke="rgba(255,255,255,.4)" strokeWidth="1.5"/>
+            <line x1="87" y1="152" x2="117" y2="152" stroke="rgba(255,255,255,.3)" strokeWidth="1.5"/>
+            <line x1="87" y1="160" x2="117" y2="160" stroke="rgba(255,255,255,.3)" strokeWidth="1.5"/>
+            {/* Chat bubble */}
+            <rect x="90" y="25" width="58" height="35" rx="12" fill="rgba(255,255,255,.2)" stroke="rgba(255,255,255,.3)" strokeWidth="1"/>
+            <text x="119" y="40" textAnchor="middle" fontSize="8" fill="#fff" fontWeight="600">Let's</text>
+            <text x="119" y="50" textAnchor="middle" fontSize="8" fill="#fff" fontWeight="600">learn!</text>
+            {/* Stars */}
+            <text x="15" y="45" fontSize="14" fill="rgba(255,255,255,.7)">✦</text>
+            <text x="135" y="70" fontSize="10" fill="rgba(255,255,255,.5)">✦</text>
+            <text x="25" y="100" fontSize="8" fill="rgba(255,255,255,.4)">✦</text>
+          </svg>
+        </div>
         {/* Top row */}
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14, position:"relative", zIndex:1 }}>
-          <div>
+          <div style={{ maxWidth:"55%" }}>
             <p style={{ fontSize:12, color:"rgba(255,255,255,.7)", fontWeight:500, fontFamily:"'Inter',sans-serif", marginBottom:2 }}>{greeting} 👋</p>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <h1 style={{ fontFamily:"'Poppins',sans-serif", fontSize:22, fontWeight:700, color:"#fff", lineHeight:1.1 }}>
