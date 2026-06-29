@@ -6276,16 +6276,16 @@ const Home = memo(function Home({ state, dispatch }) {
         {/* Stats row */}
         <div style={{ display:"flex", gap:8, marginBottom:14, position:"relative", zIndex:1 }}>
           {[
-            { icon:"🎓", label:"Level", value:user.level },
-            { icon:"⚡", label:"XP", value:user.xp.toLocaleString() },
-            { icon:"🔥", label:"Streak", value:`${user.streak}d` },
+            { icon:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>, label:"Level", value:user.level },
+            { icon:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13,2 3,14 12,14 11,22 21,10 12,10 13,2"/></svg>, label:"XP", value:user.xp.toLocaleString() },
+            { icon:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"/></svg>, label:"Streak", value:`${user.streak}d` },
           ].map(s => (
             <div key={s.label} style={{
               flex:1, background:"rgba(255,255,255,.15)", borderRadius:16,
               padding:"10px 8px", textAlign:"center",
               backdropFilter:"blur(8px)", border:"1px solid rgba(255,255,255,.15)",
             }}>
-              <div style={{ fontSize:15, lineHeight:1, marginBottom:3 }}>{s.icon}</div>
+              <div style={{ marginBottom:4, display:"flex", justifyContent:"center" }}>{s.icon}</div>
               <div style={{ fontFamily:"'Poppins',sans-serif", fontSize:16, fontWeight:700, color:"#fff", lineHeight:1.1 }}>{s.value}</div>
               <div style={{ fontSize:9, color:"rgba(255,255,255,.7)", fontWeight:500, marginTop:2 }}>{s.label}</div>
             </div>
@@ -6393,12 +6393,15 @@ const Home = memo(function Home({ state, dispatch }) {
             return (
               <div key={key} style={{ marginBottom:10 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4, fontSize:12 }}>
-                  <span style={{ color:"var(--text-2)", fontWeight:500, display:"flex", alignItems:"center", gap:5 }}>{icon} {label}</span>
-                  <span style={{ color:over?"var(--red)":"var(--text-3)", fontWeight:over?700:500 }}>{used}/{limit}</span>
+                  <span style={{ color:"var(--text-2)", fontWeight:500, display:"flex", alignItems:"center", gap:6 }}>
+                    <span style={{ color: key==="pronunciation" ? "#2563EB" : key==="conversations" ? "#4F46E5" : "#22C55E", display:"flex" }}>{icon}</span>
+                    {label}
+                  </span>
+                  <span style={{ color:over?"#EF4444":key==="pronunciation"?"#2563EB":key==="conversations"?"#4F46E5":"#22C55E", fontWeight:600 }}>{used}/{limit}</span>
                 </div>
                 <div style={{ height:5, background:"var(--border-2)", borderRadius:999, overflow:"hidden" }}>
                   <div style={{ height:"100%", width:`${pct}%`, borderRadius:999, transition:"width .5s",
-                    background:over?"var(--red)":pct>70?"var(--gold)":"var(--green)" }} />
+                    background:over?"#EF4444":key==="pronunciation"?"#2563EB":key==="conversations"?"#4F46E5":"#22C55E" }} />
                 </div>
               </div>
             );
