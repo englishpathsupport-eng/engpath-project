@@ -6383,9 +6383,9 @@ const Home = memo(function Home({ state, dispatch }) {
             <button onClick={()=>nav("settings")} style={{ fontSize:11, color:"var(--accent)", background:"none", border:"none", cursor:"pointer", fontWeight:600 }}>Upgrade ↗</button>
           </div>
           {[
-            { key:"pronunciation",  label:"Speaking",      icon:"🎙", limit:5  },
-            { key:"conversations",  label:"Conversations", icon:"💬", limit:3  },
-            { key:"aiChat",         label:"AI Coach",      icon:"🤖", limit:10 },
+            { key:"pronunciation",  label:"Speaking",      icon:<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/></svg>, limit:5  },
+            { key:"conversations",  label:"Conversations", icon:<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>, limit:3  },
+            { key:"aiChat",         label:"AI Coach",      icon:<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9 9h.01M15 9h.01M9 15c0 0 1 2 3 2s3-2 3-2"/></svg>, limit:10 },
           ].map(({ key, label, icon, limit }) => {
             const used = dailyUsage[key] || 0;
             const pct  = Math.min(100, Math.round((used/limit)*100));
@@ -6393,7 +6393,7 @@ const Home = memo(function Home({ state, dispatch }) {
             return (
               <div key={key} style={{ marginBottom:10 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4, fontSize:12 }}>
-                  <span style={{ color:"var(--text-2)", fontWeight:500 }}>{icon} {label}</span>
+                  <span style={{ color:"var(--text-2)", fontWeight:500, display:"flex", alignItems:"center", gap:5 }}>{icon} {label}</span>
                   <span style={{ color:over?"var(--red)":"var(--text-3)", fontWeight:over?700:500 }}>{used}/{limit}</span>
                 </div>
                 <div style={{ height:5, background:"var(--border-2)", borderRadius:999, overflow:"hidden" }}>
