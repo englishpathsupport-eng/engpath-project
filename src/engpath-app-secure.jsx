@@ -6246,9 +6246,8 @@ const Home = memo(function Home({ state, dispatch }) {
         <div style={{ position:"absolute", top:-30, right:-30, width:120, height:120, borderRadius:"50%", background:"rgba(255,255,255,.08)", pointerEvents:"none" }} />
         <div style={{ position:"absolute", bottom:-20, left:-20, width:90, height:90, borderRadius:"50%", background:"rgba(255,255,255,.06)", pointerEvents:"none" }} />
 
-        {/* Illustration - right side */}
-        <div style={{ position:"absolute", right:-10, bottom:0, width:150, zIndex:0, pointerEvents:"none" }}>
-          <img src="/hero-girl.jpeg" alt="" style={{ width:150, height:"auto", objectFit:"contain", display:"block" }} />
+        {/* Illustration placeholder */}
+        <div style={{ display:"none" }}>
           <svg viewBox="0 0 160 200" width="160" height="200" style={{ display:"none" }}>
             {/* Body */}
             <ellipse cx="80" cy="185" rx="45" ry="18" fill="rgba(0,0,0,.15)"/>
