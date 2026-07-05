@@ -11,42 +11,17 @@ import { useState, useEffect, useRef, useReducer, useCallback, useMemo, memo } f
 let _audioUnlocked = false;
 /* ─ window._safeSpeak: reliable one-shot TTS for Android ─ */
 if (typeof window !== "undefined") {
-  window._safeSpeak = function(text, lang, rate, gender) {
+  window._safeSpeak = function(text, lang, rate) {
     const synth = window.speechSynthesis;
     if (!synth || !text) return;
     try { synth.cancel(); } catch(_) {}
+    setTimeout(function() {
     try { if (synth.paused) synth.resume(); } catch(_) {}
     const u = new SpeechSynthesisUtterance(text.trim().slice(0, 200));
     u.lang = lang || "en-US"; u.rate = rate || 0.9;
-    try {
-      const vv = synth.getVoices();
-      const isMale = (gender||"female") === "male";
-      // All English voices
-      const enVoices = vv.filter(x => x.lang.startsWith("en"));
-      // Same-lang voices
-      const langVoices = vv.filter(x => x.lang.startsWith(u.lang) || x.lang.startsWith(u.lang.split('-')[0]));
-      let v = null;
-      if (isMale) {
-        // Try same-lang male first
-        v = langVoices.find(x => /male|ravi|david|james|mark|daniel|alex|fred|albert|bruce|junior|thomas|george|arthur/i.test(x.name));
-        // Try any English male
-        if (!v) v = enVoices.find(x => /male|ravi|david|james|mark|daniel|alex|fred|albert|bruce|junior|thomas|george|arthur/i.test(x.name));
-        // Fallback: last voice in lang (often male)
-        if (!v && langVoices.length > 1) v = langVoices[langVoices.length - 1];
-        if (!v && enVoices.length > 1) v = enVoices[enVoices.length - 1];
-      } else {
-        // Try same-lang female first
-        v = langVoices.find(x => /female|heera|samantha|victoria|karen|susan|zira|google us english/i.test(x.name));
-        // Try any English female
-        if (!v) v = enVoices.find(x => /female|heera|samantha|victoria|karen|susan|zira|google us english/i.test(x.name));
-        // Fallback: first voice
-        if (!v && langVoices.length > 0) v = langVoices[0];
-        if (!v && enVoices.length > 0) v = enVoices[0];
-      }
-      if (!v && langVoices.length > 0) v = langVoices[0];
-      if (v) u.voice = v;
-    } catch(_) {}
+    try { const vv=synth.getVoices(); const v=vv.find(x=>x.lang.startsWith(u.lang)); if(v) u.voice=v; } catch(_){}
     synth.speak(u);
+    }, 90);
   };
 }
 
@@ -54,6 +29,9 @@ function unlockAudio() {
   if (_audioUnlocked) return;
   _audioUnlocked = true;
   try {
+    // Only unlock Web Audio API context — do NOT call synth.speak() here
+    // because a silent utterance would queue before our real one.
+    // speechSynthesis is unlocked by the cancel()+speak() in speak() itself.
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const buf = ctx.createBuffer(1, 1, 22050);
     const src = ctx.createBufferSource();
@@ -61,16 +39,7 @@ function unlockAudio() {
     src.connect(ctx.destination);
     src.start(0);
     setTimeout(() => ctx.close(), 500);
-  } catch (_) {}
-  try {
-    const s = window.speechSynthesis;
-    if (s) {
-      const u = new SpeechSynthesisUtterance("");
-      u.volume = 0;
-      s.speak(u);
-      setTimeout(() => s.cancel(), 100);
-    }
-  } catch (_) {}
+  } catch (_) { /* sandbox - ignore */ }
 }
 
 /* ═══ useTTS.js ═══ */
@@ -127,8 +96,8 @@ function useTTS() {
 
     const langBase = lang.slice(0, 5);
     const langRoot = lang.slice(0, 2);
-    const femRe  = /female|samantha|karen|victoria|moira|aria|jenny|zira|alice|allison|ava|joanna|kendra|kimberly|salli|ivy|olivia|heera|susan|linda/i;
-    const malRe  = /male|david|daniel|fred|rishi|ravi|mark|guy|aaron|brian|joey|matthew|justin|kevin|james|george|richard|tom/i;
+    const femRe  = /female|samantha|karen|victoria|moira|aria|jenny|zira|alice|allison|ava|joanna|kendra|kimberly|salli|ivy|olivia/i;
+    const malRe  = /male|daniel|david|fred|rishi|mark|guy|aaron|brian|joey|matthew|justin|kevin|james/i;
     const re     = gender === "female" ? femRe : malRe;
     const byLang = v => v.lang && (v.lang.startsWith(langBase) || v.lang.startsWith(langRoot));
     const isHQ   = v => /google|natural|neural|enhanced|wavenet|studio|premium/i.test(v.name);
@@ -726,49 +695,15 @@ const LANG_LABELS = {
   ml:"Malayalam", hi:"Hindi", ta:"Tamil", te:"Telugu",
   ar:"Arabic",    fr:"French", de:"German", es:"Spanish",
   zh:"Chinese",   ja:"Japanese", ko:"Korean", pt:"Portuguese",
-  id:"Indonesian", vi:"Vietnamese", tr:"Turkish", it:"Italian", bn:"Bengali", ur:"Urdu", th:"Thai", en:"English",
 };
 
-// ── Supabase cache helpers ──
-const SB_URL = "https://oiobzjwwzmbjbimijryj.supabase.co";
-const SB_KEY = "sb_publishable_NUUO7h2t5Y0w7w28sUtPjQ_c0mkgPar";
-
-async function sbGet(table, filters) {
-  try {
-    const params = Object.entries(filters).map(([k,v]) => `${k}=eq.${encodeURIComponent(v)}`).join("&");
-    const res = await fetch(`${SB_URL}/rest/v1/${table}?${params}&limit=1`, {
-      headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
-    });
-    const data = await res.json();
-    return data?.[0] || null;
-  } catch { return null; }
-}
-
-async function sbInsert(table, row) {
-  try {
-    await fetch(`${SB_URL}/rest/v1/${table}`, {
-      method: "POST",
-      headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "ignore-duplicates" },
-      body: JSON.stringify(row)
-    });
-  } catch {}
-}
-
 export async function translateText(text, targetLang) {
-  if (!targetLang || targetLang === "ml") return text;
-  // Check Supabase cache first
-  const cached = await sbGet("translation_cache", { word: text, language: targetLang });
-  if (cached?.translation) return cached.translation;
-  // Call Claude API
   const label = LANG_LABELS[targetLang] || "Malayalam";
-  const translation = await callClaude(
+  return callClaude(
     `You are a professional translator. Reply ONLY with the ${label} translation, nothing else.`,
     `Translate to ${label}: "${text}"`,
     120
   );
-  // Save to Supabase cache
-  if (translation) await sbInsert("translation_cache", { word: text, language: targetLang, translation });
-  return translation || text;
 }
 
 export async function detectLanguage(text) {
@@ -1015,7 +950,8 @@ Include:
 2. Formula/pattern (e.g. Subject + has/have + past participle)
 3. Three ✅ correct examples
 4. Two ❌ common mistakes with corrections
-5. One 💡 practical tip or memory trick for remembering this rule
+5. One 💡 tip for Malayalam/South Asian speakers
+
 Keep under 200 words. Use clear formatting.`;
   return callClaude(
     "Expert English grammar teacher. Be clear and practical. Use ✅ and ❌ examples.",
@@ -1027,7 +963,7 @@ Keep under 200 words. Use clear formatting.`;
 // ── Vocabulary AI generator ──────────────────────────────────────
 export async function generateVocabWords(level, existingWords = [], count = 50, nativeLang = "ml") {
   const existing = existingWords.slice(-20).join(", ");
-  const LANG_NAMES = {ml:"Malayalam",hi:"Hindi",ta:"Tamil",te:"Telugu",ar:"Arabic",fr:"French",de:"German",es:"Spanish",zh:"Chinese",ja:"Japanese",ko:"Korean",pt:"Portuguese",id:"Indonesian",vi:"Vietnamese",tr:"Turkish",it:"Italian",bn:"Bengali",ur:"Urdu",th:"Thai",en:"English"};
+  const LANG_NAMES = {ml:"Malayalam",hi:"Hindi",ta:"Tamil",te:"Telugu",ar:"Arabic",fr:"French",de:"German",es:"Spanish",zh:"Chinese",ja:"Japanese",ko:"Korean",pt:"Portuguese"};
   const langName = LANG_NAMES[nativeLang] || "Hindi";
   const prompt = `Generate ${count} useful ${level} CEFR English vocabulary words. Do NOT repeat: [${existing}].
 Return ONLY valid JSON array, no markdown, no extra text:
@@ -1279,665 +1215,7 @@ A1: [
   {word:"have",pos:"v.",meaning:"To possess something",example:"I have a car.",translation:"ഉണ്ട്"},
   {word:"be",pos:"v.",meaning:"To exist; to equal",example:"Be honest.",translation:"ആകുക"},
   {word:"do",pos:"v.",meaning:"To perform an action",example:"What do you do?",translation:"ചെയ്യുക"},
-,
-  {word:"cat",pos:"n.",meaning:"A small furry animal kept as a pet",example:"The cat is sleeping on the sofa.",translation:"പൂച്ച",ipa:"kæt"},
-  {word:"dog",pos:"n.",meaning:"A common pet animal that barks",example:"My dog is very friendly.",translation:"നായ",ipa:"dɒɡ"},
-  {word:"bird",pos:"n.",meaning:"An animal with wings and feathers",example:"A bird is sitting on the tree.",translation:"പക്ഷി",ipa:"bɜːd"},
-  {word:"fish",pos:"n.",meaning:"An animal that lives in water",example:"I have a fish in a bowl.",translation:"മത്സ്യം",ipa:"fɪʃ"},
-  {word:"cow",pos:"n.",meaning:"A large farm animal that gives milk",example:"The cow is in the field.",translation:"പശു",ipa:"kaʊ"},
-  {word:"head",pos:"n.",meaning:"The top part of the body",example:"She put a hat on her head.",translation:"തല",ipa:"hɛd"},
-  {word:"eye",pos:"n.",meaning:"The part of the body used to see",example:"He has brown eyes.",translation:"കണ്ണ്",ipa:"aɪ"},
-  {word:"nose",pos:"n.",meaning:"The part of the face used to smell",example:"My nose is cold.",translation:"മൂക്ക്",ipa:"nəʊz"},
-  {word:"mouth",pos:"n.",meaning:"The opening in the face used to eat and speak",example:"Open your mouth wide.",translation:"വായ",ipa:"maʊθ"},
-  {word:"ear",pos:"n.",meaning:"The part of the body used to hear",example:"She has a ring in her ear.",translation:"ചെവി",ipa:"ɪər"},
-  {word:"hand",pos:"n.",meaning:"The part at the end of the arm with fingers",example:"Wash your hands before eating.",translation:"കൈ",ipa:"hænd"},
-  {word:"foot",pos:"n.",meaning:"The part at the bottom of the leg",example:"My foot hurts.",translation:"കാൽ",ipa:"fʊt"},
-  {word:"leg",pos:"n.",meaning:"The body part used for walking",example:"He broke his leg.",translation:"കാൽ‌മുട്ട്",ipa:"lɛɡ"},
-  {word:"arm",pos:"n.",meaning:"The body part between the shoulder and hand",example:"She raised her arm.",translation:"കൈഭുജം",ipa:"ɑːm"},
-  {word:"hair",pos:"n.",meaning:"The thin threads growing on the head",example:"She has long black hair.",translation:"മുടി",ipa:"hɛər"},
-  {word:"grandfather",pos:"n.",meaning:"The father of your mother or father",example:"My grandfather is seventy years old.",translation:"മുത്തച്ഛൻ",ipa:"ˈɡrænˌfɑːðər"},
-  {word:"grandmother",pos:"n.",meaning:"The mother of your mother or father",example:"My grandmother cooks very well.",translation:"മുത്തശ്ശി",ipa:"ˈɡrænˌmʌðər"},
-  {word:"son",pos:"n.",meaning:"A male child of a parent",example:"Their son is five years old.",translation:"മകൻ",ipa:"sʌn"},
-  {word:"daughter",pos:"n.",meaning:"A female child of a parent",example:"She has two daughters.",translation:"മകൾ",ipa:"ˈdɔːtər"},
-  {word:"baby",pos:"n.",meaning:"A very young child",example:"The baby is sleeping.",translation:"കുഞ്ഞ്",ipa:"ˈbeɪbi"},
-  {word:"yellow",pos:"adj.",meaning:"Having the color of the sun or a lemon",example:"She is wearing a yellow dress.",translation:"മഞ്ഞ",ipa:"ˈjɛləʊ"},
-  {word:"orange",pos:"adj.",meaning:"Having the color between red and yellow",example:"He has an orange bag.",translation:"ഓറഞ്ച്",ipa:"ˈɒrɪndʒ"},
-  {word:"pink",pos:"adj.",meaning:"Having a light red color",example:"The flowers are pink.",translation:"പിങ്ക്",ipa:"pɪŋk"},
-  {word:"purple",pos:"adj.",meaning:"Having a color mixed from red and blue",example:"She likes purple shoes.",translation:"പർപ്പിൾ",ipa:"ˈpɜːpəl"},
-  {word:"brown",pos:"adj.",meaning:"Having the color of wood or soil",example:"The dog has brown fur.",translation:"തവിട്ട്",ipa:"braʊn"},
-  {word:"four",pos:"n.",meaning:"The number after three",example:"I have four cats.",translation:"നാല്",ipa:"fɔːr"},
-  {word:"five",pos:"n.",meaning:"The number after four",example:"She is five years old.",translation:"അഞ്ച്",ipa:"faɪv"},
-  {word:"ten",pos:"n.",meaning:"The number equal to twice five",example:"There are ten eggs.",translation:"പത്ത്",ipa:"tɛn"},
-  {word:"twenty",pos:"n.",meaning:"The number equal to two times ten",example:"He is twenty years old.",translation:"ഇരുപത്",ipa:"ˈtwɛnti"},
-  {word:"hundred",pos:"n.",meaning:"The number equal to ten times ten",example:"There are a hundred students.",translation:"നൂറ്",ipa:"ˈhʌndrəd"},
-  {word:"thanks",pos:"excl.",meaning:"A word used to show you are grateful",example:"Thanks for your help.",translation:"നന്ദി",ipa:"θæŋks"},
-  {word:"egg",pos:"n.",meaning:"An oval food from a chicken",example:"I eat an egg for breakfast.",translation:"മുട്ട",ipa:"ɛɡ"},
-  {word:"cake",pos:"n.",meaning:"A sweet baked food often eaten at celebrations",example:"She made a birthday cake.",translation:"കേക്ക്",ipa:"keɪk"},
-  {word:"soup",pos:"n.",meaning:"A hot liquid food made by boiling vegetables or meat",example:"The soup is very hot.",translation:"സൂപ്പ്",ipa:"suːp"},
-  {word:"bed",pos:"n.",meaning:"A piece of furniture used for sleeping",example:"I go to bed at ten.",translation:"കട്ടിൽ",ipa:"bɛd"},
-  {word:"kitchen",pos:"n.",meaning:"The room where food is prepared",example:"She is cooking in the kitchen.",translation:"അടുക്കള",ipa:"ˈkɪtʃɪn"},
-  {word:"shirt",pos:"n.",meaning:"A piece of clothing worn on the upper body",example:"He is wearing a blue shirt.",translation:"ഷർട്ട്",ipa:"ʃɜːt"},
-  {word:"shoe",pos:"n.",meaning:"A covering worn on the foot",example:"I need new shoes.",translation:"ചെരിപ്പ്",ipa:"ʃuː"},
-  {word:"dress",pos:"n.",meaning:"A piece of clothing worn by women or girls",example:"She is wearing a red dress.",translation:"ഡ്രസ്സ്",ipa:"drɛs"},
-  {word:"hat",pos:"n.",meaning:"A covering worn on the head",example:"He wears a hat in the sun.",translation:"തൊപ്പി",ipa:"hæt"},
-  {word:"six",pos:"n.",meaning:"The number 6",example:"I have six pencils.",translation:"ആറ്",ipa:"sɪks"},
-  {word:"seven",pos:"n.",meaning:"The number 7",example:"There are seven days in a week.",translation:"ഏഴ്",ipa:"ˈsɛvən"},
-  {word:"eight",pos:"n.",meaning:"The number 8",example:"She is eight years old.",translation:"എട്ട്",ipa:"eɪt"},
-  {word:"nine",pos:"n.",meaning:"The number 9",example:"I have nine books.",translation:"ഒൻപത്",ipa:"naɪn"},
-  {word:"fifty",pos:"n.",meaning:"The number 50",example:"There are fifty students in the class.",translation:"അമ്പത്",ipa:"ˈfɪfti"},
-  {word:"grey",pos:"adj.",meaning:"A color between black and white",example:"The sky is grey today.",translation:"ചാരനിറം",ipa:"ɡreɪ"},
-  {word:"uncle",pos:"n.",meaning:"The brother of your parent",example:"My uncle is a teacher.",translation:"അമ്മാവൻ",ipa:"ˈʌŋkəl"},
-  {word:"aunt",pos:"n.",meaning:"The sister of your parent",example:"My aunt makes good food.",translation:"അമ്മായി",ipa:"ɑːnt"},
-  {word:"husband",pos:"n.",meaning:"The man that a woman is married to",example:"Her husband is tall.",translation:"ഭർത്താവ്",ipa:"ˈhʌzbənd"},
-  {word:"wife",pos:"n.",meaning:"The woman that a man is married to",example:"His wife is a nurse.",translation:"ഭാര്യ",ipa:"waɪf"},
-  {word:"back",pos:"n.",meaning:"The rear part of the body between neck and bottom",example:"My back hurts today.",translation:"പുറം",ipa:"bæk"},
-  {word:"finger",pos:"n.",meaning:"One of the five long parts at the end of your hand",example:"She cut her finger.",translation:"വിരൽ",ipa:"ˈfɪŋɡər"},
-  {word:"tooth",pos:"n.",meaning:"One of the hard white things in your mouth for biting",example:"I brush my tooth every morning.",translation:"പല്ല്",ipa:"tuːθ"},
-  {word:"knee",pos:"n.",meaning:"The joint in the middle of your leg",example:"My knee is sore.",translation:"മുട്ട്",ipa:"niː"},
-  {word:"shoulder",pos:"n.",meaning:"The part of the body between the neck and the arm",example:"He put his bag on his shoulder.",translation:"തോള്",ipa:"ˈʃoʊldər"},
-  {word:"tea",pos:"n.",meaning:"A hot drink made with leaves and water",example:"I like to drink tea in the morning.",translation:"ചായ",ipa:"tiː"},
-  {word:"coffee",pos:"n.",meaning:"A dark hot drink made from roasted beans",example:"He drinks coffee every morning.",translation:"കാപ്പി",ipa:"ˈkɒfi"},
-  {word:"banana",pos:"n.",meaning:"A long yellow fruit",example:"She eats a banana for breakfast.",translation:"വാഴപ്പഴം",ipa:"bəˈnɑːnə"},
-  {word:"jacket",pos:"n.",meaning:"A short coat worn on the upper body",example:"He wears a blue jacket.",translation:"ജാക്കറ്റ്",ipa:"ˈdʒækɪt"},
-  {word:"trousers",pos:"n.",meaning:"A piece of clothing that covers both legs",example:"He is wearing black trousers.",translation:"ട്രൗസർ",ipa:"ˈtraʊzərz"},
-  {word:"sock",pos:"n.",meaning:"A soft covering for your foot worn inside a shoe",example:"I need a clean sock.",translation:"സോക്ക്",ipa:"sɒk"},
-  {word:"horse",pos:"n.",meaning:"A large animal used for riding",example:"The horse is running fast.",translation:"കുതിര",ipa:"hɔːrs"},
-  {word:"rabbit",pos:"n.",meaning:"A small soft animal with long ears",example:"The rabbit eats vegetables.",translation:"മുയൽ",ipa:"ˈræbɪt"},
-  {word:"evening",pos:"n.",meaning:"The part of the day after the afternoon",example:"Good evening, everyone.",translation:"സന്ധ്യ",ipa:"ˈiːvnɪŋ"},
-  {word:"parent",pos:"n.",meaning:"A father or mother of a child",example:"My parent works at a school.",translation:"രക്ഷിതാവ്",ipa:"ˈpɛərənt"},
-  {word:"boy",pos:"n.",meaning:"A male child",example:"The boy has a red ball.",translation:"ആൺകുട്ടി",ipa:"bɔɪ"},
-  {word:"girl",pos:"n.",meaning:"A female child",example:"The girl likes to sing.",translation:"പെൺകുട്ടി",ipa:"ɡɜːrl"},
-  {word:"body",pos:"n.",meaning:"The whole physical form of a person",example:"Exercise is good for the body.",translation:"ശരീരം",ipa:"ˈbɒdi"},
-  {word:"face",pos:"n.",meaning:"The front part of the head",example:"She has a happy face.",translation:"മുഖം",ipa:"feɪs"},
-  {word:"neck",pos:"n.",meaning:"The part of the body between the head and the shoulders",example:"He has a long neck.",translation:"കഴുത്ത്",ipa:"nɛk"},
-  {word:"stomach",pos:"n.",meaning:"The part of the body where food is digested",example:"My stomach hurts today.",translation:"വയർ",ipa:"ˈstʌmək"},
-  {word:"juice",pos:"n.",meaning:"A drink made from fruit",example:"I like orange juice.",translation:"ജ്യൂസ്",ipa:"dʒuːs"},
-  {word:"pizza",pos:"n.",meaning:"A round flat food with cheese and toppings",example:"I want to eat pizza tonight.",translation:"പിസ്സ",ipa:"ˈpiːtsə"},
-  {word:"fruit",pos:"n.",meaning:"The sweet food that grows on trees or plants",example:"I eat fruit every day.",translation:"പഴം",ipa:"fruːt"},
-  {word:"coat",pos:"n.",meaning:"A long warm piece of clothing worn outside",example:"She wears a blue coat in winter.",translation:"കോട്ട്",ipa:"koʊt"},
-  {word:"bag",pos:"n.",meaning:"A container used to carry things",example:"I have a big school bag.",translation:"സഞ്ചി",ipa:"bæɡ"},
-  {word:"elephant",pos:"n.",meaning:"A very large grey animal with a long nose",example:"The elephant lives in the forest.",translation:"ആന",ipa:"ˈɛlɪfənt"},
-  {word:"lion",pos:"n.",meaning:"A large wild cat that is called the king of animals",example:"The lion is very strong.",translation:"സിംഹം",ipa:"ˈlaɪən"},
-  {word:"room",pos:"n.",meaning:"A separate area inside a building",example:"My room is very clean.",translation:"മുറി",ipa:"ruːm"},
-  {word:"vegetable",pos:"n.",meaning:"A plant or part of a plant used as food",example:"I eat vegetables every day.",translation:"പച്ചക്കറി",ipa:"ˈvɛdʒtəbəl"},
-  {word:"pants",pos:"n.",meaning:"A piece of clothing that covers both legs",example:"I wear black pants to school.",translation:"പാന്റ്സ്",ipa:"pænts"},
-  {word:"shoes",pos:"n.",meaning:"Items worn on the feet for protection",example:"My shoes are new and white.",translation:"ചെരിപ്പ്",ipa:"ʃuːz"},
-  {word:"afternoon",pos:"n.",meaning:"The time between midday and evening",example:"Good afternoon, teacher.",translation:"ഉച്ചതിരിഞ്ഞ്",ipa:"ˌɑːftərˈnuːn"},
-  {word:"meat",pos:"n.",meaning:"The flesh of an animal used as food",example:"He likes to eat meat.",translation:"മാംസം",ipa:"miːt"},
-  {word:"cheese",pos:"n.",meaning:"A solid dairy food made from milk",example:"I like cheese on my food.",translation:"ചീസ്",ipa:"tʃiːz"},
-  {word:"pen",pos:"n.",meaning:"A tool used for writing with ink",example:"Can I borrow your pen?",translation:"പേന",ipa:"pɛn"},
-  {word:"skirt",pos:"n.",meaning:"A piece of clothing that hangs from the waist",example:"She is wearing a blue skirt.",translation:"സ്കർട്ട്",ipa:"skɜːrt"},
-  {word:"bye",pos:"excl.",meaning:"A word said when leaving someone",example:"Bye! See you later.",translation:"യാത്ര പറയൽ",ipa:"baɪ"},
-  {word:"mango",pos:"n.",meaning:"A sweet yellow tropical fruit",example:"I love eating mango.",translation:"മാമ്പഴം",ipa:"ˈmæŋɡoʊ"},
-  {word:"animal",pos:"n.",meaning:"A living creature that is not a plant or human",example:"A tiger is a wild animal.",translation:"മൃഗം",ipa:"ˈænɪməl"},
-  {word:"tiger",pos:"n.",meaning:"A large wild animal with orange and black stripes",example:"The tiger is very strong.",translation:"കടുവ",ipa:"ˈtaɪɡər"},
-  {word:"good morning",pos:"phrase",meaning:"A greeting said in the morning",example:"Good morning! How are you?",translation:"സുപ്രഭാതം",ipa:"ɡʊd ˈmɔːrnɪŋ"},
-  {word:"mom",pos:"n.",meaning:"An informal word for your female parent",example:"My mom is a teacher.",translation:"അമ്മ",ipa:"mɒm"},
-  {word:"dad",pos:"n.",meaning:"An informal word for your male parent",example:"My dad works in an office.",translation:"അച്ഛൻ",ipa:"dæd"},
-  {word:"chicken",pos:"n.",meaning:"A common farm bird kept for eggs and meat",example:"We have a chicken in our garden.",translation:"കോഴി",ipa:"ˈtʃɪkɪn"},
-  {word:"thirty",pos:"n.",meaning:"The number 30",example:"There are thirty students in the class.",translation:"മുപ്പത്",ipa:"ˈθɜːrti"},
-  {word:"sugar",pos:"n.",meaning:"A sweet white substance added to food and drinks",example:"I put sugar in my tea.",translation:"പഞ്ചസാര",ipa:"ˈʃʊɡər"},
-  {word:"pig",pos:"n.",meaning:"A pink farm animal with a short curly tail",example:"The pig is sleeping in the mud.",translation:"പന്നി",ipa:"pɪɡ"},
-  {word:"hi",pos:"excl.",meaning:"An informal greeting",example:"Hi! How are you?",translation:"ഹായ്",ipa:"haɪ"},
-  {word:"cousin",pos:"n.",meaning:"The child of your aunt or uncle",example:"My cousin lives in the city.",translation:"കസിൻ",ipa:"ˈkʌzən"},
-  {word:"sheep",pos:"n.",meaning:"A farm animal with thick wool",example:"The sheep is eating grass.",translation:"ആട്",ipa:"ʃiːp"},
-  {word:"duck",pos:"n.",meaning:"A bird that swims on water",example:"I see a duck in the lake.",translation:"താറാവ്",ipa:"dʌk"},
-  {word:"top",pos:"n.",meaning:"A piece of clothing worn on the upper body",example:"She is wearing a blue top today.",translation:"ടോപ്പ്",ipa:"tɒp"},
-  {word:"scarf",pos:"n.",meaning:"A piece of cloth worn around the neck or head",example:"She wears a red scarf in winter.",translation:"സ്കാർഫ്",ipa:"skɑːrf"},
-,
-,
-,
-  {word:"sweater",pos:"n.",meaning:"A warm knitted piece of clothing for the upper body",example:"She wears a sweater in winter.",translation:"സ്വെറ്റർ",ipa:"ˈswɛtər"},
-  {word:"pencil",pos:"n.",meaning:"A thin stick used for writing or drawing",example:"I write with a pencil.",translation:"പെൻസിൽ",ipa:"ˈpɛnsəl"},
-,
-,
-,
-  {word:"in",pos:"prep.",meaning:"Inside or within a place or thing",example:"The pen is in the bag.",translation:"ഉള്ളിൽ",ipa:"ɪn"},
-,
-  {word:"on",pos:"prep.",meaning:"Touching or supported by the top of something",example:"The book is on the table.",translation:"മുകളിൽ",ipa:"ɒn"},
-  {word:"under",pos:"prep.",meaning:"Below something else",example:"The bag is under the chair.",translation:"അടിയിൽ",ipa:"ˈʌndər"},
-  {word:"forty",pos:"n.",meaning:"The number 40",example:"There are forty students in the class.",translation:"നാൽപത്",ipa:"ˈfɔːrti"},
-  {word:"T-shirt",pos:"n.",meaning:"A simple shirt with short sleeves and no collar",example:"He is wearing a blue T-shirt.",translation:"ടി-ഷർട്ട്",ipa:"ˈtiːʃɜːrt"},
-  {word:"glove",pos:"n.",meaning:"A covering for the hand with separate fingers",example:"She wears gloves in winter.",translation:"കൈയ്യുറ",ipa:"ɡlʌv"},
-  {word:"boot",pos:"n.",meaning:"A strong shoe that covers the ankle",example:"He has brown boots.",translation:"ബൂട്ട്",ipa:"buːt"},
-  {word:"frog",pos:"n.",meaning:"A small green animal that jumps and lives near water",example:"I see a frog near the pond.",translation:"തവള",ipa:"frɒɡ"},
-  {word:"snake",pos:"n.",meaning:"A long animal with no legs that slides on the ground",example:"There is a snake in the garden.",translation:"പാമ്പ്",ipa:"sneɪk"},
-  {word:"monkey",pos:"n.",meaning:"An animal with fur that can climb trees",example:"The monkey is in the tree.",translation:"കുരങ്ങ്",ipa:"ˈmʌŋki"},
-,
-  {word:"flower",pos:"n.",meaning:"The colorful part of a plant",example:"She gave me a red flower.",translation:"പൂവ്",ipa:"ˈflaʊər"},
-,
-,
-,
-,
-,
-,
-,
-  {word:"eleven",pos:"n.",meaning:"The number 11",example:"There are eleven students here.",translation:"പതിനൊന്ന്",ipa:"ɪˈlɛvən"},
-  {word:"twelve",pos:"n.",meaning:"The number 12",example:"There are twelve months in a year.",translation:"പന്ത്രണ്ട്",ipa:"twɛlv"},
-  {word:"pant",pos:"n.",meaning:"A piece of clothing that covers each leg",example:"She wears black pants today.",translation:"പാന്റ്",ipa:"pænt"},
-,
-,
-,
-,
-,
-,
-,
-,
-  {word:"floor",pos:"n.",meaning:"The flat surface you walk on inside a building",example:"The ball is on the floor.",translation:"തറ",ipa:"flɔːr"},
-,
-,
-,
-,
-,
-,
-,
-,
-  {word:"zero",pos:"n.",meaning:"the number 0; nothing",example:"I have zero apples left.",translation:"പൂജ്യം",ipa:"/ˈzɪərəʊ/"},
-  {word:"plus",pos:"prep.",meaning:"added to; the sign +",example:"Two plus two equals four.",translation:"കൂട്ടൽ",ipa:"/plʌs/"},
-  {word:"minus",pos:"prep.",meaning:"take away; the sign -",example:"Five minus three is two.",translation:"കുറയ്ക്കൽ",ipa:"/ˈmaɪnəs/"},
-  {word:"equal",pos:"adj.",meaning:"the same in number or amount",example:"Three plus three is equal to six.",translation:"തുല്യം",ipa:"/ˈiːkwəl/"},
-  {word:"total",pos:"n.",meaning:"the whole amount when you add everything together",example:"The total is fifteen dollars.",translation:"ആകെ തുക",ipa:"/ˈtəʊtəl/"},
-  {word:"count",pos:"v.",meaning:"to say numbers in order; to find how many",example:"Please count the students in the class.",translation:"എണ്ണുക",ipa:"/kaʊnt/"},
-  {word:"add",pos:"v.",meaning:"to put numbers together to get a larger number",example:"Add five and three to get eight.",translation:"കൂട്ടുക",ipa:"/æd/"},
-  {word:"subtract",pos:"v.",meaning:"to take one number away from another",example:"Subtract two from ten to get eight.",translation:"കുറയ്ക്കുക",ipa:"/səbˈtrækt/"},
-  {word:"multiply",pos:"v.",meaning:"to add a number to itself a certain number of times",example:"Multiply three by four to get twelve.",translation:"ഗുണിക്കുക",ipa:"/ˈmʌltɪplaɪ/"},
-  {word:"divide",pos:"v.",meaning:"to split a number into equal parts",example:"Divide ten by two to get five.",translation:"ഹരിക്കുക",ipa:"/dɪˈvaɪd/"},
-  {word:"half",pos:"n.",meaning:"one of two equal parts of something",example:"I eat half of the cake.",translation:"പകുതി",ipa:"/hɑːf/"},
-  {word:"double",pos:"adj.",meaning:"two times as much or as many",example:"Double of four is eight.",translation:"ഇരട്ടി",ipa:"/ˈdʌbəl/"},
-  {word:"odd",pos:"adj.",meaning:"a number that cannot be divided equally by two, like 1, 3, 5",example:"Seven is an odd number.",translation:"ഒറ്റ സംഖ്യ",ipa:"/ɒd/"},
-  {word:"even",pos:"adj.",meaning:"a number that can be divided equally by two, like 2, 4, 6",example:"Eight is an even number.",translation:"ഇരട്ട സംഖ്യ",ipa:"/ˈiːvən/"},
-  {word:"pair",pos:"n.",meaning:"a set of two things together",example:"I have a pair of socks.",translation:"ജോഡി",ipa:"/peər/"},
-  {word:"once",pos:"adv.",meaning:"one time only",example:"I go to the gym once a week.",translation:"ഒരിക്കൽ",ipa:"/wʌns/"},
-  {word:"twice",pos:"adv.",meaning:"two times",example:"I brush my teeth twice a day.",translation:"രണ്ടുതവണ",ipa:"/twaɪs/"},
-  {word:"sum",pos:"n.",meaning:"the answer you get when you add numbers together",example:"The sum of five and five is ten.",translation:"തുക",ipa:"/sʌm/"},
-  {word:"digit",pos:"n.",meaning:"any single number from 0 to 9",example:"The number 25 has two digits.",translation:"അക്കം",ipa:"/ˈdɪdʒɪt/"},
-  {word:"amount",pos:"n.",meaning:"how much of something there is",example:"What is the amount of sugar in this?",translation:"അളവ്",ipa:"/əˈmaʊnt/"},
-  {word:"thirteen",pos:"n.",meaning:"the number 13",example:"There are thirteen students in the group.",translation:"പതിമൂന്ന്",ipa:"/ˌθɜːˈtiːn/"},
-  {word:"fourteen",pos:"n.",meaning:"the number 14",example:"She is fourteen years old.",translation:"പതിനാല്",ipa:"/ˌfɔːˈtiːn/"},
-  {word:"fifteen",pos:"n.",meaning:"the number 15",example:"I have fifteen books on my shelf.",translation:"പതിനഞ്ച്",ipa:"/ˌfɪfˈtiːn/"},
-  {word:"sixteen",pos:"n.",meaning:"the number 16",example:"My brother is sixteen years old.",translation:"പതിനാറ്",ipa:"/ˌsɪkˈstiːn/"},
-  {word:"sixty",pos:"n.",meaning:"the number 60",example:"There are sixty minutes in one hour.",translation:"അറുപത്",ipa:"/ˈsɪksti/"},
-  {word:"seventy",pos:"n.",meaning:"the number 70",example:"My grandfather is seventy years old.",translation:"എഴുപത്",ipa:"/ˈsevənti/"},
-  {word:"eighty",pos:"n.",meaning:"the number 80",example:"The old man is eighty years old.",translation:"എൺപത്",ipa:"/ˈeɪti/"},
-  {word:"ninety",pos:"n.",meaning:"the number 90",example:"She scored ninety points on the test.",translation:"തൊണ്ണൂറ്",ipa:"/ˈnaɪnti/"},
-  {word:"second",pos:"adj.",meaning:"coming after the first; number 2 in order",example:"She is the second student in the line.",translation:"രണ്ടാമത്",ipa:"/ˈsekənd/"},
-  {word:"third",pos:"adj.",meaning:"coming after second; number 3 in order",example:"He lives on the third floor.",translation:"മൂന്നാമത്",ipa:"/θɜːd/"},
-  {word:"lip",pos:"n.",meaning:"one of the two soft edges of the mouth",example:"She has a cut on her lip.",translation:"അധരം",ipa:"/lɪp/"},
-  {word:"chin",pos:"n.",meaning:"the bottom part of the face below the mouth",example:"He has a small cut on his chin.",translation:"താടി",ipa:"/tʃɪn/"},
-  {word:"cheek",pos:"n.",meaning:"the soft part of the face on each side",example:"The baby has round cheeks.",translation:"കവിൾ",ipa:"/tʃiːk/"},
-  {word:"forehead",pos:"n.",meaning:"the flat part of the face above the eyes",example:"She touched her forehead because it was hot.",translation:"നെറ്റി",ipa:"/ˈfɔːhed/"},
-  {word:"thumb",pos:"n.",meaning:"the short, thick first part of the hand",example:"He hurt his thumb playing football.",translation:"പെരുവിരൽ",ipa:"/θʌm/"},
-  {word:"wrist",pos:"n.",meaning:"the joint connecting the hand and the arm",example:"She wears a watch on her wrist.",translation:"മണിബന്ധം",ipa:"/rɪst/"},
-  {word:"elbow",pos:"n.",meaning:"the joint in the middle of the arm",example:"He hit his elbow on the table.",translation:"മുഴങ്കൈ",ipa:"/ˈelbəʊ/"},
-  {word:"chest",pos:"n.",meaning:"the front part of the body between the neck and stomach",example:"He feels pain in his chest.",translation:"നെഞ്ച്",ipa:"/tʃest/"},
-  {word:"hip",pos:"n.",meaning:"the wide part of the body below the waist",example:"She hurt her hip when she fell.",translation:"അരക്കെട്ട്",ipa:"/hɪp/"},
-  {word:"ankle",pos:"n.",meaning:"the joint connecting the foot and the leg",example:"She twisted her ankle while running.",translation:"കണങ്കാൽ",ipa:"/ˈæŋkəl/"},
-  {word:"toe",pos:"n.",meaning:"one of the five small parts at the end of the foot",example:"He dropped a book on his toe.",translation:"കാൽവിരൽ",ipa:"/təʊ/"},
-  {word:"palm",pos:"n.",meaning:"the flat inside part of the hand",example:"She held the coin in her palm.",translation:"ഉള്ളംകൈ",ipa:"/pɑːm/"},
-  {word:"spine",pos:"n.",meaning:"the long bone down the middle of the back",example:"It is important to keep your spine straight.",translation:"നട്ടെല്ല്",ipa:"/spaɪn/"},
-  {word:"lung",pos:"n.",meaning:"one of two organs in the chest used for breathing",example:"Smoking is bad for your lungs.",translation:"ശ്വാസകോശം",ipa:"/lʌŋ/"},
-  {word:"heart",pos:"n.",meaning:"the organ in the chest that pumps blood",example:"Exercise makes your heart strong.",translation:"ഹൃദയം",ipa:"/hɑːt/"},
-  {word:"bone",pos:"n.",meaning:"the hard white structure inside the body",example:"Milk makes your bones strong.",translation:"എല്ല്",ipa:"/bəʊn/"},
-  {word:"skin",pos:"n.",meaning:"the outer covering of the body",example:"Her skin is soft and smooth.",translation:"ചർമ്മം",ipa:"/skɪn/"},
-  {word:"blood",pos:"n.",meaning:"the red liquid that moves through the body",example:"The doctor checked his blood.",translation:"രക്തം",ipa:"/blʌd/"},
-  {word:"fever",pos:"n.",meaning:"a body temperature that is higher than normal",example:"The child has a fever today.",translation:"പനി",ipa:"/ˈfiːvə/"},
-  {word:"cough",pos:"n.",meaning:"a sudden loud sound made by air leaving the lungs",example:"He has a bad cough this week.",translation:"ചുമ",ipa:"/kɒf/"},
-  {word:"pain",pos:"n.",meaning:"a feeling of hurt in a part of the body",example:"She feels pain in her leg.",translation:"വേദന",ipa:"/peɪn/"},
-  {word:"ill",pos:"adj.",meaning:"not feeling well; sick",example:"He is ill and cannot go to school.",translation:"അസുഖമുള്ള",ipa:"/ɪl/"},
-  {word:"healthy",pos:"adj.",meaning:"having good health; not sick",example:"Eating fruit helps you stay healthy.",translation:"ആരോഗ്യമുള്ള",ipa:"/ˈhelθi/"},
-  {word:"weak",pos:"adj.",meaning:"not having much strength or energy",example:"She feels weak after being ill.",translation:"ദുർബലമായ",ipa:"/wiːk/"},
-  {word:"strong",pos:"adj.",meaning:"having a lot of physical power",example:"He is strong because he exercises every day.",translation:"ശക്തിയുള്ള",ipa:"/strɒŋ/"},
-  {word:"medicine",pos:"n.",meaning:"a substance taken to treat illness",example:"The doctor gave her medicine for her cough.",translation:"മരുന്ന്",ipa:"/ˈmedɪsɪn/"},
-  {word:"rest",pos:"v.",meaning:"to relax and stop working or moving",example:"You need to rest when you are ill.",translation:"വിശ്രമിക്കുക",ipa:"/rest/"},
-  {word:"sneeze",pos:"v.",meaning:"to push air out through the nose suddenly",example:"He sneezes a lot in cold weather.",translation:"തുമ്മുക",ipa:"/sniːz/"},
-  {word:"breathe",pos:"v.",meaning:"to take air into and out of the lungs",example:"Breathe slowly and relax.",translation:"ശ്വസിക്കുക",ipa:"/briːð/"},
-  {word:"heartbeat",pos:"n.",meaning:"the regular movement or sound of the heart pumping blood",example:"The doctor listened to his heartbeat.",translation:"ഹൃദയമിടിപ്പ്",ipa:"/ˈhɑːtbiːt/"},
-  {word:"relative",pos:"n.",meaning:"a person in your family",example:"My relative lives in another town.",translation:"ബന്ധു",ipa:"/ˈrɛlətɪv/"},
-  {word:"twin",pos:"n.",meaning:"one of two children born at the same time to the same mother",example:"My twin looks exactly like me.",translation:"ഇരട്ട",ipa:"/twɪn/"},
-  {word:"grandchild",pos:"n.",meaning:"the child of your son or daughter",example:"She has one grandchild.",translation:"പേരക്കുട്ടി",ipa:"/ˈɡræntʃaɪld/"},
-  {word:"grandson",pos:"n.",meaning:"the son of your son or daughter",example:"My grandson is two years old.",translation:"പേരൻ",ipa:"/ˈɡrænsʌn/"},
-  {word:"granddaughter",pos:"n.",meaning:"the daughter of your son or daughter",example:"My granddaughter loves to sing.",translation:"പേരക്കിടാവ്",ipa:"/ˈɡrændɔːtər/"},
-  {word:"nephew",pos:"n.",meaning:"the son of your brother or sister",example:"My nephew is very playful.",translation:"അനന്തരവൻ",ipa:"/ˈnɛfjuː/"},
-  {word:"niece",pos:"n.",meaning:"the daughter of your brother or sister",example:"My niece visits us every Sunday.",translation:"അനന്തരവൾ",ipa:"/niːs/"},
-  {word:"stepmother",pos:"n.",meaning:"the woman who is married to your father but is not your birth mother",example:"My stepmother cooks well.",translation:"രണ്ടാനമ്മ",ipa:"/ˈstɛpmʌðər/"},
-  {word:"stepfather",pos:"n.",meaning:"the man who is married to your mother but is not your birth father",example:"My stepfather is very kind.",translation:"രണ്ടാനച്ഛൻ",ipa:"/ˈstɛpfɑːðər/"},
-  {word:"stepsister",pos:"n.",meaning:"the daughter of your stepmother or stepfather",example:"My stepsister and I share a room.",translation:"രണ്ടാനസഹോദരി",ipa:"/ˈstɛpsɪstər/"},
-  {word:"stepbrother",pos:"n.",meaning:"the son of your stepmother or stepfather",example:"My stepbrother helps me with homework.",translation:"രണ്ടാനസഹോദരൻ",ipa:"/ˈstɛpbrʌðər/"},
-  {word:"marry",pos:"v.",meaning:"to become the husband or wife of someone",example:"They want to marry next year.",translation:"വിവാഹം കഴിക്കുക",ipa:"/ˈmæri/"},
-  {word:"married",pos:"adj.",meaning:"having a husband or wife",example:"She is married and very happy.",translation:"വിവാഹിതയായ",ipa:"/ˈmærid/"},
-  {word:"single",pos:"adj.",meaning:"not married; without a partner",example:"He is single and lives alone.",translation:"അവിവാഹിതൻ",ipa:"/ˈsɪŋɡəl/"},
-  {word:"couple",pos:"n.",meaning:"two people who are together as partners",example:"The couple walks in the park.",translation:"ദമ്പതികൾ",ipa:"/ˈkʌpəl/"},
-  {word:"elder",pos:"adj.",meaning:"older than another person in the family",example:"My elder sister teaches at a school.",translation:"മൂത്ത",ipa:"/ˈɛldər/"},
-  {word:"younger",pos:"adj.",meaning:"not as old as another person",example:"My younger brother is very funny.",translation:"ഇളയ",ipa:"/ˈjʌŋɡər/"},
-  {word:"born",pos:"v.",meaning:"to come into the world; to start life",example:"She was born in a small town.",translation:"ജനിക്കുക",ipa:"/bɔːrn/"},
-  {word:"orphan",pos:"n.",meaning:"a child whose parents have died",example:"The orphan lives with his aunt.",translation:"അനാഥൻ",ipa:"/ˈɔːrfən/"},
-  {word:"widow",pos:"n.",meaning:"a woman whose husband has died",example:"The widow lives with her daughter.",translation:"വിധവ",ipa:"/ˈwɪdoʊ/"},
-  {word:"widower",pos:"n.",meaning:"a man whose wife has died",example:"The widower takes care of his children.",translation:"വിധുരൻ",ipa:"/ˈwɪdoʊər/"},
-  {word:"engage",pos:"v.",meaning:"to agree to marry someone",example:"They plan to engage this month.",translation:"നിശ്ചയിക്കുക",ipa:"/ɪnˈɡeɪdʒ/"},
-  {word:"pregnant",pos:"adj.",meaning:"expecting a baby",example:"My mother is pregnant again.",translation:"ഗർഭിണി",ipa:"/ˈprɛɡnənt/"},
-  {word:"adopt",pos:"v.",meaning:"to legally take a child into your family",example:"They want to adopt a baby girl.",translation:"ദത്തെടുക്കുക",ipa:"/əˈdɒpt/"},
-  {word:"godmother",pos:"n.",meaning:"a woman who promises to help raise a child in a religious way",example:"My godmother gives me gifts.",translation:"ദൈവമാതാ",ipa:"/ˈɡɒdmʌðər/"},
-  {word:"godfather",pos:"n.",meaning:"a man who promises to help raise a child in a religious way",example:"My godfather is a kind man.",translation:"ദൈവപിതാ",ipa:"/ˈɡɒdfɑːðər/"},
-  {word:"sibling",pos:"n.",meaning:"a brother or sister",example:"I have two siblings at home.",translation:"സഹോദരൻ/സഹോദരി",ipa:"/ˈsɪblɪŋ/"},
-  {word:"newborn",pos:"n.",meaning:"a very recently born baby",example:"The newborn sleeps all day.",translation:"നവജാതശിശു",ipa:"/ˈnjuːbɔːrn/"},
-  {word:"in-law",pos:"n.",meaning:"a relative through marriage",example:"My in-law is very friendly.",translation:"വിവാഹബന്ധത്തിലൂടെ ബന്ധു",ipa:"/ˈɪn lɔː/"},
-  {word:"circle",pos:"n.",meaning:"a round flat shape with no corners",example:"The wheel is a circle.",translation:"വൃത്തം",ipa:"ˈsɜːkl"},
-  {word:"square",pos:"n.",meaning:"a shape with four equal sides and four corners",example:"The box has a square shape.",translation:"സമചതുരം",ipa:"skweər"},
-  {word:"triangle",pos:"n.",meaning:"a shape with three sides and three corners",example:"A triangle has three angles.",translation:"ത്രികോണം",ipa:"ˈtraɪæŋɡl"},
-  {word:"rectangle",pos:"n.",meaning:"a shape with four sides where opposite sides are equal",example:"The door is a rectangle.",translation:"ദീർഘചതുരം",ipa:"ˈrektæŋɡl"},
-  {word:"oval",pos:"n.",meaning:"a shape like a stretched circle, like an egg",example:"The mirror is oval.",translation:"അണ്ഡാകൃതി",ipa:"ˈoʊvl"},
-  {word:"star",pos:"n.",meaning:"a shape with five or more points",example:"She drew a star on the paper.",translation:"നക്ഷത്രം",ipa:"stɑːr"},
-  {word:"diamond",pos:"n.",meaning:"a shape with four equal sides standing on one corner",example:"The kite has a diamond shape.",translation:"ഹീരം",ipa:"ˈdaɪmənd"},
-  {word:"tiny",pos:"adj.",meaning:"very very small",example:"The ant is tiny.",translation:"അതിചെറിയ",ipa:"ˈtaɪni"},
-  {word:"huge",pos:"adj.",meaning:"very very big or large",example:"The elephant is huge.",translation:"വളരെ വലിയ",ipa:"hjuːdʒ"},
-  {word:"tall",pos:"adj.",meaning:"having a great height from bottom to top",example:"The tree is very tall.",translation:"ഉയരമുള്ള",ipa:"tɔːl"},
-  {word:"short",pos:"adj.",meaning:"not tall or not long",example:"He is short for his age.",translation:"കുറിയ",ipa:"ʃɔːrt"},
-  {word:"wide",pos:"adj.",meaning:"having a large distance from one side to the other",example:"The road is very wide.",translation:"വീതിയുള്ള",ipa:"waɪd"},
-  {word:"narrow",pos:"adj.",meaning:"having a small distance from one side to the other",example:"The path is narrow.",translation:"ഇടുങ്ങിയ",ipa:"ˈnæroʊ"},
-  {word:"thick",pos:"adj.",meaning:"having a large distance between two sides or surfaces",example:"The wall is very thick.",translation:"കട്ടിയുള്ള",ipa:"θɪk"},
-  {word:"thin",pos:"adj.",meaning:"having a small distance between two sides; not thick",example:"The paper is thin.",translation:"നേർത്ത",ipa:"θɪn"},
-  {word:"long",pos:"adj.",meaning:"having a great length from one end to the other",example:"The river is very long.",translation:"നീളമുള്ള",ipa:"lɔːŋ"},
-  {word:"flat",pos:"adj.",meaning:"smooth and level with no raised parts",example:"The table is flat.",translation:"പരന്ന",ipa:"flæt"},
-  {word:"round",pos:"adj.",meaning:"shaped like a circle or a ball",example:"The coin is round.",translation:"വൃത്താകൃതിയിലുള്ള",ipa:"raʊnd"},
-  {word:"straight",pos:"adj.",meaning:"going in one direction without bending or curving",example:"Draw a straight line.",translation:"നേരായ",ipa:"streɪt"},
-  {word:"curved",pos:"adj.",meaning:"having a smooth bend, not straight",example:"The road is curved.",translation:"വളഞ്ഞ",ipa:"kɜːrvd"},
-  {word:"light",pos:"adj.",meaning:"not heavy in weight",example:"The bag is very light.",translation:"ഭാരം കുറഞ്ഞ",ipa:"laɪt"},
-  {word:"heavy",pos:"adj.",meaning:"having a lot of weight; not light",example:"The box is heavy.",translation:"ഭാരമുള്ള",ipa:"ˈhevi"},
-  {word:"medium",pos:"adj.",meaning:"not small and not big; in the middle size",example:"She wears a medium shirt.",translation:"ഇടത്തരം",ipa:"ˈmiːdiəm"},
-  {word:"large",pos:"adj.",meaning:"big in size or amount",example:"He has a large house.",translation:"വലിയ",ipa:"lɑːrdʒ"},
-  {word:"tint",pos:"n.",meaning:"a light or pale shade of a color",example:"The wall has a blue tint.",translation:"നിറഭേദം",ipa:"tɪnt"},
-  {word:"shade",pos:"n.",meaning:"a darker version of a color",example:"I like this shade of green.",translation:"നിറത്തിന്റെ അഴം",ipa:"ʃeɪd"},
-  {word:"bright",pos:"adj.",meaning:"having a strong, vivid color; not dull",example:"She wears a bright yellow dress.",translation:"തിളക്കമുള്ള",ipa:"braɪt"},
-  {word:"dark",pos:"adj.",meaning:"having a color that is deep and close to black",example:"He has dark blue shoes.",translation:"കടും നിറമുള്ള",ipa:"dɑːrk"},
-  {word:"pale",pos:"adj.",meaning:"having a light or weak color",example:"The sky is pale blue today.",translation:"നിറം മങ്ങിയ",ipa:"peɪl"},
-  {word:"butter",pos:"n.",meaning:"a soft yellow fat made from cream, used on bread or in cooking",example:"I put butter on my toast every morning.",translation:"വെണ്ണ",ipa:"/ˈbʌtər/"},
-  {word:"salt",pos:"n.",meaning:"a white powder used to add flavor to food",example:"Please pass the salt for my soup.",translation:"ഉപ്പ്",ipa:"/sɔːlt/"},
-  {word:"pepper",pos:"n.",meaning:"a spice with a hot taste, used to flavor food",example:"I add pepper to my eggs.",translation:"കുരുമുളക്",ipa:"/ˈpepər/"},
-  {word:"oil",pos:"n.",meaning:"a liquid fat used for cooking food",example:"She uses oil to fry the vegetables.",translation:"എണ്ണ",ipa:"/ɔɪl/"},
-  {word:"onion",pos:"n.",meaning:"a round vegetable with a strong smell and taste",example:"I cut an onion for the salad.",translation:"ഉള്ളി",ipa:"/ˈʌnjən/"},
-  {word:"tomato",pos:"n.",meaning:"a soft red fruit often used in cooking or salads",example:"I put a tomato in my sandwich.",translation:"തക്കാളി",ipa:"/təˈmeɪtoʊ/"},
-  {word:"potato",pos:"n.",meaning:"a round vegetable with brown skin that grows underground",example:"We had potato and soup for lunch.",translation:"ഉരുളക്കിഴങ്ങ്",ipa:"/pəˈteɪtoʊ/"},
-  {word:"carrot",pos:"n.",meaning:"a long orange vegetable that grows underground",example:"I eat a carrot as a snack.",translation:"കാരറ്റ്",ipa:"/ˈkærət/"},
-  {word:"lemon",pos:"n.",meaning:"a small yellow fruit with a very sour taste",example:"She puts lemon in her water.",translation:"നാരങ്ങ",ipa:"/ˈlemən/"},
-  {word:"grape",pos:"n.",meaning:"a small sweet fruit that grows in clusters on a vine",example:"I love eating grapes in the afternoon.",translation:"മുന്തിരി",ipa:"/ɡreɪp/"},
-  {word:"strawberry",pos:"n.",meaning:"a small red sweet fruit with seeds on the outside",example:"She put strawberry on her cake.",translation:"സ്ട്രോബെറി",ipa:"/ˈstrɔːberi/"},
-  {word:"pineapple",pos:"n.",meaning:"a large tropical fruit with a rough skin and sweet yellow flesh",example:"I drink pineapple juice every day.",translation:"കൈതച്ചക്ക",ipa:"/ˈpaɪnæpəl/"},
-  {word:"watermelon",pos:"n.",meaning:"a large round fruit with green skin and sweet red flesh inside",example:"We eat watermelon on hot days.",translation:"തണ്ണിമത്തൻ",ipa:"/ˈwɔːtərmelən/"},
-  {word:"noodle",pos:"n.",meaning:"a long thin strip of pasta or dough used in soups or fried dishes",example:"I cook noodle for my lunch.",translation:"നൂഡിൽസ്",ipa:"/ˈnuːdəl/"},
-  {word:"sandwich",pos:"n.",meaning:"two pieces of bread with food in between",example:"I have a sandwich for breakfast.",translation:"സാൻഡ്‌വിച്ച്",ipa:"/ˈsænwɪtʃ/"},
-  {word:"salad",pos:"n.",meaning:"a dish of raw vegetables, often eaten cold",example:"She makes a salad with tomato and carrot.",translation:"സലാഡ്",ipa:"/ˈsæləd/"},
-  {word:"burger",pos:"n.",meaning:"a cooked meat patty in a round bread roll",example:"He eats a burger for dinner sometimes.",translation:"ബർഗർ",ipa:"/ˈbɜːrɡər/"},
-  {word:"biscuit",pos:"n.",meaning:"a small flat dry food, usually sweet or plain, baked in an oven",example:"I eat a biscuit with my tea.",translation:"ബിസ്കറ്റ്",ipa:"/ˈbɪskɪt/"},
-  {word:"chocolate",pos:"n.",meaning:"a sweet brown food made from cocoa beans",example:"She gives chocolate to her friends.",translation:"ചോക്കലേറ്റ്",ipa:"/ˈtʃɒklət/"},
-  {word:"candy",pos:"n.",meaning:"a small sweet food made with sugar",example:"The boy eats candy after school.",translation:"മിഠായി",ipa:"/ˈkændi/"},
-  {word:"jam",pos:"n.",meaning:"a sweet food made from fruit and sugar, spread on bread",example:"I put jam on my bread in the morning.",translation:"ജാം",ipa:"/dʒæm/"},
-  {word:"honey",pos:"n.",meaning:"a sweet thick liquid made by bees, used as food",example:"She adds honey to her drink.",translation:"തേൻ",ipa:"/ˈhʌni/"},
-  {word:"yogurt",pos:"n.",meaning:"a thick creamy food made from milk",example:"I eat yogurt every morning.",translation:"തൈര്",ipa:"/ˈjoʊɡərt/"},
-  {word:"cream",pos:"n.",meaning:"a thick white liquid from milk, used in food",example:"He puts cream in his coffee.",translation:"ക്രീം",ipa:"/kriːm/"},
-  {word:"ice cream",pos:"n.",meaning:"a cold sweet frozen food made from milk and sugar",example:"We eat ice cream on weekends.",translation:"ഐസ് ക്രീം",ipa:"/ˈaɪs kriːm/"},
-  {word:"porridge",pos:"n.",meaning:"a soft hot food made from oats cooked in water or milk",example:"She eats porridge for breakfast.",translation:"കഞ്ഞി",ipa:"/ˈpɒrɪdʒ/"},
-  {word:"flour",pos:"n.",meaning:"a white powder made from grain, used to make bread and cakes",example:"We need flour to make bread.",translation:"മാവ്",ipa:"/flaʊər/"},
-  {word:"menu",pos:"n.",meaning:"a list of food and drinks available in a restaurant",example:"The waiter shows me the menu.",translation:"മെനു",ipa:"/ˈmenjuː/"},
-  {word:"snack",pos:"n.",meaning:"a small amount of food eaten between meals",example:"I have a snack at three in the afternoon.",translation:"ലഘുഭക്ഷണം",ipa:"/snæk/"},
-  {word:"breakfast",pos:"n.",meaning:"the first meal of the day, eaten in the morning",example:"I eat bread and egg for breakfast.",translation:"പ്രഭാത ഭക്ഷണം",ipa:"/ˈbrekfəst/"},
-  {word:"goat",pos:"n.",meaning:"a farm animal with horns that gives milk",example:"The goat eats grass in the field.",translation:"ആട്",ipa:"/ɡoʊt/"},
-  {word:"hen",pos:"n.",meaning:"a female bird kept on a farm for eggs",example:"The hen lays an egg every day.",translation:"പെൺകോഴി",ipa:"/hɛn/"},
-  {word:"rooster",pos:"n.",meaning:"a male farm bird that makes a loud sound in the morning",example:"The rooster wakes up early.",translation:"കോഴി (ആൺ)",ipa:"/ˈruːstər/"},
-  {word:"kitten",pos:"n.",meaning:"a very young cat",example:"The kitten is playing with a ball.",translation:"കുഞ്ഞുപൂച്ച",ipa:"/ˈkɪtən/"},
-  {word:"puppy",pos:"n.",meaning:"a very young dog",example:"The puppy runs around the yard.",translation:"നായക്കുട്ടി",ipa:"/ˈpʌpi/"},
-  {word:"parrot",pos:"n.",meaning:"a colorful bird that can copy human speech",example:"My parrot says hello every morning.",translation:"തത്ത",ipa:"/ˈpærət/"},
-  {word:"hamster",pos:"n.",meaning:"a small furry animal kept as a pet",example:"My hamster sleeps during the day.",translation:"ഹാംസ്റ്റർ",ipa:"/ˈhæmstər/"},
-  {word:"goldfish",pos:"n.",meaning:"a small orange fish kept in a bowl as a pet",example:"She has a goldfish in a glass bowl.",translation:"സ്വർണ്ണമത്സ്യം",ipa:"/ˈɡoʊldfɪʃ/"},
-  {word:"turtle",pos:"n.",meaning:"a slow animal with a hard shell on its back",example:"The turtle walks very slowly near the pond.",translation:"ആമ",ipa:"/ˈtɜːrtəl/"},
-  {word:"donkey",pos:"n.",meaning:"a farm animal like a small horse used for carrying things",example:"The donkey carries heavy bags on the farm.",translation:"കഴുത",ipa:"/ˈdɒŋki/"},
-  {word:"calf",pos:"n.",meaning:"a young cow or bull",example:"The calf stays close to its mother.",translation:"കിടാവ്",ipa:"/kɑːf/"},
-  {word:"lamb",pos:"n.",meaning:"a young sheep",example:"The lamb runs in the green field.",translation:"കുഞ്ഞാട്",ipa:"/læm/"},
-  {word:"cub",pos:"n.",meaning:"a young wild animal such as a bear or lion",example:"The lion cub plays with its mother.",translation:"കുഞ്ഞുമൃഗം",ipa:"/kʌb/"},
-  {word:"bull",pos:"n.",meaning:"a male cow kept on a farm",example:"The bull is very big and strong.",translation:"കാള",ipa:"/bʊl/"},
-  {word:"mare",pos:"n.",meaning:"a female horse",example:"The mare runs fast across the field.",translation:"പെൺകുതിര",ipa:"/mɛər/"},
-  {word:"foal",pos:"n.",meaning:"a very young horse",example:"The foal stands next to its mother.",translation:"കുതിരക്കുട്ടി",ipa:"/foʊl/"},
-  {word:"chick",pos:"n.",meaning:"a baby bird or baby chicken",example:"The chick is small and yellow.",translation:"കോഴിക്കുഞ്ഞ്",ipa:"/tʃɪk/"},
-  {word:"piglet",pos:"n.",meaning:"a baby pig",example:"The piglet sleeps in the mud.",translation:"പന്നിക്കുട്ടി",ipa:"/ˈpɪɡlɪt/"},
-  {word:"pet",pos:"n.",meaning:"an animal that lives with people at home",example:"A dog is a popular pet for families.",translation:"വളർത്തുമൃഗം",ipa:"/pɛt/"},
-  {word:"cage",pos:"n.",meaning:"a box made of metal bars where animals are kept",example:"The parrot sits inside its cage.",translation:"കൂട്",ipa:"/keɪdʒ/"},
-  {word:"barn",pos:"n.",meaning:"a large building on a farm where animals sleep",example:"The animals stay in the barn at night.",translation:"തൊഴുത്ത്",ipa:"/bɑːrn/"},
-  {word:"stable",pos:"n.",meaning:"a building where horses are kept",example:"The horse lives in a clean stable.",translation:"കുതിരലായം",ipa:"/ˈsteɪbəl/"},
-  {word:"leash",pos:"n.",meaning:"a long strap used to hold a dog when walking",example:"She holds the dog with a leash.",translation:"പട്ട",ipa:"/liːʃ/"},
-  {word:"fur",pos:"n.",meaning:"the soft thick hair on an animal's body",example:"The cat has soft white fur.",translation:"രോമം",ipa:"/fɜːr/"},
-  {word:"tail",pos:"n.",meaning:"the long part at the back end of an animal's body",example:"The dog wags its tail when happy.",translation:"വാൽ",ipa:"/teɪl/"},
-  {word:"paw",pos:"n.",meaning:"the foot of an animal like a dog or cat",example:"The puppy lifted its paw up.",translation:"മൃഗത്തിന്റെ കാൽ",ipa:"/pɔː/"},
-  {word:"beak",pos:"n.",meaning:"the hard pointed mouth of a bird",example:"The bird picks up food with its beak.",translation:"കൊക്ക്",ipa:"/biːk/"},
-  {word:"wing",pos:"n.",meaning:"the part of a bird's body used for flying",example:"The bird opens its wing and flies away.",translation:"ചിറക്",ipa:"/wɪŋ/"},
-  {word:"hoof",pos:"n.",meaning:"the hard part at the bottom of a horse or cow's foot",example:"The horse's hoof makes a sound on the road.",translation:"കുളമ്പ്",ipa:"/huːf/"},
-  {word:"flock",pos:"n.",meaning:"a group of birds or farm animals together",example:"A flock of birds flies over the farm.",translation:"കൂട്ടം",ipa:"/flɒk/"},
-  {word:"belt",pos:"n.",meaning:"a strip of leather or cloth worn around the waist",example:"He wears a brown belt with his pants.",translation:"ബെൽറ്റ്",ipa:"/bɛlt/"},
-  {word:"cap",pos:"n.",meaning:"a soft flat hat with a curved part at the front",example:"She puts on a cap before going outside.",translation:"തൊപ്പി",ipa:"/kæp/"},
-  {word:"necklace",pos:"n.",meaning:"a piece of jewellery worn around the neck",example:"My mom has a gold necklace.",translation:"മാല",ipa:"/ˈnɛklɪs/"},
-  {word:"ring",pos:"n.",meaning:"a small circle of metal worn on a finger",example:"She has a silver ring on her finger.",translation:"മോതിരം",ipa:"/rɪŋ/"},
-  {word:"blouse",pos:"n.",meaning:"a shirt worn by women or girls",example:"She wears a white blouse to school.",translation:"ബ്ലൗസ്",ipa:"/blaʊz/"},
-  {word:"tie",pos:"n.",meaning:"a long piece of cloth worn around the neck with a shirt",example:"He wears a red tie to work.",translation:"ടൈ",ipa:"/taɪ/"},
-  {word:"pocket",pos:"n.",meaning:"a small bag sewn inside clothing to hold things",example:"He puts his keys in his pocket.",translation:"പോക്കറ്റ്",ipa:"/ˈpɒkɪt/"},
-  {word:"button",pos:"n.",meaning:"a small round object used to fasten clothes",example:"One button on her shirt is missing.",translation:"ബട്ടൺ",ipa:"/ˈbʌtən/"},
-  {word:"zipper",pos:"n.",meaning:"a fastener with two rows of teeth used to open and close clothes",example:"The zipper on his bag is broken.",translation:"സിപ്പ്",ipa:"/ˈzɪpər/"},
-  {word:"uniform",pos:"n.",meaning:"special clothes worn by students or workers",example:"Students wear a uniform at this school.",translation:"യൂണിഫോം",ipa:"/ˈjuːnɪfɔːm/"},
-  {word:"swimsuit",pos:"n.",meaning:"clothes worn for swimming",example:"She packs her swimsuit for the beach.",translation:"സ്വിംസ്യൂട്ട്",ipa:"/ˈswɪmsuːt/"},
-  {word:"raincoat",pos:"n.",meaning:"a waterproof coat worn in the rain",example:"He puts on his raincoat before going out.",translation:"മഴക്കോട്ട്",ipa:"/ˈreɪnkoʊt/"},
-  {word:"earring",pos:"n.",meaning:"a piece of jewellery worn on the ear",example:"She wears gold earrings every day.",translation:"കമ്മൽ",ipa:"/ˈɪərɪŋ/"},
-  {word:"bracelet",pos:"n.",meaning:"a band or chain worn around the wrist",example:"My sister has a pretty bracelet.",translation:"വളയൽ",ipa:"/ˈbreɪslɪt/"},
-  {word:"sleeve",pos:"n.",meaning:"the part of a shirt or coat that covers the arm",example:"She rolls up her sleeve to wash her hands.",translation:"കൈത്തണ്ട ഭാഗം",ipa:"/sliːv/"},
-  {word:"collar",pos:"n.",meaning:"the part of a shirt that goes around the neck",example:"His shirt has a blue collar.",translation:"കോളർ",ipa:"/ˈkɒlər/"},
-  {word:"pyjamas",pos:"n.",meaning:"loose comfortable clothes worn in bed",example:"He wears pyjamas when he sleeps.",translation:"പൈജാമ",ipa:"/pəˈdʒɑːməz/"},
-  {word:"slipper",pos:"n.",meaning:"a soft comfortable shoe worn inside the house",example:"She puts on her slippers after coming home.",translation:"ചെരിപ്പ്",ipa:"/ˈslɪpər/"},
-  {word:"sandal",pos:"n.",meaning:"an open shoe held on the foot by straps",example:"He wears sandals in the summer.",translation:"സാൻഡൽ",ipa:"/ˈsændəl/"},
-  {word:"heel",pos:"n.",meaning:"the raised part at the back bottom of a shoe",example:"Her shoe has a high heel.",translation:"ഹീൽ",ipa:"/hiːl/"},
-  {word:"sunglasses",pos:"n.",meaning:"dark glasses worn to protect the eyes from the sun",example:"She wears sunglasses on sunny days.",translation:"സൺഗ്ലാസ്",ipa:"/ˈsʌnɡlæsɪz/"},
-  {word:"umbrella",pos:"n.",meaning:"a folding cover held above the head to protect from rain",example:"Take your umbrella — it is raining.",translation:"കുട",ipa:"/ʌmˈbrɛlə/"},
-  {word:"purse",pos:"n.",meaning:"a small bag used to carry money and personal things",example:"She keeps her phone in her purse.",translation:"പഴ്‌സ്",ipa:"/pɜːrs/"},
-  {word:"wallet",pos:"n.",meaning:"a small flat case for carrying money and cards",example:"His wallet is in his back pocket.",translation:"വാലറ്റ്",ipa:"/ˈwɒlɪt/"},
-  {word:"mitten",pos:"n.",meaning:"a warm covering for the hand with one part for all fingers together",example:"She wears mittens in cold weather.",translation:"മിറ്റൻ",ipa:"/ˈmɪtən/"},
-  {word:"hood",pos:"n.",meaning:"a covering for the head attached to a coat or jacket",example:"He pulls up his hood in the rain.",translation:"ഹൂഡ്",ipa:"/hʊd/"},
-  {word:"vest",pos:"n.",meaning:"a piece of clothing without sleeves worn over a shirt",example:"He wears a vest over his shirt.",translation:"വേസ്റ്റ്",ipa:"/vɛst/"},
-  {word:"shorts",pos:"n.",meaning:"short trousers that end above the knee",example:"He wears shorts when it is hot.",translation:"ഷോർട്‌സ്",ipa:"/ʃɔːrts/"},
-  {word:"leggings",pos:"n.",meaning:"tight trousers that stretch and fit close to the legs",example:"She wears leggings to her exercise class.",translation:"ലെഗ്ഗിംഗ്സ്",ipa:"/ˈlɛɡɪŋz/"},
-  {word:"denim",pos:"n.",meaning:"a strong blue cotton fabric used to make jeans",example:"He has a denim jacket on the chair.",translation:"ഡെനിം",ipa:"/ˈdɛnɪm/"},
-  {word:"bedroom",pos:"n.",meaning:"a room where you sleep",example:"I sleep in my bedroom every night.",translation:"കിടപ്പുമുറി",ipa:"/ˈbɛdruːm/"},
-  {word:"bathroom",pos:"n.",meaning:"a room with a toilet and sink",example:"The bathroom is next to the bedroom.",translation:"കുളിമുറി",ipa:"/ˈbæθruːm/"},
-  {word:"living room",pos:"n.",meaning:"the main room in a house where people relax",example:"We watch TV in the living room.",translation:"ഇരിപ്പുമുറി",ipa:"/ˈlɪvɪŋ ruːm/"},
-  {word:"sofa",pos:"n.",meaning:"a long comfortable seat for more than one person",example:"The sofa is in the living room.",translation:"സോഫ",ipa:"/ˈsoʊfə/"},
-  {word:"lamp",pos:"n.",meaning:"a device that gives light",example:"There is a lamp on my desk.",translation:"വിളക്ക്",ipa:"/læmp/"},
-  {word:"shelf",pos:"n.",meaning:"a flat board on a wall used to store things",example:"I put my books on the shelf.",translation:"അലമാര പലക",ipa:"/ʃɛlf/"},
-  {word:"wardrobe",pos:"n.",meaning:"a tall cupboard where you hang clothes",example:"My clothes are in the wardrobe.",translation:"വസ്ത്രഅലമാര",ipa:"/ˈwɔːrdroʊb/"},
-  {word:"pillow",pos:"n.",meaning:"a soft bag you put your head on when sleeping",example:"I have two pillows on my bed.",translation:"തലയണ",ipa:"/ˈpɪloʊ/"},
-  {word:"blanket",pos:"n.",meaning:"a thick soft cover used to keep warm in bed",example:"She puts a blanket on the bed at night.",translation:"പുതപ്പ്",ipa:"/ˈblæŋkɪt/"},
-  {word:"curtain",pos:"n.",meaning:"a piece of cloth hung over a window",example:"Please close the curtain, it is sunny.",translation:"തിരശ്ശീല",ipa:"/ˈkɜːrtən/"},
-  {word:"mirror",pos:"n.",meaning:"a glass surface that shows your reflection",example:"I look in the mirror every morning.",translation:"കണ്ണാടി",ipa:"/ˈmɪrər/"},
-  {word:"staircase",pos:"n.",meaning:"a set of steps inside a building",example:"She walks up the staircase to her room.",translation:"ഗോവണി",ipa:"/ˈstɛrkeɪs/"},
-  {word:"ceiling",pos:"n.",meaning:"the top inner surface of a room",example:"The ceiling in this room is very high.",translation:"മേൽക്കൂര",ipa:"/ˈsiːlɪŋ/"},
-  {word:"wall",pos:"n.",meaning:"a flat side surface of a room or building",example:"We have a picture on the wall.",translation:"ചുവർ",ipa:"/wɔːl/"},
-  {word:"carpet",pos:"n.",meaning:"a thick soft covering for the floor",example:"There is a red carpet in the living room.",translation:"പരവതാനി",ipa:"/ˈkɑːrpɪt/"},
-  {word:"sink",pos:"n.",meaning:"a bowl with taps used for washing in the kitchen or bathroom",example:"Wash your hands in the sink.",translation:"സിങ്ക്",ipa:"/sɪŋk/"},
-  {word:"tap",pos:"n.",meaning:"a device that controls the flow of water",example:"Turn off the tap after washing.",translation:"ടാപ്പ്",ipa:"/tæp/"},
-  {word:"fridge",pos:"n.",meaning:"a machine that keeps food cold",example:"I keep milk in the fridge.",translation:"ഫ്രിഡ്ജ്",ipa:"/frɪdʒ/"},
-  {word:"oven",pos:"n.",meaning:"a box-shaped device used for cooking or baking food",example:"She bakes bread in the oven.",translation:"അടുപ്പ്",ipa:"/ˈʌvən/"},
-  {word:"cupboard",pos:"n.",meaning:"a piece of furniture with doors for storing things",example:"The cups are in the cupboard.",translation:"അലമാര",ipa:"/ˈkʌbərd/"},
-  {word:"garage",pos:"n.",meaning:"a building or room where you keep a car",example:"He parks his car in the garage.",translation:"ഗാരേജ്",ipa:"/ˈɡærɪdʒ/"},
-  {word:"garden",pos:"n.",meaning:"an area of land near a house where plants grow",example:"There are flowers in the garden.",translation:"തോട്ടം",ipa:"/ˈɡɑːrdən/"},
-  {word:"gate",pos:"n.",meaning:"a door in a fence or wall outside a house",example:"Please close the gate when you leave.",translation:"ഗേറ്റ്",ipa:"/ɡeɪt/"},
-  {word:"roof",pos:"n.",meaning:"the top covering of a building",example:"The roof of our house is orange.",translation:"മേൽക്കൂര",ipa:"/ruːf/"},
-  {word:"attic",pos:"n.",meaning:"a space or room just below the roof of a house",example:"Old boxes are kept in the attic.",translation:"다락방",ipa:"/ˈætɪk/"},
-  {word:"balcony",pos:"n.",meaning:"a small platform outside an upper-floor room",example:"We drink tea on the balcony.",translation:"ബാൽക്കണി",ipa:"/ˈbælkəni/"},
-  {word:"hallway",pos:"n.",meaning:"a passage inside a house near the entrance",example:"Leave your shoes in the hallway.",translation:"ഇടനാഴി",ipa:"/ˈhɔːlweɪ/"},
-  {word:"drawer",pos:"n.",meaning:"a sliding box inside a piece of furniture for storing things",example:"I keep my socks in the drawer.",translation:"വലിപ്പ്",ipa:"/drɔːr/"},
-  {word:"armchair",pos:"n.",meaning:"a comfortable chair with supports for your arms",example:"Grandfather sits in the armchair.",translation:"കൈത്താങ്ങ് കസേര",ipa:"/ˈɑːrmtʃɛr/"},
-  {word:"fence",pos:"n.",meaning:"a wooden or metal structure around a garden or yard",example:"There is a white fence around our house.",translation:"വേലി",ipa:"/fɛns/"},
-  {word:"Sunday",pos:"n.",meaning:"the first day of the week",example:"We rest at home on Sunday.",translation:"ഞായറാഴ്ച",ipa:"/ˈsʌndeɪ/"},
-  {word:"Monday",pos:"n.",meaning:"the second day of the week",example:"School starts on Monday.",translation:"തിങ്കളാഴ്ച",ipa:"/ˈmʌndeɪ/"},
-  {word:"Tuesday",pos:"n.",meaning:"the third day of the week",example:"We have art class on Tuesday.",translation:"ചൊവ്വാഴ്ച",ipa:"/ˈtjuːzdeɪ/"},
-  {word:"Wednesday",pos:"n.",meaning:"the fourth day of the week",example:"Wednesday is the middle of the week.",translation:"ബുധനാഴ്ച",ipa:"/ˈwɛnzdeɪ/"},
-  {word:"Thursday",pos:"n.",meaning:"the fifth day of the week",example:"My dad comes home early on Thursday.",translation:"വ്യാഴാഴ്ച",ipa:"/ˈθɜːzdeɪ/"},
-  {word:"Friday",pos:"n.",meaning:"the sixth day of the week",example:"We play games on Friday evening.",translation:"വെള്ളിയാഴ്ച",ipa:"/ˈfraɪdeɪ/"},
-  {word:"Saturday",pos:"n.",meaning:"the seventh day of the week",example:"I sleep late on Saturday.",translation:"ശനിയാഴ്ച",ipa:"/ˈsætədeɪ/"},
-  {word:"January",pos:"n.",meaning:"the first month of the year",example:"January is very cold in many countries.",translation:"ജനുവരി",ipa:"/ˈdʒænjuəri/"},
-  {word:"February",pos:"n.",meaning:"the second month of the year",example:"February has twenty-eight days.",translation:"ഫെബ്രുവരി",ipa:"/ˈfɛbruəri/"},
-  {word:"March",pos:"n.",meaning:"the third month of the year",example:"Spring begins in March.",translation:"മാർച്ച്",ipa:"/mɑːtʃ/"},
-  {word:"April",pos:"n.",meaning:"the fourth month of the year",example:"It often rains in April.",translation:"ഏപ്രിൽ",ipa:"/ˈeɪprəl/"},
-  {word:"May",pos:"n.",meaning:"the fifth month of the year",example:"Flowers bloom in May.",translation:"മേയ്",ipa:"/meɪ/"},
-  {word:"June",pos:"n.",meaning:"the sixth month of the year",example:"School finishes in June.",translation:"ജൂൺ",ipa:"/dʒuːn/"},
-  {word:"July",pos:"n.",meaning:"the seventh month of the year",example:"July is a hot summer month.",translation:"ജൂലൈ",ipa:"/dʒuˈlaɪ/"},
-  {word:"August",pos:"n.",meaning:"the eighth month of the year",example:"We go on holiday in August.",translation:"ഓഗസ്റ്റ്",ipa:"/ˈɔːɡəst/"},
-  {word:"September",pos:"n.",meaning:"the ninth month of the year",example:"School starts again in September.",translation:"സെപ്റ്റംബർ",ipa:"/sɛpˈtɛmbə/"},
-  {word:"October",pos:"n.",meaning:"the tenth month of the year",example:"The leaves fall in October.",translation:"ഒക്ടോബർ",ipa:"/ɒkˈtoʊbə/"},
-  {word:"November",pos:"n.",meaning:"the eleventh month of the year",example:"It gets dark early in November.",translation:"നവംബർ",ipa:"/noʊˈvɛmbə/"},
-  {word:"December",pos:"n.",meaning:"the twelfth month of the year",example:"Christmas is in December.",translation:"ഡിസംബർ",ipa:"/dɪˈsɛmbə/"},
-  {word:"spring",pos:"n.",meaning:"the season after winter when flowers grow",example:"Birds sing in spring.",translation:"വസന്തകാലം",ipa:"/sprɪŋ/"},
-  {word:"summer",pos:"n.",meaning:"the hottest season of the year",example:"We swim in summer.",translation:"വേനൽക്കാലം",ipa:"/ˈsʌmə/"},
-  {word:"autumn",pos:"n.",meaning:"the season when leaves fall from trees",example:"Leaves turn red in autumn.",translation:"ശരത്കാലം",ipa:"/ˈɔːtəm/"},
-  {word:"winter",pos:"n.",meaning:"the coldest season of the year",example:"We wear coats in winter.",translation:"ശീതകാലം",ipa:"/ˈwɪntə/"},
-  {word:"hour",pos:"n.",meaning:"a period of sixty minutes",example:"The class is one hour long.",translation:"മണിക്കൂർ",ipa:"/ˈaʊə/"},
-  {word:"minute",pos:"n.",meaning:"a period of sixty seconds",example:"Wait one minute, please.",translation:"മിനിറ്റ്",ipa:"/ˈmɪnɪt/"},
-  {word:"clock",pos:"n.",meaning:"a device that shows the time",example:"The clock on the wall shows three.",translation:"ഘടിയാരം",ipa:"/klɒk/"},
-  {word:"noon",pos:"n.",meaning:"twelve o'clock in the middle of the day",example:"We eat lunch at noon.",translation:"ഉച്ചനേരം",ipa:"/nuːn/"},
-  {word:"midnight",pos:"n.",meaning:"twelve o'clock at night",example:"The party ends at midnight.",translation:"അർദ്ധരാത്രി",ipa:"/ˈmɪdnaɪt/"},
-  {word:"date",pos:"n.",meaning:"the number of a day in a month",example:"What is today's date?",translation:"തീയതി",ipa:"/deɪt/"},
-  {word:"early",pos:"adv.",meaning:"before the usual or expected time",example:"She wakes up early every day.",translation:"നേരത്തേ",ipa:"/ˈɜːli/"},
-  {word:"train",pos:"n.",meaning:"a vehicle that travels on rails and carries people or goods",example:"We take the train to the city every week.",translation:"തീവണ്ടി",ipa:"/treɪn/"},
-  {word:"airplane",pos:"n.",meaning:"a vehicle with wings that flies in the sky",example:"The airplane flies very high in the sky.",translation:"വിമാനം",ipa:"/ˈɛərpleɪn/"},
-  {word:"bicycle",pos:"n.",meaning:"a vehicle with two wheels that you pedal with your feet",example:"She rides her bicycle to school every day.",translation:"സൈക്കിൾ",ipa:"/ˈbaɪsɪkəl/"},
-  {word:"taxi",pos:"n.",meaning:"a car that takes people to places for money",example:"We took a taxi to the airport.",translation:"ടാക്സി",ipa:"/ˈtæksi/"},
-  {word:"ship",pos:"n.",meaning:"a very large boat that travels on the sea",example:"The ship travels across the ocean.",translation:"കപ്പൽ",ipa:"/ʃɪp/"},
-  {word:"truck",pos:"n.",meaning:"a large vehicle used to carry heavy goods",example:"The truck carries food to the supermarket.",translation:"ട്രക്ക്",ipa:"/trʌk/"},
-  {word:"motorcycle",pos:"n.",meaning:"a vehicle with two wheels and an engine",example:"My uncle rides a motorcycle to work.",translation:"മോട്ടോർസൈക്കിൾ",ipa:"/ˈmoʊtərsaɪkəl/"},
-  {word:"helicopter",pos:"n.",meaning:"an aircraft with spinning blades that can fly straight up",example:"The helicopter lands on top of the building.",translation:"ഹെലികോപ്റ്റർ",ipa:"/ˈhɛlɪkɒptər/"},
-  {word:"ferry",pos:"n.",meaning:"a boat that carries people and cars across water",example:"We take the ferry to cross the river.",translation:"ഫെറി",ipa:"/ˈfɛri/"},
-  {word:"van",pos:"n.",meaning:"a medium-sized vehicle used to carry people or goods",example:"The van takes children to school.",translation:"വാൻ",ipa:"/væn/"},
-  {word:"tram",pos:"n.",meaning:"an electric vehicle that travels on rails in a city",example:"The tram stops near our house.",translation:"ട്രാം",ipa:"/træm/"},
-  {word:"scooter",pos:"n.",meaning:"a small vehicle with two wheels and a low engine",example:"He rides a scooter around town.",translation:"സ്കൂട്ടർ",ipa:"/ˈskuːtər/"},
-  {word:"ambulance",pos:"n.",meaning:"a vehicle that takes sick or injured people to hospital",example:"The ambulance came very fast.",translation:"ആംബുലൻസ്",ipa:"/ˈæmbjʊləns/"},
-  {word:"fire truck",pos:"n.",meaning:"a large vehicle used by firefighters to put out fires",example:"The fire truck has a long ladder on top.",translation:"ഫയർ ട്രക്ക്",ipa:"/ˈfaɪər trʌk/"},
-  {word:"subway",pos:"n.",meaning:"a train that travels underground in a city",example:"The subway is very fast in the big city.",translation:"സബ്‌വേ",ipa:"/ˈsʌbweɪ/"},
-  {word:"boat",pos:"n.",meaning:"a small vehicle that travels on water",example:"We go fishing in a small boat.",translation:"തോണി",ipa:"/boʊt/"},
-  {word:"jeep",pos:"n.",meaning:"a strong vehicle used for travelling on rough ground",example:"They drive a jeep in the mountains.",translation:"ജീപ്പ്",ipa:"/dʒiːp/"},
-  {word:"ticket",pos:"n.",meaning:"a small piece of paper that lets you travel on a bus, train, or plane",example:"Please buy a ticket before you get on the train.",translation:"ടിക്കറ്റ്",ipa:"/ˈtɪkɪt/"},
-  {word:"driver",pos:"n.",meaning:"a person who drives a vehicle",example:"The bus driver is very friendly.",translation:"ഡ്രൈവർ",ipa:"/ˈdraɪvər/"},
-  {word:"passenger",pos:"n.",meaning:"a person who travels in a vehicle but does not drive",example:"There are many passengers on the train.",translation:"യാത്രക്കാരൻ",ipa:"/ˈpæsɪndʒər/"},
-  {word:"station",pos:"n.",meaning:"a place where trains or buses stop to let people on or off",example:"We wait at the station for the train.",translation:"സ്റ്റേഷൻ",ipa:"/ˈsteɪʃən/"},
-  {word:"airport",pos:"n.",meaning:"a place where airplanes take off and land",example:"We arrive at the airport two hours early.",translation:"വിമാനത്താവളം",ipa:"/ˈɛərpɔːrt/"},
-  {word:"port",pos:"n.",meaning:"a place by the sea where ships stop",example:"Many big ships come to this port.",translation:"തുറമുഖം",ipa:"/pɔːrt/"},
-  {word:"parking",pos:"n.",meaning:"a place or action of leaving a vehicle in a spot",example:"There is free parking near the shop.",translation:"പാർക്കിംഗ്",ipa:"/ˈpɑːrkɪŋ/"},
-  {word:"drive",pos:"v.",meaning:"to control and operate a vehicle",example:"Can you drive a car?",translation:"ഓടിക്കുക",ipa:"/draɪv/"},
-  {word:"ride",pos:"v.",meaning:"to travel on a bicycle, motorcycle, or horse",example:"I like to ride a bicycle in the park.",translation:"സവാരി ചെയ്യുക",ipa:"/raɪd/"},
-  {word:"travel",pos:"v.",meaning:"to go from one place to another",example:"We travel by train to visit our family.",translation:"യാത്ര ചെയ്യുക",ipa:"/ˈtrævəl/"},
-  {word:"arrive",pos:"v.",meaning:"to reach a place after travelling",example:"The bus will arrive in ten minutes.",translation:"എത്തിച്ചേരുക",ipa:"/əˈraɪv/"},
-  {word:"depart",pos:"v.",meaning:"to leave a place at the start of a journey",example:"The train will depart from platform two.",translation:"പുറപ്പെടുക",ipa:"/dɪˈpɑːrt/"},
-  {word:"seatbelt",pos:"n.",meaning:"a safety strap you wear in a car or plane",example:"Always wear your seatbelt in the car.",translation:"സീറ്റ്ബെൽറ്റ്",ipa:"/ˈsiːtbɛlt/"},
-  {word:"cloud",pos:"n.",meaning:"a white or grey mass in the sky made of water drops",example:"There is a big cloud in the sky today.",translation:"മേഘം",ipa:"/klaʊd/"},
-  {word:"wind",pos:"n.",meaning:"air that moves fast outdoors",example:"The wind is very strong this afternoon.",translation:"കാറ്റ്",ipa:"/wɪnd/"},
-  {word:"tree",pos:"n.",meaning:"a tall plant with a trunk and branches",example:"There is a tall tree near my house.",translation:"മരം",ipa:"/triː/"},
-  {word:"leaf",pos:"n.",meaning:"a flat green part that grows on a plant or tree",example:"The leaf falls from the tree.",translation:"ഇല",ipa:"/liːf/"},
-  {word:"river",pos:"n.",meaning:"a large flow of water that moves across land",example:"We swim in the river near our village.",translation:"നദി",ipa:"/ˈrɪvər/"},
-  {word:"lake",pos:"n.",meaning:"a large area of water surrounded by land",example:"There are fish in the lake.",translation:"തടാകം",ipa:"/leɪk/"},
-  {word:"sea",pos:"n.",meaning:"a large area of salty water",example:"We can see the sea from the hill.",translation:"കടൽ",ipa:"/siː/"},
-  {word:"sky",pos:"n.",meaning:"the space above the earth that you see when you look up",example:"The sky is blue and clear today.",translation:"ആകാശം",ipa:"/skaɪ/"},
-  {word:"snow",pos:"n.",meaning:"soft white frozen water that falls from the sky",example:"The children play in the snow.",translation:"മഞ്ഞ്",ipa:"/snəʊ/"},
-  {word:"storm",pos:"n.",meaning:"very bad weather with strong wind and rain",example:"We stay inside during the storm.",translation:"കൊടുങ്കാറ്റ്",ipa:"/stɔːm/"},
-  {word:"fog",pos:"n.",meaning:"thick cloud near the ground that makes it hard to see",example:"There is thick fog on the road this morning.",translation:"മൂടൽ മഞ്ഞ്",ipa:"/fɒɡ/"},
-  {word:"ice",pos:"n.",meaning:"water that has frozen and become solid",example:"The ice on the lake is very thin.",translation:"ഐസ്",ipa:"/aɪs/"},
-  {word:"mountain",pos:"n.",meaning:"a very high area of land with steep sides",example:"We can see snow on the mountain.",translation:"പർവ്വതം",ipa:"/ˈmaʊntən/"},
-  {word:"hill",pos:"n.",meaning:"a raised area of land, smaller than a mountain",example:"We walk up the hill every weekend.",translation:"കുന്ന്",ipa:"/hɪl/"},
-  {word:"forest",pos:"n.",meaning:"a large area with many trees growing together",example:"Many animals live in the forest.",translation:"വനം",ipa:"/ˈfɒrɪst/"},
-  {word:"sand",pos:"n.",meaning:"tiny grains of rock found on beaches and deserts",example:"The children dig in the sand at the beach.",translation:"മണൽ",ipa:"/sænd/"},
-  {word:"beach",pos:"n.",meaning:"the area of sand or rock next to the sea",example:"We go to the beach on hot days.",translation:"കടൽത്തീരം",ipa:"/biːtʃ/"},
-  {word:"rock",pos:"n.",meaning:"a hard natural material found in the ground",example:"There is a big rock near the river.",translation:"പാറ",ipa:"/rɒk/"},
-  {word:"field",pos:"n.",meaning:"a large open area of land, often with grass",example:"Cows eat grass in the field.",translation:"വയൽ",ipa:"/fiːld/"},
-  {word:"mud",pos:"n.",meaning:"wet soft earth or soil",example:"The dog has mud on its paws.",translation:"ചളി",ipa:"/mʌd/"},
-  {word:"grass",pos:"n.",meaning:"the green plant that covers the ground outdoors",example:"The children sit on the grass in the park.",translation:"പുല്ല്",ipa:"/ɡrɑːs/"},
-  {word:"sunny",pos:"adj.",meaning:"having a lot of bright light from the sun",example:"It is a sunny day, so we go outside.",translation:"സൂര്യപ്രകാശമുള്ള",ipa:"/ˈsʌni/"},
-  {word:"cloudy",pos:"adj.",meaning:"having many clouds in the sky",example:"It is cloudy today, so bring a jacket.",translation:"മേഘാവൃതമായ",ipa:"/ˈklaʊdi/"},
-  {word:"windy",pos:"adj.",meaning:"having a lot of wind",example:"It is very windy outside today.",translation:"കാറ്റുള്ള",ipa:"/ˈwɪndi/"},
-  {word:"wet",pos:"adj.",meaning:"covered with water or liquid",example:"My shoes are wet from the rain.",translation:"നനഞ്ഞ",ipa:"/wɛt/"},
-  {word:"dry",pos:"adj.",meaning:"not wet or not having water",example:"The weather is dry and warm today.",translation:"വരണ്ട",ipa:"/draɪ/"},
-  {word:"thunder",pos:"n.",meaning:"the loud noise you hear during a storm",example:"The thunder is very loud tonight.",translation:"ഇടിമുഴക്കം",ipa:"/ˈθʌndər/"},
-  {word:"lightning",pos:"n.",meaning:"a bright flash of light in the sky during a storm",example:"We see lightning in the dark sky.",translation:"മിന്നൽ",ipa:"/ˈlaɪtnɪŋ/"},
-  {word:"rainbow",pos:"n.",meaning:"a curved band of many colors in the sky after rain",example:"Look at the beautiful rainbow after the rain.",translation:"മഴവില്ല്",ipa:"/ˈreɪnbəʊ/"},
-  {word:"temperature",pos:"n.",meaning:"how hot or cold something is",example:"The temperature today is very low.",translation:"താപനില",ipa:"/ˈtɛmprətʃər/"},
-  {word:"clean",pos:"adj.",meaning:"not dirty; free from dirt or mess",example:"The plates are clean after washing.",translation:"വൃത്തിയുള്ള",ipa:"/kliːn/"},
-  {word:"dirty",pos:"adj.",meaning:"not clean; covered with dirt or mess",example:"His shoes are dirty after playing outside.",translation:"അഴുക്കുള്ള",ipa:"/ˈdɜːti/"},
-  {word:"full",pos:"adj.",meaning:"containing as much as possible; not empty",example:"The glass is full of water.",translation:"നിറഞ്ഞ",ipa:"/fʊl/"},
-  {word:"empty",pos:"adj.",meaning:"containing nothing; not full",example:"The bottle is empty now.",translation:"ശൂന്യമായ",ipa:"/ˈempti/"},
-  {word:"cheap",pos:"adj.",meaning:"not expensive; low in price",example:"This bag is very cheap.",translation:"വിലകുറഞ്ഞ",ipa:"/tʃiːp/"},
-  {word:"expensive",pos:"adj.",meaning:"costing a lot of money",example:"That car is very expensive.",translation:"വിലകൂടിയ",ipa:"/ɪkˈspensɪv/"},
-  {word:"quiet",pos:"adj.",meaning:"making little or no noise",example:"The library is very quiet.",translation:"ശാന്തമായ",ipa:"/ˈkwaɪət/"},
-  {word:"loud",pos:"adj.",meaning:"making a lot of noise; not quiet",example:"The music is very loud.",translation:"ശബ്ദമുള്ള",ipa:"/laʊd/"},
-  {word:"soft",pos:"adj.",meaning:"not hard; smooth and gentle to touch",example:"The pillow feels very soft.",translation:"മൃദുവായ",ipa:"/sɒft/"},
-  {word:"rough",pos:"adj.",meaning:"not smooth; having an uneven surface",example:"The rock has a rough surface.",translation:"പരുക്കൻ",ipa:"/rʌf/"},
-  {word:"pretty",pos:"adj.",meaning:"attractive and pleasant to look at",example:"She has a pretty smile.",translation:"സുന്ദരമായ",ipa:"/ˈprɪti/"},
-  {word:"ugly",pos:"adj.",meaning:"not attractive; unpleasant to look at",example:"He thinks the old building looks ugly.",translation:"വൃത്തിഹീനമായ",ipa:"/ˈʌɡli/"},
-  {word:"young",pos:"adj.",meaning:"not old; having lived for a short time",example:"The young cat likes to play.",translation:"ചെറുപ്പമായ",ipa:"/jʌŋ/"},
-  {word:"rich",pos:"adj.",meaning:"having a lot of money or possessions",example:"The rich man has a big house.",translation:"സമ്പന്നനായ",ipa:"/rɪtʃ/"},
-  {word:"poor",pos:"adj.",meaning:"having very little money",example:"The poor family needs help.",translation:"ദരിദ്രമായ",ipa:"/pɔːr/"},
-  {word:"sharp",pos:"adj.",meaning:"having a thin edge or point that can cut",example:"Be careful, the knife is sharp.",translation:"മൂർച്ചയുള്ള",ipa:"/ʃɑːrp/"},
-  {word:"blunt",pos:"adj.",meaning:"not sharp; without a sharp edge or point",example:"This pencil is blunt and needs sharpening.",translation:"മൂർച്ചയില്ലാത്ത",ipa:"/blʌnt/"},
-  {word:"sweet",pos:"adj.",meaning:"having a pleasant sugary taste",example:"This apple is very sweet.",translation:"മധുരമുള്ള",ipa:"/swiːt/"},
-  {word:"sour",pos:"adj.",meaning:"having a sharp, acid taste like lemon",example:"The lemon tastes very sour.",translation:"പുളിപ്പുള്ള",ipa:"/saʊər/"},
-  {word:"deep",pos:"adj.",meaning:"going far down from the top or surface",example:"The river is very deep here.",translation:"ആഴമുള്ള",ipa:"/diːp/"},
-  {word:"shallow",pos:"adj.",meaning:"not deep; having little depth",example:"The pool is shallow for children.",translation:"ആഴം കുറഞ്ഞ",ipa:"/ˈʃæləʊ/"},
-  {word:"brave",pos:"adj.",meaning:"not afraid; willing to face danger",example:"The brave boy helped his friend.",translation:"ധൈര്യശാലിയായ",ipa:"/breɪv/"},
-  {word:"afraid",pos:"adj.",meaning:"feeling fear; scared of something",example:"She is afraid of the dark.",translation:"ഭയപ്പെടുന്ന",ipa:"/əˈfreɪd/"},
-  {word:"busy",pos:"adj.",meaning:"having a lot of things to do; not free",example:"My teacher is very busy today.",translation:"തിരക്കുള്ള",ipa:"/ˈbɪzi/"},
-  {word:"free",pos:"adj.",meaning:"not busy; having time available",example:"Are you free this afternoon?",translation:"ഒഴിവുള്ള",ipa:"/friː/"},
-  {word:"clever",pos:"adj.",meaning:"quick to learn and understand things; smart",example:"She is a clever student.",translation:"ബുദ്ധിശാലിയായ",ipa:"/ˈklevər/"},
-  {word:"silly",pos:"adj.",meaning:"not sensible; acting in a foolish way",example:"Don't be silly, put on your coat.",translation:"മണ്ടത്തരമായ",ipa:"/ˈsɪli/"},
-  {word:"awake",pos:"adj.",meaning:"not sleeping; in a conscious state",example:"The baby is awake and smiling.",translation:"ഉണർന്നിരിക്കുന്ന",ipa:"/əˈweɪk/"},
-  {word:"asleep",pos:"adj.",meaning:"sleeping; in a state of sleep",example:"The dog is asleep on the sofa.",translation:"ഉറങ്ങുന്ന",ipa:"/əˈsliːp/"},
-  {word:"fresh",pos:"adj.",meaning:"recently made or obtained; not old or stale",example:"I like fresh bread in the morning.",translation:"പുതുമയുള്ള",ipa:"/freʃ/"},
-  {word:"jump",pos:"v.",meaning:"to push yourself up into the air with your legs",example:"The children jump in the park every day.",translation:"ചാടുക",ipa:"/dʒʌmp/"},
-  {word:"catch",pos:"v.",meaning:"to take and hold something that is moving through the air",example:"Can you catch the ball?",translation:"പിടിക്കുക",ipa:"/kætʃ/"},
-  {word:"throw",pos:"v.",meaning:"to send something through the air using your hand",example:"Please throw the ball to me.",translation:"എറിയുക",ipa:"/θroʊ/"},
-  {word:"push",pos:"v.",meaning:"to move something away from you using your hands",example:"He pushes the door to open it.",translation:"തള്ളുക",ipa:"/pʊʃ/"},
-  {word:"pull",pos:"v.",meaning:"to move something toward you using your hands",example:"She pulls the chair closer to the table.",translation:"വലിക്കുക",ipa:"/pʊl/"},
-  {word:"carry",pos:"v.",meaning:"to hold something and take it somewhere",example:"He carries his bag to school every day.",translation:"ചുമക്കുക",ipa:"/ˈkæri/"},
-  {word:"kick",pos:"v.",meaning:"to hit something with your foot",example:"The boy kicks the ball hard.",translation:"ചവിട്ടുക",ipa:"/kɪk/"},
-  {word:"hit",pos:"v.",meaning:"to touch something quickly and with force",example:"She hits the drum with a stick.",translation:"അടിക്കുക",ipa:"/hɪt/"},
-  {word:"drop",pos:"v.",meaning:"to let something fall from your hand",example:"Be careful not to drop the glass.",translation:"വീഴ്ത്തുക",ipa:"/drɒp/"},
-  {word:"pick",pos:"v.",meaning:"to take or lift something with your fingers",example:"He picks an apple from the tree.",translation:"എടുക്കുക",ipa:"/pɪk/"},
-  {word:"hold",pos:"v.",meaning:"to keep something in your hands",example:"Please hold my bag for a moment.",translation:"പിടിച്ചിരിക്കുക",ipa:"/hoʊld/"},
-  {word:"climb",pos:"v.",meaning:"to go up something using your hands and feet",example:"The children climb the big tree.",translation:"കയറുക",ipa:"/klaɪm/"},
-  {word:"swim",pos:"v.",meaning:"to move through water using your body",example:"She can swim very well.",translation:"നീന്തുക",ipa:"/swɪm/"},
-  {word:"dance",pos:"v.",meaning:"to move your body to music",example:"They dance together at the party.",translation:"നൃത്തം ചെയ്യുക",ipa:"/dæns/"},
-  {word:"sing",pos:"v.",meaning:"to make music with your voice",example:"The children sing a song in class.",translation:"പാടുക",ipa:"/sɪŋ/"},
-  {word:"laugh",pos:"v.",meaning:"to make sounds when something is funny",example:"We laugh at the funny joke.",translation:"ചിരിക്കുക",ipa:"/læf/"},
-  {word:"cry",pos:"v.",meaning:"to have tears come from your eyes when sad or hurt",example:"The baby cries when she is hungry.",translation:"കരയുക",ipa:"/kraɪ/"},
-  {word:"touch",pos:"v.",meaning:"to put your hand or fingers on something",example:"Do not touch the hot oven.",translation:"തൊടുക",ipa:"/tʌtʃ/"},
-  {word:"smell",pos:"v.",meaning:"to sense something through your nose",example:"I can smell the flowers in the garden.",translation:"മണക്കുക",ipa:"/smɛl/"},
-  {word:"wash",pos:"v.",meaning:"to clean something with water",example:"She washes her hands before eating.",translation:"കഴുകുക",ipa:"/wɒʃ/"},
-  {word:"cut",pos:"v.",meaning:"to divide something using a sharp tool",example:"He cuts the bread with a knife.",translation:"മുറിക്കുക",ipa:"/kʌt/"},
-  {word:"draw",pos:"v.",meaning:"to make a picture using a pen or pencil",example:"The girl draws a house on the paper.",translation:"വരയ്ക്കുക",ipa:"/drɔː/"},
-  {word:"paint",pos:"v.",meaning:"to put color on something using a brush",example:"He paints a picture of the sea.",translation:"ചിത്രം വരയ്ക്കുക",ipa:"/peɪnt/"},
-  {word:"cook",pos:"v.",meaning:"to prepare food using heat",example:"My mother cooks dinner every evening.",translation:"പാചകം ചെയ്യുക",ipa:"/kʊk/"},
-  {word:"pour",pos:"v.",meaning:"to make a liquid flow from a container",example:"She pours water into the glass.",translation:"ഒഴിക്കുക",ipa:"/pɔːr/"},
-  {word:"mix",pos:"v.",meaning:"to combine two or more things together",example:"He mixes flour and water to make dough.",translation:"കലർത്തുക",ipa:"/mɪks/"},
-  {word:"break",pos:"v.",meaning:"to make something come apart into pieces",example:"Do not break the window.",translation:"തകർക്കുക",ipa:"/breɪk/"},
-  {word:"wave",pos:"v.",meaning:"to move your hand to greet someone or say goodbye",example:"He waves to his friend across the street.",translation:"കൈ വീശുക",ipa:"/weɪv/"},
-  {word:"point",pos:"v.",meaning:"to show where something is using your finger",example:"She points at the big red house.",translation:"ചൂണ്ടിക്കാണിക്കുക",ipa:"/pɔɪnt/"},
-  {word:"bank",pos:"n.",meaning:"a place where people keep or borrow money",example:"I need to go to the bank to get some money.",translation:"ബാങ്ക്",ipa:"/bæŋk/"},
-  {word:"park",pos:"n.",meaning:"an open area with grass and trees in a town",example:"The children play in the park after lunch.",translation:"പാർക്ക്",ipa:"/pɑːrk/"},
-  {word:"library",pos:"n.",meaning:"a building where you can borrow books",example:"She goes to the library every Saturday.",translation:"ലൈബ്രറി",ipa:"/ˈlaɪbrəri/"},
-  {word:"café",pos:"n.",meaning:"a small place where you can buy drinks and snacks",example:"We sit and talk at the café near the park.",translation:"കഫേ",ipa:"/ˈkæfeɪ/"},
-  {word:"hotel",pos:"n.",meaning:"a building where people pay to sleep and stay",example:"They stay at the hotel for two nights.",translation:"ഹോട്ടൽ",ipa:"/hoʊˈtɛl/"},
-  {word:"cinema",pos:"n.",meaning:"a building where people watch films",example:"We watch a new film at the cinema tonight.",translation:"സിനിമ തിയേറ്റർ",ipa:"/ˈsɪnɪmə/"},
-  {word:"restaurant",pos:"n.",meaning:"a place where you pay to eat meals",example:"My family eats dinner at the restaurant on Sunday.",translation:"റസ്റ്റോറന്റ്",ipa:"/ˈrɛstrɒnt/"},
-  {word:"supermarket",pos:"n.",meaning:"a large shop that sells food and other things",example:"Mom buys vegetables at the supermarket.",translation:"സൂപ്പർമാർക്കറ്റ്",ipa:"/ˈsuːpərmɑːrkɪt/"},
-  {word:"post office",pos:"n.",meaning:"a place where you send letters and packages",example:"He sends a letter at the post office.",translation:"പോസ്റ്റ് ഓഫീസ്",ipa:"/ˈpoʊst ˌɒfɪs/"},
-  {word:"church",pos:"n.",meaning:"a building where Christians go to pray",example:"The old church is in the centre of town.",translation:"പള്ളി",ipa:"/tʃɜːrtʃ/"},
-  {word:"mosque",pos:"n.",meaning:"a building where Muslims go to pray",example:"The mosque is near the market.",translation:"പള്ളി (മുസ്ലിം)",ipa:"/mɒsk/"},
-  {word:"market",pos:"n.",meaning:"a place outside where people sell and buy things",example:"We buy fresh fruit at the market.",translation:"ചന്ത",ipa:"/ˈmɑːrkɪt/"},
-  {word:"pharmacy",pos:"n.",meaning:"a shop where you buy medicine and health products",example:"She buys vitamins at the pharmacy.",translation:"മരുന്നുകട",ipa:"/ˈfɑːrməsi/"},
-  {word:"police station",pos:"n.",meaning:"a building where police officers work",example:"The police station is next to the bank.",translation:"പോലീസ് സ്റ്റേഷൻ",ipa:"/pəˈliːs ˌsteɪʃən/"},
-  {word:"fire station",pos:"n.",meaning:"a building where firefighters and fire engines stay",example:"The fire station is at the end of the road.",translation:"ഫയർ സ്റ്റേഷൻ",ipa:"/ˈfaɪər ˌsteɪʃən/"},
-  {word:"town hall",pos:"n.",meaning:"a main building where local government works",example:"The town hall is a very big and old building.",translation:"ടൗൺ ഹാൾ",ipa:"/ˈtaʊn hɔːl/"},
-  {word:"bridge",pos:"n.",meaning:"a structure built over water so people can cross",example:"Walk over the bridge to get to the shop.",translation:"പാലം",ipa:"/brɪdʒ/"},
-  {word:"corner",pos:"n.",meaning:"the point where two streets meet",example:"Turn left at the corner and you will see the bank.",translation:"കോണ്",ipa:"/ˈkɔːrnər/"},
-  {word:"left",pos:"adv.",meaning:"the direction on the side of your left hand",example:"Turn left after the traffic light.",translation:"ഇടത്",ipa:"/lɛft/"},
-  {word:"opposite",pos:"prep.",meaning:"across from something, facing it",example:"The café is opposite the park.",translation:"എതിർവശം",ipa:"/ˈɒpəzɪt/"},
-  {word:"next to",pos:"prep.",meaning:"very close to something, at the side of it",example:"The pharmacy is next to the supermarket.",translation:"അടുത്ത്",ipa:"/ˈnɛkst tuː/"},
-  {word:"between",pos:"prep.",meaning:"in the space separating two things or places",example:"The park is between the school and the library.",translation:"ഇടയിൽ",ipa:"/bɪˈtwiːn/"},
-  {word:"behind",pos:"prep.",meaning:"at the back of something",example:"The car park is behind the supermarket.",translation:"പിന്നിൽ",ipa:"/bɪˈhaɪnd/"},
-  {word:"in front of",pos:"prep.",meaning:"directly before something, facing it",example:"There is a bus stop in front of the hotel.",translation:"മുന്നിൽ",ipa:"/ɪn frʌnt ɒv/"},
-  {word:"far",pos:"adj.",meaning:"a long distance away",example:"The airport is very far from the town centre.",translation:"ദൂരെ",ipa:"/fɑːr/"},
-  {word:"near",pos:"adj.",meaning:"not far away, close in distance",example:"The bus stop is near the restaurant.",translation:"അടുത്ത്",ipa:"/nɪər/"},
-  {word:"avenue",pos:"n.",meaning:"a wide road in a town, often with trees",example:"The hotel is on Main Avenue.",translation:"അവന്യൂ",ipa:"/ˈævənjuː/"},
-  {word:"pavement",pos:"n.",meaning:"a path at the side of a road for people to walk on",example:"Walk on the pavement, not on the road.",translation:"നടപ്പാത",ipa:"/ˈpeɪvmənt/"},
-  {word:"straight ahead",pos:"phrase",meaning:"continuing forward without turning",example:"Go straight ahead and you will see the park.",translation:"നേരെ മുന്നോട്ട്",ipa:"/streɪt əˈhɛd/"},
-  {word:"ruler",pos:"n.",meaning:"a flat stick used to measure length or draw straight lines",example:"She uses a ruler to draw a straight line in her notebook.",translation:"അളവുകോൽ",ipa:"/ˈruːlər/"},
-  {word:"eraser",pos:"n.",meaning:"a small object used to remove pencil marks",example:"He uses an eraser to fix his mistake on the paper.",translation:"മായ്ക്കുന്ന റബ്ബർ",ipa:"/ɪˈreɪzər/"},
-  {word:"notebook",pos:"n.",meaning:"a book with blank or lined pages for writing",example:"I write my homework in my notebook every day.",translation:"നോട്ട്ബുക്ക്",ipa:"/ˈnoʊtbʊk/"},
-  {word:"crayon",pos:"n.",meaning:"a colored stick made of wax used for drawing",example:"She draws a house with a red crayon.",translation:"ക്രയോൺ",ipa:"/ˈkreɪɒn/"},
-  {word:"scissors",pos:"n.",meaning:"a tool with two blades used for cutting paper",example:"He cuts the paper with scissors in art class.",translation:"കത്രിക",ipa:"/ˈsɪzərz/"},
-  {word:"glue",pos:"n.",meaning:"a sticky substance used to join things together",example:"She uses glue to stick the picture in her book.",translation:"പശ",ipa:"/ɡluː/"},
-  {word:"backpack",pos:"n.",meaning:"a bag carried on the back, used by students",example:"He puts his books in his backpack every morning.",translation:"ബാക്ക്പാക്ക്",ipa:"/ˈbækpæk/"},
-  {word:"desk",pos:"n.",meaning:"a table used for reading, writing, or studying",example:"She sits at her desk and opens her book.",translation:"മേശ",ipa:"/dɛsk/"},
-  {word:"blackboard",pos:"n.",meaning:"a dark board on the wall that teachers write on with chalk",example:"The teacher writes the answer on the blackboard.",translation:"ബ്ലാക്ക്ബോർഡ്",ipa:"/ˈblækbɔːrd/"},
-  {word:"chalk",pos:"n.",meaning:"a white or colored stick used to write on a blackboard",example:"The teacher uses white chalk to write numbers.",translation:"ചോക്ക്",ipa:"/tʃɔːk/"},
-  {word:"marker",pos:"n.",meaning:"a thick pen used to write or draw with bright color",example:"She writes the title with a blue marker.",translation:"മാർക്കർ",ipa:"/ˈmɑːrkər/"},
-  {word:"textbook",pos:"n.",meaning:"a book used in school to study a subject",example:"He reads the math textbook at home.",translation:"പാഠപുസ്തകം",ipa:"/ˈtɛkstbʊk/"},
-  {word:"folder",pos:"n.",meaning:"a flat cover used to hold and organize papers",example:"She keeps her worksheets in a yellow folder.",translation:"ഫോൾഡർ",ipa:"/ˈfoʊldər/"},
-  {word:"whiteboard",pos:"n.",meaning:"a white board used for writing with special markers",example:"The teacher draws a map on the whiteboard.",translation:"വൈറ്റ്ബോർഡ്",ipa:"/ˈwaɪtbɔːrd/"},
-  {word:"sharpener",pos:"n.",meaning:"a small tool used to make a pencil sharp",example:"He uses a sharpener before the drawing class.",translation:"ഷാർപ്പനർ",ipa:"/ˈʃɑːrpənər/"},
-  {word:"stapler",pos:"n.",meaning:"a device that joins papers together with small metal pins",example:"She uses a stapler to join her project pages.",translation:"സ്റ്റേപ്ലർ",ipa:"/ˈsteɪplər/"},
-  {word:"timetable",pos:"n.",meaning:"a list that shows the schedule of classes at school",example:"He looks at the timetable to find his next class.",translation:"സമയപ്പട്ടിക",ipa:"/ˈtaɪmteɪbəl/"},
-  {word:"classroom",pos:"n.",meaning:"a room in a school where students have lessons",example:"The students sit quietly in the classroom.",translation:"ക്ലാസ്മുറി",ipa:"/ˈklæsruːm/"},
-  {word:"globe",pos:"n.",meaning:"a round model of the Earth used in geography lessons",example:"She spins the globe and finds her country.",translation:"ഭൂഗോളം",ipa:"/ɡloʊb/"},
-  {word:"atlas",pos:"n.",meaning:"a book of maps used in school",example:"He opens the atlas to find the capital city.",translation:"ഭൂപടഗ്രന്ഥം",ipa:"/ˈætləs/"},
-  {word:"calculator",pos:"n.",meaning:"a small electronic device used for math problems",example:"She uses a calculator to add big numbers.",translation:"കാൽക്കുലേറ്റർ",ipa:"/ˈkælkjʊleɪtər/"},
-  {word:"projector",pos:"n.",meaning:"a machine that shows pictures or videos on a wall or screen",example:"The teacher uses a projector to show the lesson.",translation:"പ്രൊജക്ടർ",ipa:"/prəˈdʒɛktər/"},
-  {word:"bookshelf",pos:"n.",meaning:"a shelf or piece of furniture used to store books",example:"He puts his textbook back on the bookshelf.",translation:"പുസ്തക ഷെൽഫ്",ipa:"/ˈbʊkʃɛlf/"},
-  {word:"worksheet",pos:"n.",meaning:"a sheet of paper with exercises or questions for students",example:"The teacher gives each student a worksheet to complete.",translation:"വർക്ക്ഷീറ്റ്",ipa:"/ˈwɜːrkʃiːt/"},
-  {word:"locker",pos:"n.",meaning:"a small metal box at school where students keep their things",example:"She puts her backpack in her locker before class.",translation:"ലോക്കർ",ipa:"/ˈlɒkər/"},
-  {word:"compass",pos:"n.",meaning:"a tool used to draw circles in geometry class",example:"He uses a compass to draw a perfect circle.",translation:"കമ്പാസ്",ipa:"/ˈkʌmpəs/"},
-  {word:"diary",pos:"n.",meaning:"a small book where students write notes or daily tasks",example:"She writes her homework tasks in her diary.",translation:"ഡയറി",ipa:"/ˈdaɪəri/"},
-  {word:"cloakroom",pos:"n.",meaning:"a room near a school entrance where students hang coats and bags",example:"He hangs his jacket in the cloakroom before class.",translation:"ക്ലോക്ക്റൂം",ipa:"/ˈkloʊkruːm/"},
-  {word:"report card",pos:"n.",meaning:"a paper that shows a student's grades and progress at school",example:"She shows her report card to her parents.",translation:"റിപ്പോർട്ട് കാർഡ്",ipa:"/rɪˈpɔːrt kɑːrd/"},
-  {word:"flashcard",pos:"n.",meaning:"a small card with a word or picture used for learning",example:"He studies new words using flashcards every evening.",translation:"ഫ്ലാഷ്കാർഡ്",ipa:"/ˈflæʃkɑːrd/"},
-  {word:"ball",pos:"n.",meaning:"a round object used in many sports and games",example:"She kicks the ball into the goal.",translation:"പന്ത്",ipa:"/bɔːl/"},
-  {word:"team",pos:"n.",meaning:"a group of people who play a sport together",example:"Our team wins every game.",translation:"ടീം",ipa:"/tiːm/"},
-  {word:"goal",pos:"n.",meaning:"the point scored when a ball enters the net in sports",example:"He scores a goal in the match.",translation:"ഗോൾ",ipa:"/ɡoʊl/"},
-  {word:"race",pos:"n.",meaning:"a competition to see who is fastest",example:"She wins the race at school.",translation:"ഓട്ടമത്സരം",ipa:"/reɪs/"},
-  {word:"game",pos:"n.",meaning:"an activity people do for fun or competition",example:"We play a game after school.",translation:"കളി",ipa:"/ɡeɪm/"},
-  {word:"sport",pos:"n.",meaning:"a physical activity done for exercise or competition",example:"Football is a popular sport.",translation:"കായികം",ipa:"/spɔːrt/"},
-  {word:"hobby",pos:"n.",meaning:"something you enjoy doing in your free time",example:"Reading is my favourite hobby.",translation:"ഹോബി",ipa:"/ˈhɒbi/"},
-  {word:"fishing",pos:"n.",meaning:"the activity of catching fish for fun or food",example:"Dad enjoys fishing at the river.",translation:"മത്സ്യബന്ധനം",ipa:"/ˈfɪʃɪŋ/"},
-  {word:"cycling",pos:"n.",meaning:"riding a bicycle as sport or hobby",example:"Cycling is good exercise every morning.",translation:"സൈക്കിൾ ചവിട്ടൽ",ipa:"/ˈsaɪklɪŋ/"},
-  {word:"running",pos:"n.",meaning:"moving fast on foot as exercise or sport",example:"Running every day keeps you healthy.",translation:"ഓട്ടം",ipa:"/ˈrʌnɪŋ/"},
-  {word:"tennis",pos:"n.",meaning:"a sport where players hit a ball over a net with a racket",example:"She plays tennis on weekends.",translation:"ടെന്നീസ്",ipa:"/ˈtenɪs/"},
-  {word:"football",pos:"n.",meaning:"a team sport played by kicking a ball into a goal",example:"The boys play football in the park.",translation:"ഫുട്ബോൾ",ipa:"/ˈfʊtbɔːl/"},
-  {word:"basketball",pos:"n.",meaning:"a sport where players throw a ball through a high hoop",example:"He practices basketball after school.",translation:"ബാസ്ക്കറ്റ്ബോൾ",ipa:"/ˈbɑːskɪtbɔːl/"},
-  {word:"swimming",pos:"n.",meaning:"the sport or activity of moving through water",example:"Swimming is her favourite hobby.",translation:"നീന്തൽ",ipa:"/ˈswɪmɪŋ/"},
-  {word:"yoga",pos:"n.",meaning:"a gentle exercise using body positions and breathing",example:"She does yoga every morning.",translation:"യോഗ",ipa:"/ˈjoʊɡə/"},
-  {word:"gym",pos:"n.",meaning:"a place where people go to exercise and do sports",example:"He goes to the gym on Monday.",translation:"ജിം",ipa:"/dʒɪm/"},
-  {word:"coach",pos:"n.",meaning:"a person who trains people in a sport",example:"The coach helps us play better.",translation:"പരിശീലകൻ",ipa:"/koʊtʃ/"},
-  {word:"match",pos:"n.",meaning:"a game or competition between two teams or players",example:"We watch a football match on TV.",translation:"മത്സരം",ipa:"/mætʃ/"},
-  {word:"player",pos:"n.",meaning:"a person who takes part in a sport or game",example:"She is a great tennis player.",translation:"കളിക്കാരൻ",ipa:"/ˈpleɪər/"},
-  {word:"score",pos:"n.",meaning:"the number of points in a game or match",example:"The score is two to one.",translation:"സ്കോർ",ipa:"/skɔːr/"},
-  {word:"win",pos:"v.",meaning:"to be the best or first in a competition",example:"We want to win the game today.",translation:"ജയിക്കുക",ipa:"/wɪn/"},
-  {word:"practice",pos:"v.",meaning:"to do something many times to get better at it",example:"He practices guitar every evening.",translation:"പരിശീലിക്കുക",ipa:"/ˈpræktɪs/"},
-  {word:"collect",pos:"v.",meaning:"to gather things you like as a hobby",example:"She likes to collect stamps.",translation:"ശേഖരിക്കുക",ipa:"/kəˈlekt/"},
-  {word:"sketch",pos:"v.",meaning:"to draw pictures quickly as a hobby",example:"He likes to sketch animals in his book.",translation:"സ്കെച്ച് ചെയ്യുക",ipa:"/sketʃ/"},
-  {word:"knit",pos:"v.",meaning:"to make clothes using wool and needles as a hobby",example:"Grandma loves to knit warm sweaters.",translation:"നൂൽ നെയ്യുക",ipa:"/nɪt/"},
-  {word:"hike",pos:"v.",meaning:"to walk a long way in nature for exercise or fun",example:"They hike in the forest every Sunday.",translation:"കാൽനടയാത്ര ചെയ്യുക",ipa:"/haɪk/"},
-  {word:"active",pos:"adj.",meaning:"doing a lot of physical movement or sports",example:"She is very active and loves sports.",translation:"സജീവമായ",ipa:"/ˈæktɪv/"},
-  {word:"outdoor",pos:"adj.",meaning:"happening or done outside in the open air",example:"Football is a fun outdoor sport.",translation:"പുറത്ത്",ipa:"/ˈaʊtdɔːr/"},
-  {word:"champion",pos:"n.",meaning:"the winner of a sports competition or tournament",example:"She is the swimming champion this year.",translation:"ചാമ്പ്യൻ",ipa:"/ˈtʃæmpiən/"},
-  {word:"angry",pos:"adj.",meaning:"feeling strong displeasure or annoyance",example:"She is angry because her toy is broken.",translation:"ദേഷ്യമുള്ള",ipa:"/ˈæŋ.ɡri/"},
-  {word:"excited",pos:"adj.",meaning:"feeling very happy and enthusiastic about something",example:"He is excited about his birthday party.",translation:"ആവേശഭരിതമായ",ipa:"/ɪkˈsaɪ.tɪd/"},
-  {word:"scared",pos:"adj.",meaning:"feeling fear or fright",example:"The little boy is scared of the dark.",translation:"ഭയപ്പെട്ട",ipa:"/skɛrd/"},
-  {word:"bored",pos:"adj.",meaning:"feeling uninterested and not entertained",example:"She is bored because there is nothing to do.",translation:"മടുപ്പ് തോന്നുന്ന",ipa:"/bɔːrd/"},
-  {word:"calm",pos:"adj.",meaning:"feeling peaceful and not worried",example:"Take a deep breath and stay calm.",translation:"ശാന്തമായ",ipa:"/kɑːm/"},
-  {word:"shy",pos:"adj.",meaning:"feeling nervous or uncomfortable around other people",example:"The shy girl hides behind her mother.",translation:"ലജ്ജാശീലമുള്ള",ipa:"/ʃaɪ/"},
-  {word:"proud",pos:"adj.",meaning:"feeling very pleased about something you did well",example:"I am proud of my good test score.",translation:"അഭിമാനിക്കുന്ന",ipa:"/praʊd/"},
-  {word:"nervous",pos:"adj.",meaning:"feeling worried or anxious about something",example:"He is nervous before his first day at school.",translation:"അസ്വസ്ഥമായ",ipa:"/ˈnɜː.vəs/"},
-  {word:"glad",pos:"adj.",meaning:"feeling pleased or joyful",example:"I am glad you came to my house today.",translation:"സന്തുഷ്ടമായ",ipa:"/ɡlæd/"},
-  {word:"upset",pos:"adj.",meaning:"feeling unhappy or troubled",example:"She is upset because she lost her bag.",translation:"വിഷമം തോന്നുന്ന",ipa:"/ʌpˈsɛt/"},
-  {word:"lonely",pos:"adj.",meaning:"feeling sad because you are alone",example:"The dog looks lonely without its owner.",translation:"ഏകാന്തത അനുഭവിക്കുന്ന",ipa:"/ˈloʊn.li/"},
-  {word:"joy",pos:"n.",meaning:"a feeling of great happiness",example:"The children feel joy when they play outside.",translation:"സന്തോഷം",ipa:"/dʒɔɪ/"},
-  {word:"fear",pos:"n.",meaning:"an unpleasant feeling caused by danger or something unknown",example:"She has a great fear of spiders.",translation:"ഭയം",ipa:"/fɪr/"},
-  {word:"surprise",pos:"n.",meaning:"a feeling caused by something unexpected",example:"The gift was a big surprise for him.",translation:"അതിശയം",ipa:"/səˈpraɪz/"},
-  {word:"mood",pos:"n.",meaning:"the way you feel at a particular time",example:"She is in a good mood today.",translation:"മനോഭാവം",ipa:"/muːd/"},
-  {word:"feel",pos:"v.",meaning:"to experience an emotion or sensation",example:"I feel happy when I see my friends.",translation:"അനുഭവിക്കുക",ipa:"/fiːl/"},
-  {word:"worry",pos:"v.",meaning:"to feel anxious or troubled about something",example:"Do not worry, everything will be okay.",translation:"ആശങ്കപ്പെടുക",ipa:"/ˈwɜː.ri/"},
-  {word:"smile",pos:"v.",meaning:"to show happiness by curving your lips upward",example:"She smiles when she sees her grandmother.",translation:"പുഞ്ചിരിക്കുക",ipa:"/smaɪl/"},
-  {word:"hate",pos:"v.",meaning:"to strongly dislike something or someone",example:"He hates waking up early in the morning.",translation:"വെറുക്കുക",ipa:"/heɪt/"},
-  {word:"enjoy",pos:"v.",meaning:"to feel pleasure or happiness from something",example:"I enjoy listening to music after school.",translation:"ആസ്വദിക്കുക",ipa:"/ɪnˈdʒɔɪ/"},
-  {word:"miss",pos:"v.",meaning:"to feel sad because someone or something is not there",example:"I miss my grandmother very much.",translation:"കൊതിക്കുക / നഷ്ടബോധം തോന്നുക",ipa:"/mɪs/"},
-  {word:"hope",pos:"v.",meaning:"to want something good to happen",example:"I hope we have sunny weather tomorrow.",translation:"പ്രതീക്ഷിക്കുക",ipa:"/hoʊp/"},
-  {word:"emotion",pos:"n.",meaning:"a strong feeling such as happiness or sadness",example:"Crying is one way to show emotion.",translation:"വികാരം",ipa:"/ɪˈmoʊ.ʃən/"},
-  {word:"feeling",pos:"n.",meaning:"something you experience in your heart or mind",example:"I have a warm feeling when I am with my family.",translation:"അനുഭൂതി",ipa:"/ˈfiː.lɪŋ/"},
-  {word:"embarrassed",pos:"adj.",meaning:"feeling uncomfortable or ashamed in front of others",example:"He is embarrassed when he makes a mistake in class.",translation:"ലജ്ജിക്കുന്ന",ipa:"/ɪmˈbær.əst/"},
-  {word:"disgusted",pos:"adj.",meaning:"feeling a strong sense of dislike or sickness toward something",example:"She is disgusted by the bad smell in the room.",translation:"അറപ്പ് തോന്നുന്ന",ipa:"/dɪsˈɡʌs.tɪd/"},
-  {word:"jealous",pos:"adj.",meaning:"feeling unhappy because someone else has what you want",example:"He is jealous of his brother's new bicycle.",translation:"അസൂയപ്പെടുന്ന",ipa:"/ˈdʒel.əs/"},
-  {word:"grateful",pos:"adj.",meaning:"feeling thankful for something good someone did for you",example:"I am grateful for all your help today.",translation:"നന്ദിയുള്ള",ipa:"/ˈɡreɪt.fəl/"},
-  {word:"confused",pos:"adj.",meaning:"feeling unable to understand something clearly",example:"She is confused about the new homework task.",translation:"ആശയക്കുഴപ്പത്തിലായ",ipa:"/kənˈfjuːzd/"},
-  {word:"cheerful",pos:"adj.",meaning:"feeling and showing happiness and positivity",example:"He is always cheerful and makes everyone smile.",translation:"സന്തോഷഭരിതമായ",ipa:"/ˈtʃɪr.fəl/"},
-  {word:"ruler",pos:"n.",meaning:"A flat tool used to draw straight lines and measure length",example:"Use a ruler to draw a straight line.",translation:"അളവുകോൽ",ipa:"ˈruːlər"}],
+],
 
 // ─────────────────────────────────────────────────────────────
 // A2 - ELEMENTARY (300 words)
@@ -2059,691 +1337,7 @@ A2: [
   {word:"wide",pos:"adj.",meaning:"Having a large distance between sides",example:"This road is very wide.",translation:"വിശാലമായ"},
   {word:"wish",pos:"v.",meaning:"To want something to be true",example:"I wish you good luck.",translation:"ആഗ്രഹിക്കുക"},
   {word:"wonderful",pos:"adj.",meaning:"Extremely good; marvelous",example:"What a wonderful idea!",translation:"അത്ഭുതകരം"},
-,
-  {word:"receipt",pos:"n.",meaning:"a paper that shows what you bought and how much you paid",example:"The cashier gave me a receipt after I paid for my groceries.",translation:"രസീത്",ipa:"/rɪˈsiːt/"},
-  {word:"discount",pos:"n.",meaning:"a reduction in the original price of something",example:"The shop gave a 20% discount on all shoes this week.",translation:"കിഴിവ്",ipa:"/ˈdɪskaʊnt/"},
-  {word:"wallet",pos:"n.",meaning:"a small flat case used to keep money and cards",example:"He kept his credit card in his wallet.",translation:"വാലറ്റ്",ipa:"/ˈwɒlɪt/"},
-  {word:"cash",pos:"n.",meaning:"physical money in the form of coins or banknotes",example:"She paid for the dress with cash instead of a card.",translation:"പണം",ipa:"/kæʃ/"},
-  {word:"afford",pos:"v.",meaning:"to have enough money to buy something",example:"I cannot afford to buy a new phone right now.",translation:"താങ്ങാൻ കഴിയുക",ipa:"/əˈfɔːrd/"},
-  {word:"refund",pos:"n.",meaning:"money given back when you return a product",example:"She got a full refund because the jacket was damaged.",translation:"പണം തിരിച്ചു നൽകൽ",ipa:"/ˈriːfʌnd/"},
-  {word:"purchase",pos:"v.",meaning:"to buy something",example:"He purchased a new bag from the market.",translation:"വാങ്ങുക",ipa:"/ˈpɜːrtʃəs/"},
-  {word:"bargain",pos:"n.",meaning:"something bought at a lower price than usual",example:"Those shoes were a real bargain at only five dollars.",translation:"വിലക്കുറവിൽ കിട്ടിയ സാധനം",ipa:"/ˈbɑːrɡɪn/"},
-  {word:"checkout",pos:"n.",meaning:"the place in a shop where you pay for your items",example:"There was a long queue at the checkout in the supermarket.",translation:"ചെക്കൗട്ട്",ipa:"/ˈtʃekaʊt/"},
-  {word:"aisle",pos:"n.",meaning:"a passage between rows of shelves in a shop",example:"The bread is in aisle three of the grocery store.",translation:"ഇടനാഴി",ipa:"/aɪl/"},
-  {word:"trolley",pos:"n.",meaning:"a large metal basket on wheels used for shopping",example:"She filled her trolley with vegetables and milk.",translation:"ട്രോളി",ipa:"/ˈtrɒli/"},
-  {word:"basket",pos:"n.",meaning:"a small container used to carry items while shopping",example:"He picked up a basket at the entrance of the store.",translation:"കൊട്ട",ipa:"/ˈbɑːskɪt/"},
-  {word:"label",pos:"n.",meaning:"a small piece of paper on a product showing its price or information",example:"Always check the label before you buy food.",translation:"ലേബൽ",ipa:"/ˈleɪbəl/"},
-  {word:"currency",pos:"n.",meaning:"the type of money used in a country",example:"The currency in Japan is the yen.",translation:"നാണയം",ipa:"/ˈkʌrənsi/"},
-  {word:"coin",pos:"n.",meaning:"a small round piece of metal used as money",example:"She found a coin on the floor near the counter.",translation:"നാണയം",ipa:"/kɔɪn/"},
-  {word:"budget",pos:"n.",meaning:"a plan for how much money you will spend",example:"We have a small budget for food this month.",translation:"ബജറ്റ്",ipa:"/ˈbʌdʒɪt/"},
-  {word:"expensive",pos:"adj.",meaning:"costing a lot of money",example:"That restaurant is too expensive for us to eat at every day.",translation:"വിലകൂടിയ",ipa:"/ɪkˈspensɪv/"},
-  {word:"sale",pos:"n.",meaning:"a time when a shop sells goods at lower prices",example:"I bought three shirts during the summer sale.",translation:"സെയിൽ",ipa:"/seɪl/"},
-  {word:"store",pos:"n.",meaning:"a place where goods are sold to customers",example:"There is a new clothing store near my house.",translation:"കട",ipa:"/stɔːr/"},
-  {word:"shelf",pos:"n.",meaning:"a flat board fixed to a wall where things are placed in a shop",example:"The new products are on the top shelf.",translation:"ഷെൽഫ്",ipa:"/ʃelf/"},
-  {word:"exchange",pos:"v.",meaning:"to give something back and get a different one instead",example:"Can I exchange this shirt for a larger size?",translation:"കൈമാറുക",ipa:"/ɪksˈtʃeɪndʒ/"},
-  {word:"savings",pos:"n.",meaning:"money that you have kept and not spent",example:"She used her savings to buy a laptop.",translation:"സമ്പാദ്യം",ipa:"/ˈseɪvɪŋz/"},
-  {word:"invoice",pos:"n.",meaning:"an official paper listing goods bought and their costs",example:"The company sent an invoice for the delivery of goods.",translation:"ഇൻവോയ്സ്",ipa:"/ˈɪnvɔɪs/"},
-  {word:"vendor",pos:"n.",meaning:"a person who sells things, often in a market",example:"The vendor at the market was selling fresh fruit.",translation:"കച്ചവടക്കാരൻ",ipa:"/ˈvendər/"},
-  {word:"counter",pos:"n.",meaning:"a flat surface in a shop where goods are shown or payments are made",example:"She placed her items on the counter to be scanned.",translation:"കൗണ്ടർ",ipa:"/ˈkaʊntər/"},
-  {word:"stock",pos:"n.",meaning:"the goods that a shop has available to sell",example:"Sorry, that item is out of stock right now.",translation:"സ്റ്റോക്ക്",ipa:"/stɒk/"},
-  {word:"borrow",pos:"v.",meaning:"to take money from someone with the plan to give it back",example:"Can I borrow ten dollars until Friday?",translation:"കടം വാങ്ങുക",ipa:"/ˈbɒrəʊ/"},
-  {word:"fee",pos:"n.",meaning:"an amount of money paid for a service",example:"There is a small fee for using the delivery service.",translation:"ഫീസ്",ipa:"/fiː/"},
-  {word:"bill",pos:"n.",meaning:"a piece of paper showing how much money you owe",example:"The waiter brought the bill at the end of the meal.",translation:"ബിൽ",ipa:"/bɪl/"},
-  {word:"donate",pos:"v.",meaning:"to give money or goods to help others",example:"She decided to donate some money to a local charity.",translation:"സംഭാവന നൽകുക",ipa:"/doʊˈneɪt/"},
-  {word:"passport",pos:"n.",meaning:"an official document that proves who you are when you travel to another country",example:"Please show your passport at the immigration desk.",translation:"പാസ്‌പോർട്ട്",ipa:"/ˈpɑːspɔːt/"},
-  {word:"boarding",pos:"n.",meaning:"the process of getting onto a plane",example:"Boarding for our flight starts at 6 o'clock.",translation:"ബോർഡിംഗ്",ipa:"/ˈbɔːdɪŋ/"},
-  {word:"luggage",pos:"n.",meaning:"the bags and suitcases you take when you travel",example:"I have two pieces of luggage for my trip.",translation:"യാത്രാ സാധനങ്ങൾ",ipa:"/ˈlʌɡɪdʒ/"},
-  {word:"flight",pos:"n.",meaning:"a journey made by plane",example:"My flight to London takes nine hours.",translation:"വിമാനയാത്ര",ipa:"/flaɪt/"},
-  {word:"runway",pos:"n.",meaning:"the long strip of ground where planes take off and land",example:"The plane moved slowly along the runway before takeoff.",translation:"റൺവേ",ipa:"/ˈrʌnweɪ/"},
-  {word:"terminal",pos:"n.",meaning:"the building at an airport where passengers arrive and leave",example:"We waited in the terminal for two hours.",translation:"ടെർമിനൽ",ipa:"/ˈtɜːmɪnl/"},
-  {word:"check-in",pos:"n.",meaning:"the process of confirming your arrival at an airport or hotel",example:"Hotel check-in time is at three in the afternoon.",translation:"ചെക്ക്-ഇൻ",ipa:"/ˈtʃek ɪn/"},
-  {word:"suitcase",pos:"n.",meaning:"a large bag with a hard or soft side used for carrying clothes when travelling",example:"She packed her suitcase the night before the trip.",translation:"സൂട്ട്കേസ്",ipa:"/ˈsuːtkeɪs/"},
-  {word:"reservation",pos:"n.",meaning:"an arrangement to keep something for you, like a hotel room or seat",example:"I made a reservation at the hotel for three nights.",translation:"റിസർവേഷൻ",ipa:"/ˌrezəˈveɪʃn/"},
-  {word:"lobby",pos:"n.",meaning:"the entrance area inside a hotel or large building",example:"We met our friends in the hotel lobby.",translation:"ലോബി",ipa:"/ˈlɒbi/"},
-  {word:"departure",pos:"n.",meaning:"the act of leaving a place, especially to start a journey",example:"The departure gate is on the second floor.",translation:"പ്രയാണം",ipa:"/dɪˈpɑːtʃə/"},
-  {word:"arrival",pos:"n.",meaning:"the act of reaching a place after a journey",example:"We waited at the arrival hall to meet our relatives.",translation:"വരവ്",ipa:"/əˈraɪvl/"},
-  {word:"customs",pos:"n.",meaning:"the place at an airport where officials check what you are bringing into the country",example:"We had to open our bags at customs.",translation:"കസ്റ്റംസ്",ipa:"/ˈkʌstəmz/"},
-  {word:"ticket",pos:"n.",meaning:"a printed paper that shows you have paid to travel or enter somewhere",example:"I bought my plane ticket online last week.",translation:"ടിക്കറ്റ്",ipa:"/ˈtɪkɪt/"},
-  {word:"gate",pos:"n.",meaning:"the door or exit in an airport where you get on your plane",example:"Please go to gate number seven for boarding.",translation:"ഗേറ്റ്",ipa:"/ɡeɪt/"},
-  {word:"room",pos:"n.",meaning:"a separate area inside a building used for sleeping or living",example:"Our hotel room had a great view of the sea.",translation:"മുറി",ipa:"/ruːm/"},
-  {word:"pillow",pos:"n.",meaning:"a soft object you rest your head on when sleeping",example:"The hotel gave us two pillows each.",translation:"തലയണ",ipa:"/ˈpɪləʊ/"},
-  {word:"towel",pos:"n.",meaning:"a piece of thick cloth used for drying yourself",example:"Fresh towels are provided every morning at the hotel.",translation:"ടവ്വൽ",ipa:"/ˈtaʊəl/"},
-  {word:"delay",pos:"n.",meaning:"when something happens later than expected",example:"There was a two-hour delay because of bad weather.",translation:"വൈകിപ്പിക്കൽ",ipa:"/dɪˈleɪ/"},
-  {word:"security",pos:"n.",meaning:"the area at an airport where your bags are checked for safety",example:"Please remove your shoes before going through security.",translation:"സുരക്ഷ",ipa:"/sɪˈkjʊərɪti/"},
-  {word:"map",pos:"n.",meaning:"a picture that shows roads, cities, or places to help you find your way",example:"We used a map to find the hotel from the airport.",translation:"ഭൂപടം",ipa:"/mæp/"},
-  {word:"taxi",pos:"n.",meaning:"a car with a driver that you pay to take you somewhere",example:"We took a taxi from the airport to the hotel.",translation:"ടാക്സി",ipa:"/ˈtæksi/"},
-  {word:"book",pos:"v.",meaning:"to arrange to use something in the future, like a room or seat",example:"I need to book a hotel room for next weekend.",translation:"ബുക്ക് ചെയ്യുക",ipa:"/bʊk/"},
-  {word:"land",pos:"v.",meaning:"when a plane comes down and touches the ground at the end of a flight",example:"Our plane will land at midnight.",translation:"ഇറങ്ങുക",ipa:"/lænd/"},
-  {word:"pack",pos:"v.",meaning:"to put things into a bag or suitcase before travelling",example:"Don't forget to pack your toothbrush.",translation:"പൊതിയുക",ipa:"/pæk/"},
-  {word:"lost",pos:"adj.",meaning:"not knowing where you are or unable to find something",example:"We were lost in the airport and could not find our gate.",translation:"വഴിതെറ്റിയ",ipa:"/lɒst/"},
-  {word:"direct",pos:"adj.",meaning:"going from one place to another without stopping",example:"We took a direct flight to avoid changing planes.",translation:"നേരിട്ടുള്ള",ipa:"/dɪˈrekt/"},
-  {word:"nearby",pos:"adv.",meaning:"not far away; close to a place",example:"There is a pharmacy nearby the hotel entrance.",translation:"സമീപത്ത്",ipa:"/ˌnɪəˈbaɪ/"},
-  {word:"abroad",pos:"adv.",meaning:"in or to a foreign country",example:"This is my first time travelling abroad alone.",translation:"വിദേശത്ത്",ipa:"/əˈbrɔːd/"},
-  {word:"overnight",pos:"adj.",meaning:"happening during the night or lasting through the night",example:"We took an overnight train and arrived in the morning.",translation:"രാത്രി മുഴുവൻ",ipa:"/ˌəʊvəˈnaɪt/"},
-  {word:"cloud",pos:"n.",meaning:"a white or grey mass of water in the sky",example:"There is a big cloud in the sky today.",translation:"മേഘം",ipa:"/klaʊd/"},
-  {word:"rain",pos:"n.",meaning:"water that falls from clouds in drops",example:"The rain started in the afternoon.",translation:"മഴ",ipa:"/reɪn/"},
-  {word:"snow",pos:"n.",meaning:"soft white frozen water that falls from the sky",example:"Children love to play in the snow.",translation:"മഞ്ഞ്",ipa:"/snəʊ/"},
-  {word:"wind",pos:"n.",meaning:"air that moves across the earth",example:"The wind is very cold today.",translation:"കാറ്റ്",ipa:"/wɪnd/"},
-  {word:"sunny",pos:"adj.",meaning:"having a lot of bright light from the sun",example:"It is a sunny day, so let us go outside.",translation:"വെയിലുള്ള",ipa:"/ˈsʌni/"},
-  {word:"cloudy",pos:"adj.",meaning:"having many clouds in the sky",example:"The sky is very cloudy this morning.",translation:"മേഘാവൃതമായ",ipa:"/ˈklaʊdi/"},
-  {word:"rainy",pos:"adj.",meaning:"having a lot of rain",example:"I do not like rainy days in winter.",translation:"മഴക്കാലമായ",ipa:"/ˈreɪni/"},
-  {word:"cold",pos:"adj.",meaning:"having a very low temperature",example:"It is very cold outside today.",translation:"തണുത്ത",ipa:"/kəʊld/"},
-  {word:"hot",pos:"adj.",meaning:"having a very high temperature",example:"The summer here is very hot.",translation:"ചൂടുള്ള",ipa:"/hɒt/"},
-  {word:"warm",pos:"adj.",meaning:"having a pleasant, fairly high temperature",example:"The weather is warm and nice in spring.",translation:"ഊഷ്മളമായ",ipa:"/wɔːm/"},
-  {word:"cool",pos:"adj.",meaning:"slightly cold in a pleasant way",example:"The evening air is cool and fresh.",translation:"തണുപ്പുള്ള",ipa:"/kuːl/"},
-  {word:"fog",pos:"n.",meaning:"thick cloud close to the ground that makes it hard to see",example:"There is heavy fog on the road this morning.",translation:"മൂടൽ മഞ്ഞ്",ipa:"/fɒɡ/"},
-  {word:"foggy",pos:"adj.",meaning:"full of fog, difficult to see clearly",example:"Driving is dangerous on a foggy morning.",translation:"മൂടൽ മഞ്ഞുള്ള",ipa:"/ˈfɒɡi/"},
-  {word:"storm",pos:"n.",meaning:"very bad weather with strong wind and rain",example:"A big storm hit the city last night.",translation:"കൊടുങ്കാറ്റ്",ipa:"/stɔːm/"},
-  {word:"thunder",pos:"n.",meaning:"the loud noise in the sky during a storm",example:"I heard thunder and saw lightning last night.",translation:"ഇടിമുഴക്കം",ipa:"/ˈθʌndə/"},
-  {word:"lightning",pos:"n.",meaning:"a bright flash of light in the sky during a storm",example:"The lightning made the whole sky bright.",translation:"മിന്നൽ",ipa:"/ˈlaɪtnɪŋ/"},
-  {word:"temperature",pos:"n.",meaning:"how hot or cold something is, measured in degrees",example:"The temperature today is 35 degrees.",translation:"താപനില",ipa:"/ˈtemprɪtʃə/"},
-  {word:"forecast",pos:"n.",meaning:"a report about what the weather will be like",example:"The forecast says it will rain tomorrow.",translation:"കാലാവസ്ഥ പ്രവചനം",ipa:"/ˈfɔːkɑːst/"},
-  {word:"season",pos:"n.",meaning:"one of the four parts of the year: spring, summer, autumn, winter",example:"My favourite season is summer.",translation:"ഋതു",ipa:"/ˈsiːzən/"},
-  {word:"climate",pos:"n.",meaning:"the typical weather conditions of a place over time",example:"This country has a warm climate all year.",translation:"കാലാവസ്ഥ",ipa:"/ˈklaɪmɪt/"},
-  {word:"flood",pos:"n.",meaning:"when water covers land that is normally dry",example:"Heavy rain caused a flood in the village.",translation:"വെള്ളപ്പൊക്കം",ipa:"/flʌd/"},
-  {word:"drought",pos:"n.",meaning:"a long period of time with no rain",example:"The drought made it hard to grow food.",translation:"വരൾച്ച",ipa:"/draʊt/"},
-  {word:"humidity",pos:"n.",meaning:"the amount of water in the air",example:"The humidity is very high in summer here.",translation:"ആർദ്രത",ipa:"/hjuːˈmɪdɪti/"},
-  {word:"breeze",pos:"n.",meaning:"a light and gentle wind",example:"A cool breeze blew through the open window.",translation:"മന്ദമാരുതൻ",ipa:"/briːz/"},
-  {word:"hail",pos:"n.",meaning:"small balls of frozen rain that fall from the sky",example:"The hail hit the roof very loudly.",translation:"ആലിപ്പഴം",ipa:"/heɪl/"},
-  {word:"ice",pos:"n.",meaning:"water that has frozen and become solid",example:"Be careful, there is ice on the road.",translation:"മഞ്ഞുകട്ട",ipa:"/aɪs/"},
-  {word:"rainbow",pos:"n.",meaning:"a curved band of colours in the sky after rain",example:"We saw a beautiful rainbow after the rain.",translation:"മഴവില്ല്",ipa:"/ˈreɪnbəʊ/"},
-  {word:"overcast",pos:"adj.",meaning:"when the sky is completely covered with grey clouds",example:"The sky is overcast and it may rain soon.",translation:"മേഘം മൂടിയ",ipa:"/ˈəʊvəkɑːst/"},
-  {word:"freeze",pos:"v.",meaning:"to become very cold and turn into ice",example:"The water in the pond will freeze tonight.",translation:"മരവിക്കുക",ipa:"/friːz/"},
-  {word:"wet",pos:"adj.",meaning:"covered with water or another liquid",example:"My clothes are wet because of the rain.",translation:"നനഞ്ഞ",ipa:"/wet/"},
-  {word:"doctor",pos:"n.",meaning:"a person trained to treat sick people",example:"The doctor checked my throat and ears.",translation:"ഡോക്ടർ",ipa:"/ˈdɒk.tər/"},
-  {word:"nurse",pos:"n.",meaning:"a person who cares for sick people in a hospital",example:"The nurse gave me some medicine.",translation:"നഴ്സ്",ipa:"/nɜːrs/"},
-  {word:"medicine",pos:"n.",meaning:"a substance you take to feel better when you are sick",example:"I take this medicine every morning.",translation:"മരുന്ന്",ipa:"/ˈmed.ɪ.sɪn/"},
-  {word:"hospital",pos:"n.",meaning:"a large building where sick or injured people are treated",example:"She went to the hospital after the accident.",translation:"ആശുപത്രി",ipa:"/ˈhɒs.pɪ.t əl/"},
-  {word:"pill",pos:"n.",meaning:"a small, solid piece of medicine you swallow",example:"Take one pill after each meal.",translation:"ഗുളിക",ipa:"/pɪl/"},
-  {word:"fever",pos:"n.",meaning:"a body temperature that is higher than normal",example:"He stayed home because he had a fever.",translation:"പനി",ipa:"/ˈfiː.vər/"},
-  {word:"cough",pos:"n.",meaning:"a sudden pushing of air from your throat",example:"I have a bad cough this week.",translation:"ചുമ",ipa:"/kɒf/"},
-  {word:"pain",pos:"n.",meaning:"an unpleasant feeling in part of your body",example:"I feel a sharp pain in my back.",translation:"വേദന",ipa:"/peɪn/"},
-  {word:"stomachache",pos:"n.",meaning:"a pain or discomfort in your stomach area",example:"She could not eat because of a stomachache.",translation:"വയറുവേദന",ipa:"/ˈstʌm.ək.eɪk/"},
-  {word:"headache",pos:"n.",meaning:"a pain that you feel inside your head",example:"I have a headache and need to rest.",translation:"തലവേദന",ipa:"/ˈhed.eɪk/"},
-  {word:"tired",pos:"adj.",meaning:"feeling that you need to rest or sleep",example:"I feel very tired after work today.",translation:"ക്ഷീണിതൻ",ipa:"/ˈtaɪərd/"},
-  {word:"sick",pos:"adj.",meaning:"not feeling well; having an illness",example:"He is sick and cannot come to school.",translation:"അസുഖം",ipa:"/sɪk/"},
-  {word:"throat",pos:"n.",meaning:"the inside part of your neck that you swallow through",example:"My throat hurts when I swallow.",translation:"തൊണ്ട",ipa:"/θrəʊt/"},
-  {word:"chest",pos:"n.",meaning:"the front part of your body between your neck and stomach",example:"She felt pain in her chest.",translation:"നെഞ്ച്",ipa:"/tʃest/"},
-  {word:"knee",pos:"n.",meaning:"the joint in the middle of your leg",example:"He hurt his knee playing football.",translation:"മുട്ട്",ipa:"/niː/"},
-  {word:"shoulder",pos:"n.",meaning:"the part of your body between your neck and your arm",example:"I carry my bag on my shoulder.",translation:"തോൾ",ipa:"/ˈʃəʊl.dər/"},
-  {word:"stomach",pos:"n.",meaning:"the organ inside your body that digests food",example:"My stomach feels empty; I need food.",translation:"വയർ",ipa:"/ˈstʌm.ək/"},
-  {word:"blood",pos:"n.",meaning:"the red liquid that flows through your body",example:"The doctor took a little blood for a test.",translation:"രക്തം",ipa:"/blʌd/"},
-  {word:"skin",pos:"n.",meaning:"the outer covering of your body",example:"Her skin is dry in winter.",translation:"ചർമ്മം",ipa:"/skɪn/"},
-  {word:"bone",pos:"n.",meaning:"one of the hard white parts inside your body",example:"He broke a bone in his arm.",translation:"എല്ല്",ipa:"/bəʊn/"},
-  {word:"muscle",pos:"n.",meaning:"a body tissue that helps you move",example:"My leg muscles are sore after running.",translation:"പേശി",ipa:"/ˈmʌs.əl/"},
-  {word:"weight",pos:"n.",meaning:"how heavy a person or thing is",example:"The doctor checked my weight at the clinic.",translation:"ഭാരം",ipa:"/weɪt/"},
-  {word:"diet",pos:"n.",meaning:"the food and drinks a person usually has",example:"A healthy diet helps you stay well.",translation:"ഭക്ഷണക്രമം",ipa:"/ˈdaɪ.ət/"},
-  {word:"exercise",pos:"n.",meaning:"physical activity that keeps your body fit",example:"Daily exercise is good for your heart.",translation:"വ്യായാമം",ipa:"/ˈek.sə.saɪz/"},
-  {word:"bandage",pos:"n.",meaning:"a strip of cloth used to cover a wound",example:"The nurse put a bandage on my finger.",translation:"ബാൻഡേജ്",ipa:"/ˈbæn.dɪdʒ/"},
-  {word:"injection",pos:"n.",meaning:"medicine put into your body with a needle",example:"The doctor gave me an injection for the flu.",translation:"കുത്തിവയ്പ്",ipa:"/ɪnˈdʒek.ʃən/"},
-  {word:"allergy",pos:"n.",meaning:"a bad reaction your body has to certain foods or things",example:"She has an allergy to peanuts.",translation:"അലർജി",ipa:"/ˈæl.ə.dʒi/"},
-  {word:"symptom",pos:"n.",meaning:"a sign that shows you may be sick",example:"A runny nose is a symptom of a cold.",translation:"രോഗലക്ഷണം",ipa:"/ˈsɪmp.təm/"},
-  {word:"prescription",pos:"n.",meaning:"a written note from a doctor for medicine",example:"Take this prescription to the pharmacy.",translation:"പ്രിസ്ക്രിപ്ഷൻ",ipa:"/prɪˈskrɪp.ʃən/"},
-  {word:"pulse",pos:"n.",meaning:"the regular beat of blood through your body",example:"The nurse checked my pulse with her fingers.",translation:"നാഡിമിടിപ്പ്",ipa:"/pʌls/"},
-  {word:"ingredient",pos:"n.",meaning:"a food item used to make a dish",example:"Flour is an important ingredient in bread.",translation:"ചേരുവ",ipa:"/ɪnˈɡriː.di.ənt/"},
-  {word:"recipe",pos:"n.",meaning:"a set of instructions for preparing a food dish",example:"She found a simple recipe for chocolate cake.",translation:"പാചകക്കുറിപ്പ്",ipa:"/ˈres.ɪ.pi/"},
-  {word:"boil",pos:"v.",meaning:"to heat water or food until it bubbles",example:"Please boil the eggs for ten minutes.",translation:"തിളപ്പിക്കുക",ipa:"/bɔɪl/"},
-  {word:"fry",pos:"v.",meaning:"to cook food in hot oil",example:"She likes to fry fish for dinner.",translation:"വറുക്കുക",ipa:"/fraɪ/"},
-  {word:"bake",pos:"v.",meaning:"to cook food in an oven using dry heat",example:"He wants to bake a birthday cake today.",translation:"ചുടുക",ipa:"/beɪk/"},
-  {word:"slice",pos:"v.",meaning:"to cut something into thin flat pieces",example:"Please slice the bread before serving.",translation:"അരിഞ്ഞെടുക്കുക",ipa:"/slaɪs/"},
-  {word:"chop",pos:"v.",meaning:"to cut food into small pieces",example:"Chop the onions and add them to the pan.",translation:"നറുക്കുക",ipa:"/tʃɒp/"},
-  {word:"mix",pos:"v.",meaning:"to combine different ingredients together",example:"Mix the flour and sugar in a bowl.",translation:"കലർത്തുക",ipa:"/mɪks/"},
-  {word:"pour",pos:"v.",meaning:"to move liquid from one place to another",example:"Pour the milk into the glass slowly.",translation:"ഒഴിക്കുക",ipa:"/pɔːr/"},
-  {word:"roast",pos:"v.",meaning:"to cook food in an oven or over fire",example:"We roast chicken every Sunday.",translation:"ഭുജിക്കാൻ ചുടുക",ipa:"/rəʊst/"},
-  {word:"grill",pos:"v.",meaning:"to cook food over direct heat",example:"He likes to grill vegetables in summer.",translation:"ഗ്രിൽ ചെയ്യുക",ipa:"/ɡrɪl/"},
-  {word:"steam",pos:"v.",meaning:"to cook food using hot steam from boiling water",example:"It is healthy to steam broccoli rather than boil it.",translation:"ആവിയിൽ വേവിക്കുക",ipa:"/stiːm/"},
-  {word:"stir",pos:"v.",meaning:"to move food around in a pot or bowl",example:"Stir the soup so it does not stick to the bottom.",translation:"ഇളക്കുക",ipa:"/stɜːr/"},
-  {word:"peel",pos:"v.",meaning:"to remove the outer skin of a fruit or vegetable",example:"Peel the potatoes before you cook them.",translation:"തൊലി കളയുക",ipa:"/piːl/"},
-  {word:"taste",pos:"v.",meaning:"to try a small amount of food to check its flavor",example:"Taste the sauce and add more salt if needed.",translation:"രുചി നോക്കുക",ipa:"/teɪst/"},
-  {word:"flavor",pos:"n.",meaning:"the particular taste of a food or drink",example:"This soup has a wonderful spicy flavor.",translation:"രുചി",ipa:"/ˈfleɪ.vər/"},
-  {word:"portion",pos:"n.",meaning:"an amount of food served to one person",example:"The restaurant gives a large portion of rice.",translation:"വിഭജനം",ipa:"/ˈpɔːr.ʃən/"},
-  {word:"meal",pos:"n.",meaning:"food that you eat at a particular time of day",example:"Breakfast is my favorite meal of the day.",translation:"ഭക്ഷണം",ipa:"/miːl/"},
-  {word:"dish",pos:"n.",meaning:"a particular type of food prepared in a certain way",example:"This pasta dish is very popular in Italy.",translation:"വിഭവം",ipa:"/dɪʃ/"},
-  {word:"spice",pos:"n.",meaning:"a substance from plants used to add flavor to food",example:"Pepper is a common spice used in cooking.",translation:"മസാല",ipa:"/spaɪs/"},
-  {word:"herb",pos:"n.",meaning:"a plant used to add flavor or aroma to food",example:"Basil is a fresh herb used in many recipes.",translation:"സസ്യൗഷധി",ipa:"/hɜːrb/"},
-  {word:"sauce",pos:"n.",meaning:"a thick liquid added to food for extra flavor",example:"He poured tomato sauce over the pasta.",translation:"സോസ്",ipa:"/sɔːs/"},
-  {word:"dough",pos:"n.",meaning:"a thick mixture of flour and water used for baking",example:"Knead the dough well before baking the bread.",translation:"മാവ്",ipa:"/dəʊ/"},
-  {word:"raw",pos:"adj.",meaning:"not cooked; in its natural state",example:"Some people eat raw vegetables in salads.",translation:"പച്ചയായ",ipa:"/rɔː/"},
-  {word:"fresh",pos:"adj.",meaning:"recently made or produced; not old or frozen",example:"Always use fresh vegetables for the best taste.",translation:"പുതിയ",ipa:"/freʃ/"},
-  {word:"tender",pos:"adj.",meaning:"soft and easy to cut or chew",example:"Cook the meat until it is tender.",translation:"മൃദുവായ",ipa:"/ˈten.dər/"},
-  {word:"crispy",pos:"adj.",meaning:"firm and making a crunching sound when you eat it",example:"Everyone loves crispy fried chicken.",translation:"ക്രിസ്പിയായ",ipa:"/ˈkrɪs.pi/"},
-  {word:"serving",pos:"n.",meaning:"one portion of food for one person",example:"This recipe makes four servings.",translation:"വിളമ്പൽ",ipa:"/ˈsɜːr.vɪŋ/"},
-  {word:"leftover",pos:"n.",meaning:"food that remains after a meal and is kept for later",example:"She ate the leftover rice for lunch the next day.",translation:"ബാക്കിയായ ഭക്ഷണം",ipa:"/ˈleft.əʊ.vər/"},
-  {word:"appetizer",pos:"n.",meaning:"a small dish eaten before the main meal",example:"We ordered soup as an appetizer before dinner.",translation:"ആദ്യ വിഭവം",ipa:"/ˈæp.ɪ.taɪ.zər/"},
-  {word:"salary",pos:"n.",meaning:"the money you earn from your job, paid every month",example:"She gets her salary at the end of every month.",translation:"ശമ്പളം",ipa:"/ˈsæl.ər.i/"},
-  {word:"boss",pos:"n.",meaning:"the person who is in charge of your work",example:"My boss asked me to finish the report today.",translation:"മേലധികാരി",ipa:"/bɒs/"},
-  {word:"office",pos:"n.",meaning:"a room or building where people work at desks",example:"She works in a big office in the city center.",translation:"ഓഫീസ്",ipa:"/ˈɒf.ɪs/"},
-  {word:"colleague",pos:"n.",meaning:"a person you work with",example:"My colleagues are very friendly and helpful.",translation:"സഹപ്രവർത്തകൻ",ipa:"/ˈkɒl.iːɡ/"},
-  {word:"interview",pos:"n.",meaning:"a formal meeting where someone is asked questions for a job",example:"He has a job interview tomorrow morning.",translation:"അഭിമുഖം",ipa:"/ˈɪn.tə.vjuː/"},
-  {word:"apply",pos:"v.",meaning:"to officially ask for a job by sending documents",example:"She decided to apply for the new position.",translation:"അപേക്ഷിക്കുക",ipa:"/əˈplaɪ/"},
-  {word:"hire",pos:"v.",meaning:"to give someone a job",example:"The company wants to hire three new workers.",translation:"നിയമിക്കുക",ipa:"/haɪər/"},
-  {word:"resign",pos:"v.",meaning:"to officially leave your job by choice",example:"He decided to resign because he was unhappy at work.",translation:"രാജിവെക്കുക",ipa:"/rɪˈzaɪn/"},
-  {word:"promote",pos:"v.",meaning:"to give someone a higher or better job position",example:"She worked hard and was promoted to manager.",translation:"സ്ഥാനക്കയറ്റം നൽകുക",ipa:"/prəˈməʊt/"},
-  {word:"workplace",pos:"n.",meaning:"the place where you do your job",example:"The workplace should be clean and safe for everyone.",translation:"ജോലിസ്ഥലം",ipa:"/ˈwɜːk.pleɪs/"},
-  {word:"employee",pos:"n.",meaning:"a person who works for a company or person for money",example:"The company has over two hundred employees.",translation:"ജീവനക്കാരൻ",ipa:"/ɪmˈplɔɪ.iː/"},
-  {word:"employer",pos:"n.",meaning:"a person or company that pays others to work",example:"Her employer gives her two weeks of vacation each year.",translation:"തൊഴിലുടമ",ipa:"/ɪmˈplɔɪ.ər/"},
-  {word:"contract",pos:"n.",meaning:"a written agreement between a worker and a company",example:"Please sign the contract before you start working.",translation:"കരാർ",ipa:"/ˈkɒn.trækt/"},
-  {word:"shift",pos:"n.",meaning:"a period of time when someone works during the day or night",example:"He works the night shift at the factory.",translation:"ഷിഫ്റ്റ്",ipa:"/ʃɪft/"},
-  {word:"deadline",pos:"n.",meaning:"the last time or date by which you must finish a task",example:"We need to finish this project before the deadline.",translation:"അവസാന തീയതി",ipa:"/ˈded.laɪn/"},
-  {word:"career",pos:"n.",meaning:"the series of jobs you do in your working life",example:"She wants to have a career in teaching.",translation:"ജീവിതവൃത്തി",ipa:"/kəˈrɪər/"},
-  {word:"overtime",pos:"n.",meaning:"extra hours of work beyond the normal working time",example:"He worked overtime to complete the project.",translation:"അധിക സമയ ജോലി",ipa:"/ˈəʊ.və.taɪm/"},
-  {word:"task",pos:"n.",meaning:"a piece of work that needs to be done",example:"My boss gave me three tasks to complete today.",translation:"ജോലി / ചുമതല",ipa:"/tɑːsk/"},
-  {word:"part-time",pos:"adj.",meaning:"working fewer hours than a full working week",example:"She has a part-time job at the local shop.",translation:"ഭാഗിക സമയ ജോലി",ipa:"/ˌpɑːtˈtaɪm/"},
-  {word:"full-time",pos:"adj.",meaning:"working the complete number of normal working hours",example:"He got a full-time job after he graduated.",translation:"പൂർണ്ണ സമയ ജോലി",ipa:"/ˌfʊlˈtaɪm/"},
-  {word:"retire",pos:"v.",meaning:"to stop working permanently, usually because of old age",example:"My grandfather retired at the age of sixty-five.",translation:"വിരമിക്കുക",ipa:"/rɪˈtaɪər/"},
-  {word:"unemployed",pos:"adj.",meaning:"not having a job at the present time",example:"He has been unemployed for six months.",translation:"തൊഴിലില്ലാത്ത",ipa:"/ˌʌn.ɪmˈplɔɪd/"},
-  {word:"uniform",pos:"n.",meaning:"special clothes that workers wear for their job",example:"Nurses wear a white uniform at the hospital.",translation:"യൂണിഫോം",ipa:"/ˈjuː.nɪ.fɔːm/"},
-  {word:"department",pos:"n.",meaning:"a section of a company or organization",example:"She works in the marketing department.",translation:"വകുപ്പ്",ipa:"/dɪˈpɑːt.mənt/"},
-  {word:"wage",pos:"n.",meaning:"money paid to a worker, usually every week or hour",example:"The minimum wage in this country is quite low.",translation:"കൂലി",ipa:"/weɪdʒ/"},
-  {word:"duty",pos:"n.",meaning:"a task or responsibility that is part of your job",example:"It is his duty to check all the documents.",translation:"ചുമതല",ipa:"/ˈdjuː.ti/"},
-  {word:"profession",pos:"n.",meaning:"a type of job that needs special training or education",example:"Teaching is a very respected profession in our country.",translation:"തൊഴിൽ / വൃത്തി",ipa:"/prəˈfeʃ.ən/"},
-  {word:"teamwork",pos:"n.",meaning:"working together with other people to achieve something",example:"Good teamwork helped them finish the project on time.",translation:"സംഘടിത പ്രവർത്തനം",ipa:"/ˈtiːm.wɜːk/"},
-  {word:"productive",pos:"adj.",meaning:"doing a lot of useful work efficiently",example:"She is very productive when she works from home.",translation:"ഉൽപ്പാദനക്ഷമമായ",ipa:"/prəˈdʌk.tɪv/"},
-  {word:"skill",pos:"n.",meaning:"the ability to do something well, learned through practice",example:"Good communication is an important skill for any job.",translation:"കഴിവ്",ipa:"/skɪl/"},
-  {word:"screen",pos:"n.",meaning:"the flat surface of a phone, computer, or TV that shows images",example:"The screen on my new phone is very bright.",translation:"സ്ക്രീൻ",ipa:"/skriːn/"},
-  {word:"battery",pos:"n.",meaning:"the part of a device that stores power",example:"My phone battery is almost empty.",translation:"ബാറ്ററി",ipa:"/ˈbætəri/"},
-  {word:"charge",pos:"v.",meaning:"to put electricity into a battery",example:"Please charge your phone before we leave.",translation:"ചാർജ് ചെയ്യുക",ipa:"/tʃɑːrdʒ/"},
-  {word:"cable",pos:"n.",meaning:"a wire used to connect devices or transfer power",example:"I need a cable to charge my laptop.",translation:"കേബിൾ",ipa:"/ˈkeɪbəl/"},
-  {word:"wireless",pos:"adj.",meaning:"connecting without using physical wires",example:"This keyboard is wireless so there are no cables.",translation:"വയർലെസ്",ipa:"/ˈwaɪərləs/"},
-  {word:"download",pos:"v.",meaning:"to copy a file from the internet to your device",example:"I want to download this app on my phone.",translation:"ഡൗൺലോഡ് ചെയ്യുക",ipa:"/ˈdaʊnloʊd/"},
-  {word:"upload",pos:"v.",meaning:"to send a file from your device to the internet",example:"She will upload the photo to her account.",translation:"അപ്‌ലോഡ് ചെയ്യുക",ipa:"/ˈʌploʊd/"},
-  {word:"network",pos:"n.",meaning:"a system that connects computers or phones together",example:"My phone cannot connect to the network here.",translation:"നെറ്റ്‌വർക്ക്",ipa:"/ˈnetwɜːrk/"},
-  {word:"signal",pos:"n.",meaning:"the connection strength between a phone and a tower",example:"There is no signal in this building.",translation:"സിഗ്നൽ",ipa:"/ˈsɪɡnəl/"},
-  {word:"password",pos:"n.",meaning:"a secret word or number used to enter an account",example:"Do not share your password with anyone.",translation:"പാസ്‌വേഡ്",ipa:"/ˈpæswɜːrd/"},
-  {word:"account",pos:"n.",meaning:"a personal page you create on a website or app",example:"I made a new account on the website.",translation:"അക്ക�ൗണ്ട്",ipa:"/əˈkaʊnt/"},
-  {word:"login",pos:"v.",meaning:"to enter your username and password to use a service",example:"You need to login before you can see your emails.",translation:"ലോഗിൻ ചെയ്യുക",ipa:"/ˈlɒɡɪn/"},
-  {word:"app",pos:"n.",meaning:"a small program you use on a phone or tablet",example:"This app helps me learn new words every day.",translation:"ആപ്പ്",ipa:"/æp/"},
-  {word:"website",pos:"n.",meaning:"a page or group of pages on the internet",example:"Visit our website for more details.",translation:"വെബ്സൈറ്റ്",ipa:"/ˈwebsaɪt/"},
-  {word:"browser",pos:"n.",meaning:"a program used to look at websites on the internet",example:"I use a browser to search for information online.",translation:"ബ്രൗസർ",ipa:"/ˈbraʊzər/"},
-  {word:"search",pos:"v.",meaning:"to look for something on the internet or in a system",example:"Let me search for the answer online.",translation:"തിരയുക",ipa:"/sɜːrtʃ/"},
-  {word:"click",pos:"v.",meaning:"to press a button on a mouse or tap a link on a screen",example:"Click on the link to open the page.",translation:"ക്ലിക്ക് ചെയ്യുക",ipa:"/klɪk/"},
-  {word:"keyboard",pos:"n.",meaning:"a set of keys used to type letters and numbers",example:"I spilled water on my keyboard by accident.",translation:"കീബോർഡ്",ipa:"/ˈkiːbɔːrd/"},
-  {word:"printer",pos:"n.",meaning:"a machine that prints documents from a computer",example:"The printer in the office is not working today.",translation:"പ്രിന്റർ",ipa:"/ˈprɪntər/"},
-  {word:"camera",pos:"n.",meaning:"a device used to take photos or videos",example:"The camera on this phone takes very clear pictures.",translation:"കാമറ",ipa:"/ˈkæmərə/"},
-  {word:"speaker",pos:"n.",meaning:"a device that produces sound from a phone or computer",example:"Turn up the speaker so everyone can hear the music.",translation:"സ്പീക്കർ",ipa:"/ˈspiːkər/"},
-  {word:"microphone",pos:"n.",meaning:"a device that records your voice",example:"Please speak into the microphone so we can hear you.",translation:"മൈക്രോഫോൺ",ipa:"/ˈmaɪkrəfoʊn/"},
-  {word:"update",pos:"v.",meaning:"to install a newer version of an app or system",example:"You should update your phone software regularly.",translation:"അപ്ഡേറ്റ് ചെയ്യുക",ipa:"/ˈʌpdeɪt/"},
-  {word:"connect",pos:"v.",meaning:"to join one device or system to another",example:"Connect your phone to the Wi-Fi to save data.",translation:"കണക്ട് ചെയ്യുക",ipa:"/kəˈnekt/"},
-  {word:"delete",pos:"v.",meaning:"to remove a file, photo, or message permanently",example:"I will delete the old photos to free up space.",translation:"ഡിലീറ്റ് ചെയ്യുക",ipa:"/dɪˈliːt/"},
-  {word:"storage",pos:"n.",meaning:"the space on a device where files and photos are saved",example:"My phone does not have enough storage for more videos.",translation:"സ്റ്റോറേജ്",ipa:"/ˈstɔːrɪdʒ/"},
-  {word:"notification",pos:"n.",meaning:"a short alert from an app that appears on your screen",example:"I received a notification from my email app.",translation:"നോട്ടിഫിക്കേഷൻ",ipa:"/ˌnoʊtɪfɪˈkeɪʃən/"},
-  {word:"video call",pos:"phrase",meaning:"a call where you can see and hear the other person on screen",example:"We had a video call with our teacher yesterday.",translation:"വീഡിയോ കോൾ",ipa:"/ˈvɪdioʊ kɔːl/"},
-  {word:"data",pos:"n.",meaning:"information or the internet allowance on a phone plan",example:"I used all my data watching videos last week.",translation:"ഡേറ്റ",ipa:"/ˈdeɪtə/"},
-  {word:"tablet",pos:"n.",meaning:"a flat electronic device larger than a phone, used for browsing and apps",example:"My sister uses a tablet to watch her favourite shows.",translation:"ടാബ്‌ലറ്റ്",ipa:"/ˈtæblɪt/"},
-  {word:"stadium",pos:"n.",meaning:"a large place where people watch sports games",example:"We went to the stadium to watch the football match.",translation:"സ്റ്റേഡിയം",ipa:"/ˈsteɪdiəm/"},
-  {word:"referee",pos:"n.",meaning:"a person who makes sure players follow the rules in a sport",example:"The referee blew his whistle to stop the game.",translation:"റഫറി",ipa:"/ˌrefəˈriː/"},
-  {word:"score",pos:"n.",meaning:"the number of points a team or player gets in a game",example:"The final score was three to one.",translation:"സ്കോർ",ipa:"/skɔːr/"},
-  {word:"teammate",pos:"n.",meaning:"a person who plays on the same team as you",example:"She passed the ball to her teammate.",translation:"ടീം അംഗം",ipa:"/ˈtiːmmeɪt/"},
-  {word:"coach",pos:"n.",meaning:"a person who trains a sports team or player",example:"Our coach teaches us new skills every week.",translation:"കോച്ч്",ipa:"/koʊtʃ/"},
-  {word:"trophy",pos:"n.",meaning:"a prize given to the winner of a competition",example:"The team won a big trophy at the end of the season.",translation:"ട്രോഫി",ipa:"/ˈtroʊfi/"},
-  {word:"match",pos:"n.",meaning:"a game or competition between two teams or players",example:"I watched an exciting tennis match yesterday.",translation:"മത്സരം",ipa:"/mætʃ/"},
-  {word:"pitch",pos:"n.",meaning:"the area of ground where a sport like football is played",example:"The players ran onto the pitch before the game.",translation:"പിച്ച്",ipa:"/pɪtʃ/"},
-  {word:"gym",pos:"n.",meaning:"a place where people go to do physical exercise",example:"He goes to the gym three times a week.",translation:"ജിം",ipa:"/dʒɪm/"},
-  {word:"swim",pos:"v.",meaning:"to move through water using your body",example:"She loves to swim in the ocean on hot days.",translation:"നീന്തുക",ipa:"/swɪm/"},
-  {word:"cycle",pos:"v.",meaning:"to ride a bicycle as sport or activity",example:"They cycle in the park every Sunday morning.",translation:"സൈക്കിൾ ചവിട്ടുക",ipa:"/ˈsaɪkəl/"},
-  {word:"race",pos:"n.",meaning:"a competition to see who can run or move the fastest",example:"He won the race by just a few seconds.",translation:"ഓട്ടമത്സരം",ipa:"/reɪs/"},
-  {word:"hiking",pos:"n.",meaning:"the activity of walking long distances in nature",example:"We went hiking in the mountains last weekend.",translation:"ഹൈക്കിംഗ്",ipa:"/ˈhaɪkɪŋ/"},
-  {word:"camping",pos:"n.",meaning:"staying outside in a tent for fun and leisure",example:"The family enjoyed camping near the lake.",translation:"ക്യാമ്പിംഗ്",ipa:"/ˈkæmpɪŋ/"},
-  {word:"athlete",pos:"n.",meaning:"a person who is good at sports and physical activities",example:"She is a talented athlete who runs very fast.",translation:"അത്‌ലറ്റ്",ipa:"/ˈæθliːt/"},
-  {word:"volleyball",pos:"n.",meaning:"a team sport where players hit a ball over a net",example:"We played volleyball on the beach all afternoon.",translation:"വോളിബോൾ",ipa:"/ˈvɒlibɔːl/"},
-  {word:"badminton",pos:"n.",meaning:"a sport where players hit a small object called a shuttlecock over a net",example:"My sister and I play badminton in the garden.",translation:"ബാഡ്മിന്റൺ",ipa:"/ˈbædmɪntən/"},
-  {word:"golf",pos:"n.",meaning:"a sport where players hit a small ball into holes using sticks",example:"My father plays golf every Saturday morning.",translation:"ഗോൾഫ്",ipa:"/ɡɒlf/"},
-  {word:"fishing",pos:"n.",meaning:"the activity of trying to catch fish for fun or food",example:"He spends his free time fishing by the river.",translation:"മത്സ്യബന്ധനം",ipa:"/ˈfɪʃɪŋ/"},
-  {word:"hobby",pos:"n.",meaning:"something you do regularly for fun in your free time",example:"Drawing is my favourite hobby after school.",translation:"ഹോബി",ipa:"/ˈhɒbi/"},
-  {word:"compete",pos:"v.",meaning:"to take part in a race or competition against others",example:"She trained hard to compete in the national championship.",translation:"മത്സരിക്കുക",ipa:"/kəmˈpiːt/"},
-  {word:"win",pos:"v.",meaning:"to finish first or be the best in a competition",example:"Our school team wants to win the tournament.",translation:"ജയിക്കുക",ipa:"/wɪn/"},
-  {word:"lose",pos:"v.",meaning:"to not win a game or competition",example:"It is okay to lose sometimes if you play fairly.",translation:"തോൽക്കുക",ipa:"/luːz/"},
-  {word:"sportswear",pos:"n.",meaning:"clothes that people wear when doing sports or exercise",example:"She bought new sportswear for her running class.",translation:"സ്പോർട്സ് വസ്ത്രം",ipa:"/ˈspɔːtswɛər/"},
-  {word:"playground",pos:"n.",meaning:"an outdoor area where children play and do activities",example:"The children played football on the playground after school.",translation:"കളിസ്ഥലം",ipa:"/ˈpleɪɡraʊnd/"},
-  {word:"jogging",pos:"n.",meaning:"running slowly as a form of exercise",example:"She goes jogging in the park every morning.",translation:"ജോഗിംഗ്",ipa:"/ˈdʒɒɡɪŋ/"},
-  {word:"fan",pos:"n.",meaning:"a person who strongly supports a sports team or player",example:"He is a big fan of the local basketball team.",translation:"ആരാധകൻ",ipa:"/fæn/"},
-  {word:"foul",pos:"n.",meaning:"an action in a sport that breaks the rules",example:"The player received a warning for the foul during the game.",translation:"ഫൗൾ",ipa:"/faʊl/"},
-  {word:"tournament",pos:"n.",meaning:"a series of games or competitions to find the best player or team",example:"Our school entered a volleyball tournament last month.",translation:"ടൂർണമെന്റ്",ipa:"/ˈtʊənəmənt/"},
-  {word:"leisure",pos:"n.",meaning:"free time when you are not working and can do things you enjoy",example:"She reads books in her leisure time.",translation:"വിശ്രമ സമയം",ipa:"/ˈleʒər/"},
-  {word:"guitar",pos:"n.",meaning:"a musical instrument with strings that you play with your fingers",example:"She plays guitar in a small band at school.",translation:"ഗിറ്റാർ",ipa:"/ɡɪˈtɑːr/"},
-  {word:"drum",pos:"n.",meaning:"a round musical instrument that you hit to make a sound",example:"He hits the drum with two sticks during the performance.",translation:"ഡ്രം",ipa:"/drʌm/"},
-  {word:"piano",pos:"n.",meaning:"a large musical instrument with black and white keys that you press",example:"My sister takes piano lessons every Saturday morning.",translation:"പിയാനോ",ipa:"/piˈænəʊ/"},
-  {word:"violin",pos:"n.",meaning:"a small musical instrument with strings that you play with a bow",example:"The student played violin at the school concert last week.",translation:"വയലിൻ",ipa:"/ˌvaɪəˈlɪn/"},
-  {word:"flute",pos:"n.",meaning:"a long thin musical instrument that you blow air into to make sounds",example:"She learned to play the flute when she was eight years old.",translation:"ഫ്ലൂട്ട്",ipa:"/fluːt/"},
-  {word:"sing",pos:"v.",meaning:"to make musical sounds with your voice",example:"They sing together every evening at the community hall.",translation:"പാടുക",ipa:"/sɪŋ/"},
-  {word:"paint",pos:"v.",meaning:"to put colour onto a surface to make a picture",example:"He likes to paint beautiful landscapes on the weekend.",translation:"ചിത്രം വരയ്ക്കുക",ipa:"/peɪnt/"},
-  {word:"draw",pos:"v.",meaning:"to make a picture using a pencil or pen",example:"She can draw faces very well with just a pencil.",translation:"വരയ്ക്കുക",ipa:"/drɔː/"},
-  {word:"sculpture",pos:"n.",meaning:"a piece of art made by shaping stone, clay, or wood",example:"The museum has a large sculpture made from white marble.",translation:"ശില്പം",ipa:"/ˈskʌlptʃər/"},
-  {word:"orchestra",pos:"n.",meaning:"a large group of musicians who play different instruments together",example:"The orchestra played a famous piece by Mozart last night.",translation:"ഓർക്കസ്ട്ര",ipa:"/ˈɔːkɪstrə/"},
-  {word:"melody",pos:"n.",meaning:"a series of musical notes that form a tune you can remember easily",example:"The melody of that song stayed in my head all day.",translation:"മെലഡി",ipa:"/ˈmelədɪ/"},
-  {word:"rhythm",pos:"n.",meaning:"a regular pattern of sounds or beats in music",example:"The students clapped their hands to feel the rhythm of the song.",translation:"താളം",ipa:"/ˈrɪðəm/"},
-  {word:"chorus",pos:"n.",meaning:"the part of a song that is repeated several times and is easy to sing along",example:"Everyone joined in when the chorus of the song began.",translation:"കോറസ്",ipa:"/ˈkɔːrəs/"},
-  {word:"album",pos:"n.",meaning:"a collection of songs released together by a singer or band",example:"Their new album has ten great songs on it.",translation:"ആൽബം",ipa:"/ˈælbəm/"},
-  {word:"stage",pos:"n.",meaning:"the raised platform where performers sing, dance, or act",example:"The singer walked onto the stage and greeted the audience.",translation:"സ്റ്റേജ്",ipa:"/steɪdʒ/"},
-  {word:"audience",pos:"n.",meaning:"the group of people who watch or listen to a performance",example:"The audience clapped loudly at the end of the show.",translation:"പ്രേക്ഷകർ",ipa:"/ˈɔːdiəns/"},
-  {word:"portrait",pos:"n.",meaning:"a painting or drawing of a person, especially their face",example:"The artist painted a portrait of the old man in one hour.",translation:"ഛായാചിത്രം",ipa:"/ˈpɔːtrɪt/"},
-  {word:"sketch",pos:"n.",meaning:"a quick, simple drawing done without many details",example:"He made a quick sketch of the building before painting it.",translation:"സ്കെച്ച്",ipa:"/sketʃ/"},
-  {word:"canvas",pos:"n.",meaning:"a strong cloth that artists use to paint pictures on",example:"She stretched the canvas before she started her painting.",translation:"കാൻവാസ്",ipa:"/ˈkænvəs/"},
-  {word:"brush",pos:"n.",meaning:"a tool with bristles used to apply paint or colour onto a surface",example:"He cleaned his brush carefully after finishing the painting.",translation:"ബ്രഷ്",ipa:"/brʌʃ/"},
-  {word:"gallery",pos:"n.",meaning:"a room or building where paintings and other works of art are shown",example:"We visited an art gallery in the city centre last Sunday.",translation:"ഗ്യാലറി",ipa:"/ˈɡæləri/"},
-  {word:"tune",pos:"n.",meaning:"a simple, pleasant series of musical notes; a short melody",example:"He whistled a cheerful tune while he walked to school.",translation:"ട്യൂൺ",ipa:"/tjuːn/"},
-  {word:"lyrics",pos:"n.",meaning:"the words of a song",example:"She wrote down all the lyrics so she could remember the song.",translation:"ഗാനവരികൾ",ipa:"/ˈlɪrɪks/"},
-  {word:"concert",pos:"n.",meaning:"a live performance of music in front of an audience",example:"We bought tickets to see a concert at the city hall.",translation:"കൺസേർട്ട്",ipa:"/ˈkɒnsət/"},
-  {word:"perform",pos:"v.",meaning:"to entertain an audience by singing, dancing, or playing music",example:"She will perform two songs at the school event tomorrow.",translation:"അവതരിപ്പിക്കുക",ipa:"/pəˈfɔːm/"},
-  {word:"creative",pos:"adj.",meaning:"having the ability to make or think of new and original things",example:"She is very creative and always makes interesting artwork.",translation:"സർഗ്ഗാത്മകമായ",ipa:"/kriˈeɪtɪv/"},
-  {word:"musical",pos:"adj.",meaning:"related to music; having a natural ability to play or enjoy music",example:"He comes from a very musical family who all play instruments.",translation:"സംഗീതപരമായ",ipa:"/ˈmjuːzɪkəl/"},
-  {word:"instrument",pos:"n.",meaning:"an object used to make musical sounds, such as a guitar or drum",example:"She is learning to play a new instrument this year.",translation:"വാദ്യോപകരണം",ipa:"/ˈɪnstrəmənt/"},
-  {word:"band",pos:"n.",meaning:"a group of musicians who play together regularly",example:"The band played their favourite songs at the local café.",translation:"ബാൻഡ്",ipa:"/bænd/"},
-  {word:"clay",pos:"n.",meaning:"a soft material used to make sculptures and pottery",example:"The students shaped animals from clay during the art class.",translation:"കളിമണ്ണ്",ipa:"/kleɪ/"},
-  {word:"shy",pos:"adj.",meaning:"nervous or uncomfortable around other people",example:"She is very shy and does not talk much in class.",translation:"ലജ്ജാശീലമുള്ള",ipa:"/ʃaɪ/"},
-  {word:"brave",pos:"adj.",meaning:"not afraid of difficult or dangerous things",example:"The brave boy helped his friend during the storm.",translation:"ധൈര്യശാലിയായ",ipa:"/breɪv/"},
-  {word:"funny",pos:"adj.",meaning:"making people laugh; humorous",example:"My uncle is very funny and always tells great jokes.",translation:"തമാശക്കാരനായ",ipa:"/ˈfʌni/"},
-  {word:"clever",pos:"adj.",meaning:"able to learn and understand things quickly",example:"She is a clever student who solves problems fast.",translation:"മിടുക്കുള്ള",ipa:"/ˈklɛvər/"},
-  {word:"lazy",pos:"adj.",meaning:"not wanting to work or be active",example:"He is too lazy to clean his room every day.",translation:"മടിയനായ",ipa:"/ˈleɪzi/"},
-  {word:"honest",pos:"adj.",meaning:"always telling the truth; not lying",example:"An honest person never tells lies to their friends.",translation:"സത്യസന്ധമായ",ipa:"/ˈɒnɪst/"},
-  {word:"polite",pos:"adj.",meaning:"having good manners and being respectful to others",example:"It is polite to say thank you when someone helps you.",translation:"മര്യാദയുള്ള",ipa:"/pəˈlaɪt/"},
-  {word:"rude",pos:"adj.",meaning:"not polite; behaving badly toward others",example:"It is rude to interrupt someone while they are speaking.",translation:"അമര്യാദയുള്ള",ipa:"/ruːd/"},
-  {word:"friendly",pos:"adj.",meaning:"kind and pleasant toward other people",example:"Our new neighbor is very friendly and always smiles.",translation:"സൗഹൃദപരമായ",ipa:"/ˈfrɛndli/"},
-  {word:"patient",pos:"adj.",meaning:"able to wait calmly without getting angry",example:"A good teacher is always patient with slow learners.",translation:"ക്ഷമയുള്ള",ipa:"/ˈpeɪʃənt/"},
-  {word:"generous",pos:"adj.",meaning:"happy to give money, help, or time to others",example:"My grandmother is very generous and gives gifts to everyone.",translation:"ഔദാര്യമുള്ള",ipa:"/ˈdʒɛnərəs/"},
-  {word:"selfish",pos:"adj.",meaning:"thinking only about yourself and not about others",example:"He is selfish because he never shares his food.",translation:"സ്വാർഥമുള്ള",ipa:"/ˈsɛlfɪʃ/"},
-  {word:"cheerful",pos:"adj.",meaning:"happy and positive most of the time",example:"She has a cheerful personality and makes everyone smile.",translation:"സന്തോഷഭരിതമായ",ipa:"/ˈtʃɪərfəl/"},
-  {word:"serious",pos:"adj.",meaning:"not joking; thinking carefully about things",example:"He is a serious student who always studies hard.",translation:"ഗൗരവമുള്ള",ipa:"/ˈsɪəriəs/"},
-  {word:"calm",pos:"adj.",meaning:"relaxed and not worried or excited",example:"She stays calm even when there are big problems.",translation:"ശാന്തമായ",ipa:"/kɑːm/"},
-  {word:"confident",pos:"adj.",meaning:"believing in your own abilities; sure of yourself",example:"He gave a confident speech in front of the whole school.",translation:"ആത്മവിശ്വാസമുള്ള",ipa:"/ˈkɒnfɪdənt/"},
-  {word:"quiet",pos:"adj.",meaning:"not making much noise; not talking a lot",example:"My sister is very quiet and prefers reading books alone.",translation:"നിശബ്ദമായ",ipa:"/ˈkwaɪət/"},
-  {word:"talkative",pos:"adj.",meaning:"liking to talk a lot",example:"My classmate is very talkative and always has a story to tell.",translation:"വാചാലനായ",ipa:"/ˈtɔːkətɪv/"},
-  {word:"hardworking",pos:"adj.",meaning:"putting a lot of effort into work or study",example:"She is hardworking and never gives up on her goals.",translation:"പരിശ്രമശീലമുള്ള",ipa:"/ˈhɑːdwɜːkɪŋ/"},
-  {word:"stubborn",pos:"adj.",meaning:"refusing to change your mind or do what others say",example:"He is so stubborn that he never listens to advice.",translation:"വാശിക്കാരനായ",ipa:"/ˈstʌbərn/"},
-  {word:"gentle",pos:"adj.",meaning:"soft and careful in the way you act or speak",example:"The nurse was very gentle when she treated the child.",translation:"സൗമ്യമായ",ipa:"/ˈdʒɛntəl/"},
-  {word:"moody",pos:"adj.",meaning:"having feelings that change quickly and often",example:"He is moody sometimes — happy in the morning and sad at night.",translation:"മനോഭാവം മാറുന്ന",ipa:"/ˈmuːdi/"},
-  {word:"outgoing",pos:"adj.",meaning:"liking to meet and talk to new people; sociable",example:"She is very outgoing and quickly makes new friends.",translation:"മിലനസ്വഭാവമുള്ള",ipa:"/ˈaʊtɡəʊɪŋ/"},
-  {word:"mature",pos:"adj.",meaning:"behaving in a sensible, adult way",example:"Although she is young, she is very mature for her age.",translation:"പക്വതയുള്ള",ipa:"/məˈtjʊər/"},
-  {word:"ambitious",pos:"adj.",meaning:"having a strong desire to succeed or achieve something",example:"He is ambitious and wants to become a successful doctor.",translation:"മോഹമുള്ള",ipa:"/æmˈbɪʃəs/"},
-  {word:"reliable",pos:"adj.",meaning:"able to be trusted to do what you say",example:"She is a reliable friend who always keeps her promises.",translation:"വിശ്വസനീയമായ",ipa:"/rɪˈlaɪəbəl/"},
-  {word:"impatient",pos:"adj.",meaning:"not able to wait calmly; getting angry when things are slow",example:"He is impatient and gets angry if the bus is late.",translation:"ക്ഷമയില്ലാത്ത",ipa:"/ɪmˈpeɪʃənt/"},
-  {word:"tidy",pos:"adj.",meaning:"keeping things clean and in order",example:"Her desk is always tidy because she organizes everything carefully.",translation:"വൃത്തിയുള്ള",ipa:"/ˈtaɪdi/"},
-  {word:"sensitive",pos:"adj.",meaning:"easily hurt or affected by what people say or do",example:"He is sensitive and gets upset when people criticize him.",translation:"വികാരജീവിയായ",ipa:"/ˈsɛnsɪtɪv/"},
-  {word:"bossy",pos:"adj.",meaning:"always telling other people what to do",example:"Nobody likes her because she is too bossy in the group.",translation:"ആധിപത്യ സ്വഭാവമുള്ള",ipa:"/ˈbɒsi/"},
-  {word:"sweep",pos:"v.",meaning:"to clean a floor by moving dirt with a broom",example:"She sweeps the kitchen floor every morning.",translation:"അടിച്ചുവാരുക",ipa:"/swiːp/"},
-  {word:"mop",pos:"v.",meaning:"to clean a floor using a wet mop",example:"He mops the bathroom floor after his shower.",translation:"തുടയ്ക്കുക",ipa:"/mɒp/"},
-  {word:"vacuum",pos:"v.",meaning:"to clean a carpet or floor using a vacuum cleaner",example:"I vacuum the living room carpet twice a week.",translation:"വാക്വം ചെയ്യുക",ipa:"/ˈvækjuəm/"},
-  {word:"scrub",pos:"v.",meaning:"to clean something by rubbing it hard with a brush",example:"She scrubs the bathroom tiles every weekend.",translation:"ഉരച്ചു കഴുകുക",ipa:"/skrʌb/"},
-  {word:"rinse",pos:"v.",meaning:"to wash something with clean water to remove soap or dirt",example:"Please rinse the vegetables before cooking them.",translation:"വെള്ളത്തിൽ കഴുകുക",ipa:"/rɪns/"},
-  {word:"wipe",pos:"v.",meaning:"to clean or dry a surface by rubbing it with a cloth",example:"He wipes the table after every meal.",translation:"തുടയ്ക്കുക",ipa:"/waɪp/"},
-  {word:"laundry",pos:"n.",meaning:"clothes and other items that need to be washed",example:"She does the laundry every Sunday morning.",translation:"അലക്കുപണി",ipa:"/ˈlɔːndri/"},
-  {word:"iron",pos:"v.",meaning:"to use a hot iron to remove wrinkles from clothes",example:"He irons his shirts before going to work.",translation:"ഇസ്തിരി ഇടുക",ipa:"/ˈaɪən/"},
-  {word:"fold",pos:"v.",meaning:"to bend cloth or paper over so it is smaller and neat",example:"She folds the clean towels and puts them in the cupboard.",translation:"മടക്കുക",ipa:"/fəʊld/"},
-  {word:"dust",pos:"v.",meaning:"to remove dust from furniture or surfaces with a cloth",example:"I dust the shelves every Saturday morning.",translation:"പൊടി തുടയ്ക്കുക",ipa:"/dʌst/"},
-  {word:"garbage",pos:"n.",meaning:"waste or unwanted things that you throw away",example:"Please take the garbage out before you go to bed.",translation:"മാലിന്യം",ipa:"/ˈɡɑːbɪdʒ/"},
-  {word:"bin",pos:"n.",meaning:"a container used for throwing away waste",example:"She empties the bin in the kitchen every day.",translation:"മാലിന്യ പാത്രം",ipa:"/bɪn/"},
-  {word:"sink",pos:"n.",meaning:"a bowl fixed to a wall with taps where you wash things",example:"The dirty dishes are piled up in the sink.",translation:"സിങ്ക്",ipa:"/sɪŋk/"},
-  {word:"sponge",pos:"n.",meaning:"a soft material used for washing dishes or surfaces",example:"Use a sponge to clean the greasy pan.",translation:"സ്പോഞ്ച്",ipa:"/spʌndʒ/"},
-  {word:"broom",pos:"n.",meaning:"a long brush used to sweep floors",example:"She keeps the broom behind the kitchen door.",translation:"ചൂൽ",ipa:"/bruːm/"},
-  {word:"dishwasher",pos:"n.",meaning:"a machine that washes plates, cups, and other dishes",example:"We load the dishwasher after dinner every night.",translation:"ഡിഷ്‌വാഷർ",ipa:"/ˈdɪʃwɒʃər/"},
-  {word:"detergent",pos:"n.",meaning:"a cleaning liquid or powder used for washing clothes or dishes",example:"She added some detergent to the washing machine.",translation:"ഡിറ്റർജന്റ്",ipa:"/dɪˈtɜːdʒənt/"},
-  {word:"hang",pos:"v.",meaning:"to put wet clothes on a line or hook to dry",example:"He hangs the wet clothes outside after washing them.",translation:"തൂക്കിയിടുക",ipa:"/hæŋ/"},
-  {word:"tub",pos:"n.",meaning:"a large open container used for bathing or washing",example:"She filled the tub with water to soak the dirty clothes.",translation:"ടബ്",ipa:"/tʌb/"},
-  {word:"polish",pos:"v.",meaning:"to rub a surface to make it shine",example:"He polishes the wooden furniture every weekend.",translation:"മിനുക്കുക",ipa:"/ˈpɒlɪʃ/"},
-  {word:"bleach",pos:"n.",meaning:"a strong chemical used to clean and kill germs on surfaces",example:"She uses bleach to clean the bathroom floor.",translation:"ബ്ലീച്ച്",ipa:"/bliːtʃ/"},
-  {word:"appliance",pos:"n.",meaning:"an electrical machine used in the home, such as a washing machine",example:"The kitchen has several useful appliances.",translation:"വൈദ്യുത ഉപകരണം",ipa:"/əˈplaɪəns/"},
-  {word:"clothesline",pos:"n.",meaning:"a rope or wire on which wet clothes are hung to dry",example:"She hangs the sheets on the clothesline outside.",translation:"വസ്ത്രം ഉണക്കുന്ന കയർ",ipa:"/ˈkləʊðzlaɪn/"},
-  {word:"declutter",pos:"v.",meaning:"to remove things you do not need to make a place tidier",example:"They declutter the garage every few months.",translation:"അനാവശ്യ സാധനങ്ങൾ നീക്കം ചെയ്യുക",ipa:"/diːˈklʌtər/"},
-  {word:"maintain",pos:"v.",meaning:"to keep something in good condition by regularly taking care of it",example:"It is important to maintain a clean and tidy home.",translation:"പരിപാലിക്കുക",ipa:"/meɪnˈteɪn/"},
-  {word:"repair",pos:"v.",meaning:"to fix something that is broken or damaged",example:"He repaired the broken chair in the living room.",translation:"നന്നാക്കുക",ipa:"/rɪˈpeər/"},
-  {word:"arrange",pos:"v.",meaning:"to put things in a neat or organised position",example:"She arranges the books on the shelf neatly.",translation:"ക്രമപ്പെടുത്തുക",ipa:"/əˈreɪndʒ/"},
-  {word:"replace",pos:"v.",meaning:"to put something new in the place of something old or broken",example:"He replaced the broken light bulb in the bedroom.",translation:"മാറ്റി വയ്ക്കുക",ipa:"/rɪˈpleɪs/"},
-  {word:"clutter",pos:"n.",meaning:"many things in an untidy or disorganised state",example:"There is too much clutter on the kitchen counter.",translation:"അലങ്കോലം",ipa:"/ˈklʌtər/"},
-  {word:"chore",pos:"n.",meaning:"a regular and often boring job done at home",example:"Washing the dishes is a daily chore in our house.",translation:"ഗൃഹജോലി",ipa:"/tʃɔːr/"},
-  {word:"classroom",pos:"n.",meaning:"a room in a school where students have lessons",example:"The students sat quietly in the classroom and waited for the teacher.",translation:"ക്ലാസ്മുറി",ipa:"/ˈklɑːsruːm/"},
-  {word:"subject",pos:"n.",meaning:"an area of study taught in school, such as maths or science",example:"My favourite subject at school is art.",translation:"വിഷയം",ipa:"/ˈsʌbdʒɪkt/"},
-  {word:"homework",pos:"n.",meaning:"school work that a student does at home",example:"She finished her homework before dinner.",translation:"വീട്ടുപണി",ipa:"/ˈhoʊmwɜːrk/"},
-  {word:"teacher",pos:"n.",meaning:"a person whose job is to teach students in a school",example:"Our maths teacher explains everything very clearly.",translation:"അദ്ധ്യാപകൻ",ipa:"/ˈtiːtʃər/"},
-  {word:"student",pos:"n.",meaning:"a person who studies at a school or university",example:"Every student needs a pencil and a notebook for class.",translation:"വിദ്യാർത്ഥി",ipa:"/ˈstjuːdənt/"},
-  {word:"lesson",pos:"n.",meaning:"a period of time in which students are taught something",example:"We have a science lesson every Tuesday morning.",translation:"പാഠം",ipa:"/ˈlesən/"},
-  {word:"geography",pos:"n.",meaning:"the school subject that studies countries, maps, and the Earth",example:"In geography, we learned about the rivers of Asia.",translation:"ഭൂമിശാസ്ത്രം",ipa:"/dʒiˈɒɡrəfi/"},
-  {word:"mathematics",pos:"n.",meaning:"the school subject that involves numbers, shapes, and calculations",example:"He is very good at mathematics and loves solving problems.",translation:"ഗണിതശാസ്ത്രം",ipa:"/ˌmæθəˈmætɪks/"},
-  {word:"science",pos:"n.",meaning:"the school subject that studies the natural world through experiments",example:"We did a fun experiment in science class today.",translation:"ശാസ്ത്രം",ipa:"/ˈsaɪəns/"},
-  {word:"art",pos:"n.",meaning:"the school subject where students draw, paint, or make things",example:"She made a beautiful picture in her art class.",translation:"കല",ipa:"/ɑːrt/"},
-  {word:"exam",pos:"n.",meaning:"a formal test to check how much a student knows",example:"He studied hard because he had an exam the next day.",translation:"പരീക്ഷ",ipa:"/ɪɡˈzæm/"},
-  {word:"grade",pos:"n.",meaning:"a mark or score given for schoolwork or an exam",example:"She got a very good grade on her English test.",translation:"ഗ്രേഡ്",ipa:"/ɡreɪd/"},
-  {word:"notebook",pos:"n.",meaning:"a small book with blank pages used for writing notes",example:"Please write the new words in your notebook.",translation:"നോട്ട്ബുക്ക്",ipa:"/ˈnoʊtbʊk/"},
-  {word:"pencil",pos:"n.",meaning:"a thin tool used for writing or drawing, made of wood with a grey centre",example:"Can I borrow your pencil to write this word?",translation:"പെൻസിൽ",ipa:"/ˈpensəl/"},
-  {word:"textbook",pos:"n.",meaning:"a book used in school that contains information about a subject",example:"Open your textbook to page forty-two.",translation:"പാഠപുസ്തകം",ipa:"/ˈtekstbʊk/"},
-  {word:"library",pos:"n.",meaning:"a room or building in a school where books can be read or borrowed",example:"She went to the library to find books for her project.",translation:"ഗ്രന്ഥശാല",ipa:"/ˈlaɪbrəri/"},
-  {word:"timetable",pos:"n.",meaning:"a list showing when different school lessons happen during the week",example:"According to the timetable, we have PE on Friday.",translation:"സമയക്രമം",ipa:"/ˈtaɪmteɪbəl/"},
-  {word:"principal",pos:"n.",meaning:"the person in charge of a school",example:"The principal gave a speech to all the students at assembly.",translation:"പ്രധാനാദ്ധ്യാപകൻ",ipa:"/ˈprɪnsɪpəl/"},
-  {word:"register",pos:"v.",meaning:"to put your name on an official list to join a school or class",example:"You need to register for the new course before Friday.",translation:"രജിസ്റ്റർ ചെയ്യുക",ipa:"/ˈredʒɪstər/"},
-  {word:"biology",pos:"n.",meaning:"the school subject that studies living things such as plants and animals",example:"We looked at cells under a microscope in biology today.",translation:"ജീവശാസ്ത്രം",ipa:"/baɪˈɒlədʒi/"},
-  {word:"chemistry",pos:"n.",meaning:"the school subject that studies substances and how they react together",example:"In chemistry, we learned about water and its properties.",translation:"രസതന്ത്രം",ipa:"/ˈkemɪstri/"},
-  {word:"physics",pos:"n.",meaning:"the school subject that studies energy, forces, and how things move",example:"Physics taught me why objects fall to the ground.",translation:"ഭൗതികശാസ്ത്രം",ipa:"/ˈfɪzɪks/"},
-  {word:"essay",pos:"n.",meaning:"a piece of writing about a topic, done as schoolwork",example:"The teacher asked us to write an essay about our town.",translation:"ഉപന്യാസം",ipa:"/ˈeseɪ/"},
-  {word:"project",pos:"n.",meaning:"a piece of research or study on a topic done by a student",example:"Our group is working on a project about climate and animals.",translation:"പദ്ധതി",ipa:"/ˈprɒdʒekt/"},
-  {word:"absent",pos:"adj.",meaning:"not present at school or in class",example:"Three students were absent from school because they were sick.",translation:"ഹാജരില്ലാത്ത",ipa:"/ˈæbsənt/"},
-  {word:"attend",pos:"v.",meaning:"to go to and be present at a school or class",example:"All students must attend every lesson during the school week.",translation:"പങ്കെടുക്കുക",ipa:"/əˈtend/"},
-  {word:"degree",pos:"n.",meaning:"a qualification given by a university when you finish your studies",example:"She wants to get a degree in biology after school.",translation:"ബിരുദം",ipa:"/dɪˈɡriː/"},
-  {word:"diploma",pos:"n.",meaning:"an official document showing you have completed a course of study",example:"He received a diploma after finishing his computer course.",translation:"ഡിപ്ലോമ",ipa:"/dɪˈploʊmə/"},
-  {word:"campus",pos:"n.",meaning:"the area of land where school or university buildings are located",example:"The school campus has a sports field and a large library.",translation:"കാമ്പസ്",ipa:"/ˈkæmpəs/"},
-  {word:"curriculum",pos:"n.",meaning:"all the subjects and topics taught at a school",example:"The school added coding to its curriculum this year.",translation:"പാഠ്യക്രമം",ipa:"/kəˈrɪkjʊləm/"},
-  {word:"forest",pos:"n.",meaning:"a large area of land covered with many trees",example:"We went for a walk in the forest and saw many birds.",translation:"വനം",ipa:"/ˈfɒr.ɪst/"},
-  {word:"river",pos:"n.",meaning:"a large natural flow of water that moves across land",example:"The children played near the river on a hot afternoon.",translation:"നദി",ipa:"/ˈrɪv.ər/"},
-  {word:"ocean",pos:"n.",meaning:"a very large area of salt water that covers most of the Earth",example:"We watched the sunset over the ocean from the beach.",translation:"മഹാസമുദ്രം",ipa:"/ˈoʊ.ʃən/"},
-  {word:"mountain",pos:"n.",meaning:"a very high area of land with steep sides",example:"They climbed the mountain and enjoyed the amazing view.",translation:"പർവ്വതം",ipa:"/ˈmaʊn.tɪn/"},
-  {word:"plant",pos:"n.",meaning:"a living thing that grows in soil and has leaves",example:"She waters the plant every morning to keep it healthy.",translation:"സസ്യം",ipa:"/plænt/"},
-  {word:"tree",pos:"n.",meaning:"a tall plant with a thick wooden trunk and branches",example:"A large tree grows in front of our house.",translation:"മരം",ipa:"/triː/"},
-  {word:"flower",pos:"n.",meaning:"the colourful part of a plant that produces seeds",example:"She picked a yellow flower from the garden.",translation:"പൂവ്",ipa:"/ˈflaʊ.ər/"},
-  {word:"lake",pos:"n.",meaning:"a large area of water surrounded by land",example:"We went fishing at the lake on Sunday morning.",translation:"തടാകം",ipa:"/leɪk/"},
-  {word:"beach",pos:"n.",meaning:"an area of sand or small stones next to the sea",example:"The family spent the day at the beach building sandcastles.",translation:"കടൽത്തീരം",ipa:"/biːtʃ/"},
-  {word:"grass",pos:"n.",meaning:"a common green plant that covers fields and gardens",example:"The children sat on the grass and had a picnic.",translation:"പുല്ല്",ipa:"/ɡrɑːs/"},
-  {word:"leaf",pos:"n.",meaning:"a flat green part that grows from a branch of a plant or tree",example:"A dry leaf fell from the tree onto the ground.",translation:"ഇല",ipa:"/liːf/"},
-  {word:"animal",pos:"n.",meaning:"a living creature that is not a plant or human",example:"The zoo had many interesting animals from around the world.",translation:"മൃഗം",ipa:"/ˈæn.ɪ.məl/"},
-  {word:"bird",pos:"n.",meaning:"a creature with wings and feathers that can usually fly",example:"A small bird was singing in the tree outside my window.",translation:"പക്ഷി",ipa:"/bɜːd/"},
-  {word:"fish",pos:"n.",meaning:"a creature that lives and swims in water",example:"We saw colourful fish swimming in the clear river.",translation:"മത്സ്യം",ipa:"/fɪʃ/"},
-  {word:"sky",pos:"n.",meaning:"the space above the earth where clouds and the sun appear",example:"The sky was bright blue without a single cloud.",translation:"ആകാശം",ipa:"/skaɪ/"},
-  {word:"soil",pos:"n.",meaning:"the top layer of earth in which plants grow",example:"The farmer checked the soil before planting the seeds.",translation:"മണ്ണ്",ipa:"/sɔɪl/"},
-  {word:"seed",pos:"n.",meaning:"a small part of a plant that grows into a new plant",example:"She planted a seed in a small pot on the windowsill.",translation:"വിത്ത്",ipa:"/siːd/"},
-  {word:"rock",pos:"n.",meaning:"a hard natural material found in the ground or on mountains",example:"He sat on a big rock by the side of the river.",translation:"പാറ",ipa:"/rɒk/"},
-  {word:"desert",pos:"n.",meaning:"a large dry area of land with very little rain or plants",example:"The desert is very hot during the day and cold at night.",translation:"മരുഭൂമി",ipa:"/ˈdez.ət/"},
-  {word:"jungle",pos:"n.",meaning:"a thick tropical forest with many trees and plants",example:"Many wild animals live deep inside the jungle.",translation:"കാട്",ipa:"/ˈdʒʌŋ.ɡəl/"},
-  {word:"pond",pos:"n.",meaning:"a small area of still water in a garden or field",example:"There were frogs jumping around the small pond in the park.",translation:"കുളം",ipa:"/pɒnd/"},
-  {word:"sunshine",pos:"n.",meaning:"the light and warmth that comes from the sun",example:"The children played outside and enjoyed the sunshine.",translation:"സൂര്യപ്രകാശം",ipa:"/ˈsʌn.ʃaɪn/"},
-  {word:"pollution",pos:"n.",meaning:"harmful substances that damage the air, water, or land",example:"Pollution in the river is killing many fish and plants.",translation:"മലിനീകരണം",ipa:"/pəˈluː.ʃən/"},
-  {word:"recycle",pos:"v.",meaning:"to use something again instead of throwing it away",example:"We recycle paper and plastic bottles at school every week.",translation:"പുനരുപയോഗം ചെയ്യുക",ipa:"/ˌriːˈsaɪ.kəl/"},
-  {word:"protect",pos:"v.",meaning:"to keep something safe from harm or damage",example:"We must protect wild animals from losing their habitat.",translation:"സംരക്ഷിക്കുക",ipa:"/prəˈtekt/"},
-  {word:"grow",pos:"v.",meaning:"to develop and become bigger over time",example:"Sunflowers grow very tall in warm and sunny weather.",translation:"വളരുക",ipa:"/ɡroʊ/"},
-  {word:"wild",pos:"adj.",meaning:"living or growing freely in nature, not kept by humans",example:"Wild horses ran freely across the open field.",translation:"കാട്ടു",ipa:"/waɪld/"},
-  {word:"green",pos:"adj.",meaning:"having the colour of grass or leaves; also used to mean good for the environment",example:"The green hills were covered with tall trees and flowers.",translation:"പച്ച",ipa:"/ɡriːn/"},
-  {word:"waterfall",pos:"n.",meaning:"water that falls from a high place down to a lower level",example:"The waterfall in the national park was very beautiful.",translation:"നീർച്ചാട്ടം",ipa:"/ˈwɔː.tə.fɔːl/"},
-  {word:"harvest",pos:"n.",meaning:"the time when crops are collected from fields after growing",example:"Farmers worked hard during the harvest to collect all the wheat.",translation:"വിളവെടുപ്പ്",ipa:"/ˈhɑː.vɪst/"},
-  {word:"gather",pos:"v.",meaning:"to come together as a group",example:"We gather at the park every Sunday to hang out.",translation:"ഒന്നിച്ചുകൂടുക",ipa:"/ˈɡæð.ər/"},
-  {word:"chat",pos:"v.",meaning:"to talk in a friendly and informal way",example:"We sat in the cafe and chatted for hours.",translation:"സൗഹൃദമായി സംസാരിക്കുക",ipa:"/tʃæt/"},
-  {word:"hang out",pos:"phrase",meaning:"to spend time relaxing with friends",example:"Do you want to hang out at my place tonight?",translation:"സുഹൃത്തുക്കളോടൊപ്പം സമയം ചിലവഴിക്കുക",ipa:"/hæŋ aʊt/"},
-  {word:"party",pos:"n.",meaning:"a social event where people meet to have fun",example:"She invited ten friends to her birthday party.",translation:"പാർട്ടി",ipa:"/ˈpɑːr.ti/"},
-  {word:"club",pos:"n.",meaning:"a group of people who meet regularly for a shared interest",example:"He joined a chess club at school.",translation:"ക്ലബ്ബ്",ipa:"/klʌb/"},
-  {word:"picnic",pos:"n.",meaning:"an outdoor meal shared with friends or family",example:"We had a picnic in the park last weekend.",translation:"പിക്നിക്",ipa:"/ˈpɪk.nɪk/"},
-  {word:"outing",pos:"n.",meaning:"a short trip made for pleasure with others",example:"Our class went on an outing to the museum.",translation:"遠足 / ഒരു ചെറിയ ഒത്തുചേരൽ യാത്ര",ipa:"/ˈaʊt.ɪŋ/"},
-  {word:"greet",pos:"v.",meaning:"to say hello or welcome someone",example:"She greeted her friends with a big smile.",translation:"അഭിവാദ്യം ചെയ്യുക",ipa:"/ɡriːt/"},
-  {word:"laugh",pos:"v.",meaning:"to make sounds showing you find something funny",example:"We laughed a lot at his silly jokes.",translation:"ചിരിക്കുക",ipa:"/lɑːf/"},
-  {word:"reunion",pos:"n.",meaning:"a meeting of people who have not seen each other for a long time",example:"We had a school reunion last summer.",translation:"പുനഃസമ്മേളനം",ipa:"/riːˈjuː.ni.ən/"},
-  {word:"sleepover",pos:"n.",meaning:"a night spent at a friend's home",example:"My daughter is having a sleepover with her best friend.",translation:"സുഹൃത്തിന്റെ വീട്ടിൽ രാത്രി തങ്ങൽ",ipa:"/ˈsliːp.oʊ.vər/"},
-  {word:"introduce",pos:"v.",meaning:"to tell people each other's names for the first time",example:"Let me introduce you to my new friend, Sara.",translation:"പരിചയപ്പെടുത്തുക",ipa:"/ˌɪn.trəˈdjuːs/"},
-  {word:"buddy",pos:"n.",meaning:"a close friend or companion",example:"Tom is my best buddy from school.",translation:"절친한 친구 / അടുത്ത കൂട്ടുകാരൻ",ipa:"/ˈbʌd.i/"},
-  {word:"bond",pos:"n.",meaning:"a close connection or friendship between people",example:"There is a strong bond between the two sisters.",translation:"ബന്ധം",ipa:"/bɒnd/"},
-  {word:"wave",pos:"v.",meaning:"to move your hand to greet or say goodbye to someone",example:"He waved at his friends across the street.",translation:"കൈ വീശുക",ipa:"/weɪv/"},
-  {word:"hug",pos:"v.",meaning:"to put your arms around someone to show affection",example:"She hugged her friend when she saw her at the airport.",translation:"ആലിംഗനം ചെയ്യുക",ipa:"/hʌɡ/"},
-  {word:"celebrate",pos:"v.",meaning:"to do something special and fun for a good occasion",example:"We celebrated his birthday at a restaurant.",translation:"ആഘോഷിക്കുക",ipa:"/ˈsel.ɪ.breɪt/"},
-  {word:"sociable",pos:"adj.",meaning:"enjoying talking and spending time with other people",example:"Maria is very sociable and makes friends easily.",translation:"സൗഹൃദസ്വഭാവമുള്ള",ipa:"/ˈsoʊ.ʃə.bəl/"},
-  {word:"trust",pos:"v.",meaning:"to believe that someone is honest and reliable",example:"I trust my best friend with my secrets.",translation:"വിശ്വസിക്കുക",ipa:"/trʌst/"},
-  {word:"argue",pos:"v.",meaning:"to disagree with someone and speak in an angry way",example:"They sometimes argue but they are still good friends.",translation:"വഴക്കിടുക",ipa:"/ˈɑːr.ɡjuː/"},
-  {word:"forgive",pos:"v.",meaning:"to stop being angry at someone for something they did wrong",example:"She forgave her friend after their small argument.",translation:"ക്ഷമിക്കുക",ipa:"/fərˈɡɪv/"},
-  {word:"make up",pos:"phrase",meaning:"to become friends again after an argument",example:"They argued on Monday but made up by Tuesday.",translation:"അനുരഞ്ജനം ആകുക",ipa:"/meɪk ʌp/"},
-  {word:"supportive",pos:"adj.",meaning:"giving help and encouragement to others",example:"A good friend is always supportive when you have problems.",translation:"പിന്തുണ നൽകുന്ന",ipa:"/səˈpɔːr.tɪv/"},
-  {word:"keep in touch",pos:"phrase",meaning:"to continue communicating with someone regularly",example:"We moved to different cities but kept in touch online.",translation:"ബന്ধം നിലനിർത്തുക",ipa:"/kiːp ɪn tʌtʃ/"},
-  {word:"join",pos:"v.",meaning:"to become part of a group or activity",example:"Would you like to join us for dinner tonight?",translation:"ചേരുക",ipa:"/dʒɔɪn/"},
-  {word:"lively",pos:"adj.",meaning:"full of energy and fun",example:"The party was really lively with lots of music and dancing.",translation:"ഉത്സാഹഭരിതമായ",ipa:"/ˈlaɪv.li/"},
-  {word:"catch up",pos:"phrase",meaning:"to talk with someone you haven't seen for a while",example:"We met for coffee to catch up after many months.",translation:"കൂടുതൽ കാലത്തിനു ശേഷം സംസാരിക്കുക",ipa:"/kætʃ ʌp/"},
-  {word:"acquaintance",pos:"n.",meaning:"a person you know but who is not a close friend",example:"He is just an acquaintance, not a close friend.",translation:"പരിചയക്കാരൻ",ipa:"/əˈkweɪn.təns/"},
-  {word:"get along",pos:"phrase",meaning:"to have a good, friendly relationship with someone",example:"I get along well with all my classmates.",translation:"നല്ല ബന്ധം പുലർത്തുക",ipa:"/ɡet əˈlɒŋ/"},
-  {word:"ferry",pos:"n.",meaning:"a boat that carries people or vehicles across water",example:"We took the ferry to cross the river to the other side.",translation:"ഫെറി (ജലഗതാഗത വാഹനം)",ipa:"/ˈfɛri/"},
-  {word:"platform",pos:"n.",meaning:"the area in a train station where you wait for or get on a train",example:"The train to London leaves from platform five.",translation:"പ്ലാറ്റ്ഫോം",ipa:"/ˈplætfɔːm/"},
-  {word:"harbour",pos:"n.",meaning:"a safe area of water near land where boats can stop",example:"The small boats waited in the harbour during the storm.",translation:"തുറമുഖം",ipa:"/ˈhɑːbər/"},
-  {word:"journey",pos:"n.",meaning:"travel from one place to another",example:"The journey by train took about two hours.",translation:"യാത്ര",ipa:"/ˈdʒɜːni/"},
-  {word:"motorway",pos:"n.",meaning:"a wide, fast road for long-distance car travel",example:"We drove on the motorway to reach the city quickly.",translation:"മോട്ടോർവേ (അതിവേഗ പാത)",ipa:"/ˈməʊtəweɪ/"},
-  {word:"subway",pos:"n.",meaning:"an underground train system in a city",example:"She takes the subway to work every morning.",translation:"ഭൂഗർഭ തീവണ്ടി",ipa:"/ˈsʌbweɪ/"},
-  {word:"station",pos:"n.",meaning:"a building where trains or buses stop for passengers",example:"We met our friends at the bus station.",translation:"സ്റ്റേഷൻ",ipa:"/ˈsteɪʃən/"},
-  {word:"fare",pos:"n.",meaning:"the money you pay to travel on a bus, train, or taxi",example:"The bus fare to the city centre is two euros.",translation:"യാത്രാ നിരക്ക്",ipa:"/fɛr/"},
-  {word:"route",pos:"n.",meaning:"the path or way you take to go from one place to another",example:"We chose a different route to avoid the traffic.",translation:"മാർഗം / റൂട്ട്",ipa:"/ruːt/"},
-  {word:"airport",pos:"n.",meaning:"a place where aeroplanes take off and land",example:"We arrived at the airport two hours before our flight.",translation:"വിമാനത്താവളം",ipa:"/ˈɛrpɔːrt/"},
-  {word:"aeroplane",pos:"n.",meaning:"a vehicle with wings that flies through the air",example:"The aeroplane landed safely after a long flight.",translation:"വിമാനം",ipa:"/ˈɛrəpleɪn/"},
-  {word:"bicycle",pos:"n.",meaning:"a vehicle with two wheels that you ride by pushing pedals",example:"He rides his bicycle to school every day.",translation:"സൈക്കിൾ",ipa:"/ˈbaɪsɪkəl/"},
-  {word:"traffic",pos:"n.",meaning:"all the vehicles moving on a road at one time",example:"There was a lot of traffic on the road this morning.",translation:"ഗതാഗതം",ipa:"/ˈtræfɪk/"},
-  {word:"passenger",pos:"n.",meaning:"a person who travels in a vehicle but does not drive it",example:"The bus was full of passengers going to the city.",translation:"യാത്രക്കാരൻ",ipa:"/ˈpæsɪndʒər/"},
-  {word:"destination",pos:"n.",meaning:"the place where you are going or being sent",example:"Our final destination was a small town near the coast.",translation:"ലക്ഷ്യസ്ഥാനം",ipa:"/ˌdɛstɪˈneɪʃən/"},
-  {word:"border",pos:"n.",meaning:"the line that divides two countries",example:"We crossed the border between France and Spain.",translation:"അതിർത്തി",ipa:"/ˈbɔːrdər/"},
-  {word:"vehicle",pos:"n.",meaning:"a machine used for carrying people or goods from place to place",example:"A bus is a large vehicle that carries many passengers.",translation:"വാഹനം",ipa:"/ˈviːɪkəl/"},
-  {word:"driver",pos:"n.",meaning:"a person who drives a vehicle",example:"The bus driver was very helpful to the tourists.",translation:"ഡ്രൈവർ",ipa:"/ˈdraɪvər/"},
-  {word:"seat",pos:"n.",meaning:"a place where you can sit, for example on a train or plane",example:"Please find your seat before the train departs.",translation:"സീറ്റ്",ipa:"/siːt/"},
-  {word:"speed",pos:"n.",meaning:"how fast something or someone moves",example:"The train travels at a very high speed.",translation:"വേഗത",ipa:"/spiːd/"},
-  {word:"petrol",pos:"n.",meaning:"liquid fuel used in cars and other vehicles",example:"We stopped at the garage to buy petrol for the car.",translation:"പെട്രോൾ",ipa:"/ˈpɛtrəl/"},
-  {word:"hotel",pos:"n.",meaning:"a building where you pay to sleep and eat when travelling",example:"We stayed at a comfortable hotel near the beach.",translation:"ഹോട്ടൽ",ipa:"/həʊˈtɛl/"},
-  {word:"trip",pos:"n.",meaning:"a short journey to a place and back again",example:"We went on a day trip to the mountains last weekend.",translation:"ഹ്രസ്വ യാത്ര",ipa:"/trɪp/"},
-  {word:"depart",pos:"v.",meaning:"to leave a place, especially to start a journey",example:"The train will depart from platform three at noon.",translation:"പുറപ്പെടുക",ipa:"/dɪˈpɑːrt/"},
-  {word:"arrive",pos:"v.",meaning:"to reach a place at the end of a journey",example:"We will arrive in Paris at seven in the evening.",translation:"എത്തിച്ചേരുക",ipa:"/əˈraɪv/"},
-  {word:"straight",pos:"adv.",meaning:"without turning or changing direction",example:"Go straight down this road and you will see the station.",translation:"നേരെ",ipa:"/streɪt/"},
-  {word:"helicopter",pos:"n.",meaning:"an aircraft without wings that uses spinning blades to fly",example:"The helicopter flew over the city centre.",translation:"ഹെലിക്കോപ്റ്റർ",ipa:"/ˈhɛlɪkɒptər/"},
-  {word:"roundabout",pos:"n.",meaning:"a circular road junction where traffic goes around a central island",example:"Turn left at the roundabout to reach the hotel.",translation:"വൃത്താകൃതിയിലുള്ള ജംഗ്ഷൻ",ipa:"/ˈraʊndəbaʊt/"},
-  {word:"channel",pos:"n.",meaning:"a TV station that broadcasts programmes",example:"My favourite channel shows cartoons every morning.",translation:"ചാനൽ",ipa:"/ˈtʃænəl/"},
-  {word:"episode",pos:"n.",meaning:"one part of a TV series",example:"I watched three episodes of that show last night.",translation:"എപ്പിസോഡ്",ipa:"/ˈepɪsoʊd/"},
-  {word:"remote",pos:"n.",meaning:"a small device used to control a TV",example:"Can you pass me the remote? I want to change the channel.",translation:"റിമോട്ട്",ipa:"/rɪˈmoʊt/"},
-  {word:"series",pos:"n.",meaning:"a set of TV programmes with the same characters or topic",example:"That series has ten episodes in total.",translation:"സീരീസ്",ipa:"/ˈsɪəriːz/"},
-  {word:"subtitle",pos:"n.",meaning:"words shown at the bottom of a screen that translate or repeat speech",example:"I turn on subtitles when I watch foreign films.",translation:"സബ്‌ടൈറ്റിൽ",ipa:"/ˈsʌbtaɪtəl/"},
-  {word:"broadcast",pos:"v.",meaning:"to send out a programme on TV or radio",example:"The news is broadcast every evening at seven.",translation:"പ്രക്ഷേപണം ചെയ്യുക",ipa:"/ˈbrɔːdkɑːst/"},
-  {word:"cartoon",pos:"n.",meaning:"an animated TV show or film with drawn characters",example:"Children love watching cartoons on Saturday mornings.",translation:"കാർട്ടൂൺ",ipa:"/kɑːrˈtuːn/"},
-  {word:"actor",pos:"n.",meaning:"a person who plays a character in a film or TV show",example:"My favourite actor won an award last year.",translation:"നടൻ",ipa:"/ˈæktər/"},
-  {word:"actress",pos:"n.",meaning:"a woman who plays a character in a film or TV show",example:"The actress smiled when she received the prize.",translation:"നടി",ipa:"/ˈæktrəs/"},
-  {word:"comedy",pos:"n.",meaning:"a funny TV show or film that makes people laugh",example:"We watched a comedy and laughed the whole time.",translation:"കോമഡി",ipa:"/ˈkɒmədi/"},
-  {word:"drama",pos:"n.",meaning:"a serious TV show or film about real-life situations",example:"She loves watching drama because the stories are emotional.",translation:"ഡ്രാമ",ipa:"/ˈdrɑːmə/"},
-  {word:"headline",pos:"n.",meaning:"the title of a news story printed in large letters",example:"I read the headlines every morning on my phone.",translation:"തലക്കെട്ട്",ipa:"/ˈhedlaɪn/"},
-  {word:"reporter",pos:"n.",meaning:"a person who collects and presents news stories",example:"The reporter stood outside the building to give the latest news.",translation:"റിപ്പോർട്ടർ",ipa:"/rɪˈpɔːrtər/"},
-  {word:"trailer",pos:"n.",meaning:"a short video that shows highlights of a film or show",example:"I watched the trailer and now I really want to see the film.",translation:"ട്രെയ്‌ലർ",ipa:"/ˈtreɪlər/"},
-  {word:"host",pos:"n.",meaning:"a person who presents a TV programme or show",example:"The host asked the contestants funny questions.",translation:"അവതാരകൻ",ipa:"/hoʊst/"},
-  {word:"documentary",pos:"n.",meaning:"a film or TV programme about real events or people",example:"We watched a documentary about ocean life.",translation:"ഡോക്യുമെന്ററി",ipa:"/ˌdɒkjʊˈmentri/"},
-  {word:"streaming",pos:"n.",meaning:"watching video or listening to audio directly from the internet",example:"Streaming movies at home is very popular now.",translation:"സ്ട്രീമിംഗ്",ipa:"/ˈstriːmɪŋ/"},
-  {word:"press",pos:"n.",meaning:"newspapers and magazines as a group",example:"The press reported the story the next day.",translation:"പത്രമാധ്യമം",ipa:"/pres/"},
-  {word:"advert",pos:"n.",meaning:"a short message on TV or radio that tries to sell something",example:"There are too many adverts during my favourite show.",translation:"പരസ്യം",ipa:"/ˈædvɜːrt/"},
-  {word:"celebrity",pos:"n.",meaning:"a famous person, especially in entertainment",example:"Many celebrities attended the award ceremony.",translation:"സെലിബ്രിറ്റി",ipa:"/səˈlebrəti/"},
-  {word:"plot",pos:"n.",meaning:"the main story of a film, book, or TV show",example:"The plot of that film is very exciting and surprising.",translation:"കഥാസംഗ്രഹം",ipa:"/plɒt/"},
-  {word:"character",pos:"n.",meaning:"a person in a film, book, or TV programme",example:"My favourite character in the show is very brave.",translation:"കഥാപാത്രം",ipa:"/ˈkærəktər/"},
-  {word:"scene",pos:"n.",meaning:"one part of a film or TV show that happens in one place",example:"The opening scene of the film was very dramatic.",translation:"രംഗം",ipa:"/siːn/"},
-  {word:"review",pos:"n.",meaning:"a written or spoken opinion about a film, book, or show",example:"I read a good review before choosing the film to watch.",translation:"അവലോകനം",ipa:"/rɪˈvjuː/"},
-  {word:"genre",pos:"n.",meaning:"a type or category of film, music, or book",example:"My favourite genre is action because it is very exciting.",translation:"വിഭാഗം",ipa:"/ˈʒɒnrə/"},
-  {word:"magazine",pos:"n.",meaning:"a publication with articles and pictures, published regularly",example:"She buys a fashion magazine every week.",translation:"മാഗസിൻ",ipa:"/ˌmæɡəˈziːn/"},
-  {word:"podcast",pos:"n.",meaning:"an audio programme you can listen to on the internet",example:"He listens to an English podcast every day to improve his skills.",translation:"പോഡ്‌കാസ്റ്റ്",ipa:"/ˈpɒdkɑːst/"},
-  {word:"live",pos:"adj.",meaning:"happening or being shown at the same time as the event",example:"We watched the football match live on TV.",translation:"തത്സമയം",ipa:"/laɪv/"},
-  {word:"schedule",pos:"n.",meaning:"a list of TV programmes and the times they are shown",example:"I checked the TV schedule to find my favourite show.",translation:"ഷെഡ്യൂൾ",ipa:"/ˈskedʒuːl/"},
-  {word:"presenter",pos:"n.",meaning:"a person who introduces and leads a TV or radio programme",example:"The presenter spoke clearly and smiled at the camera.",translation:"അവതാരകൻ",ipa:"/prɪˈzentər/"},
-  {word:"balloon",pos:"n.",meaning:"a small, thin rubber bag filled with air or gas, used as a decoration at celebrations",example:"We put colorful balloons around the room for the birthday party.",translation:"ബലൂൺ",ipa:"/bəˈluːn/"},
-  {word:"candle",pos:"n.",meaning:"a stick of wax with a wick that you light to give light or decoration",example:"She blew out all the candles on her birthday cake.",translation:"മെഴുകുതിരി",ipa:"/ˈkændl/"},
-  {word:"cake",pos:"n.",meaning:"a sweet food made from flour, sugar, and eggs, often eaten at celebrations",example:"They bought a big chocolate cake for the party.",translation:"കേക്ക്",ipa:"/keɪk/"},
-  {word:"gift",pos:"n.",meaning:"something you give to someone to make them happy, especially on a special occasion",example:"She received many gifts on her birthday.",translation:"സമ്മാനം",ipa:"/ɡɪft/"},
-  {word:"decorate",pos:"v.",meaning:"to make a place look nice by adding things like lights and flowers",example:"We decorated the house with lights for the festival.",translation:"അലങ്കരിക്കുക",ipa:"/ˈdekəreɪt/"},
-  {word:"firework",pos:"n.",meaning:"a small device that makes a loud noise and bright colors in the sky when lit",example:"Everyone watched the fireworks on New Year's Eve.",translation:"വെടിക്കെട്ട്",ipa:"/ˈfaɪəwɜːk/"},
-  {word:"costume",pos:"n.",meaning:"special clothing worn for a celebration, festival, or performance",example:"The children wore funny costumes for the Halloween party.",translation:"വേഷം",ipa:"/ˈkɒstjuːm/"},
-  {word:"feast",pos:"n.",meaning:"a large, special meal shared with others during a celebration",example:"The family prepared a big feast for the holiday.",translation:"വിരുന്ന്",ipa:"/fiːst/"},
-  {word:"greeting",pos:"n.",meaning:"something you say or write to welcome someone or wish them well",example:"She sent greeting cards to all her friends at Christmas.",translation:"ആശംസ",ipa:"/ˈɡriːtɪŋ/"},
-  {word:"tradition",pos:"n.",meaning:"a custom or activity that people do every year at a special time",example:"It is a tradition in our family to sing songs on New Year's Day.",translation:"പാരമ്പര്യം",ipa:"/trəˈdɪʃn/"},
-  {word:"parade",pos:"n.",meaning:"a line of people and vehicles moving through the streets to celebrate something",example:"We watched the colorful parade during the national holiday.",translation:"ഘോഷയാത്ര",ipa:"/pəˈreɪd/"},
-  {word:"anniversary",pos:"n.",meaning:"the date each year when you remember a special event from the past",example:"They went to a nice restaurant for their wedding anniversary.",translation:"വാർഷികം",ipa:"/ˌænɪˈvɜːsəri/"},
-  {word:"carol",pos:"n.",meaning:"a religious or traditional song sung at Christmas",example:"The children sang carols in front of the church.",translation:"ക്രിസ്മസ് ഗാനം",ipa:"/ˈkærəl/"},
-  {word:"invitation",pos:"n.",meaning:"a written or spoken request asking someone to come to an event",example:"I received an invitation to my friend's birthday party.",translation:"ക്ഷണം",ipa:"/ˌɪnvɪˈteɪʃn/"},
-  {word:"ceremony",pos:"n.",meaning:"a formal event held to celebrate or mark a special occasion",example:"The graduation ceremony was held in the school hall.",translation:"ചടങ്ങ്",ipa:"/ˈserɪməni/"},
-  {word:"lantern",pos:"n.",meaning:"a light inside a frame, often used as decoration during festivals",example:"People hang red lanterns during the Spring Festival.",translation:"വിളക്ക്",ipa:"/ˈlæntən/"},
-  {word:"confetti",pos:"n.",meaning:"small pieces of colored paper thrown into the air at celebrations",example:"Everyone threw confetti when the bride and groom came out.",translation:"കൺഫെറ്റി",ipa:"/kənˈfeti/"},
-  {word:"toast",pos:"n.",meaning:"a moment when people raise their glasses and drink to wish someone well",example:"Everyone made a toast to the happy couple at the wedding.",translation:"ആശംസാ പാനം",ipa:"/toʊst/"},
-  {word:"countdown",pos:"n.",meaning:"counting numbers down to zero before something special happens",example:"We all joined the countdown before the New Year fireworks.",translation:"കൗണ്ട്ഡൗൺ",ipa:"/ˈkaʊntdaʊn/"},
-  {word:"present",pos:"n.",meaning:"something given to someone as a gift at a celebration",example:"He opened his presents after the birthday cake.",translation:"സമ്മാനം",ipa:"/ˈpreznt/"},
-  {word:"festive",pos:"adj.",meaning:"happy and lively because of a celebration or holiday",example:"The streets had a festive atmosphere during the carnival.",translation:"ആഘോഷകരമായ",ipa:"/ˈfestɪv/"},
-  {word:"decoration",pos:"n.",meaning:"an object used to make a place look more attractive for a celebration",example:"The shop sold beautiful Christmas decorations.",translation:"അലങ്കാരം",ipa:"/ˌdekəˈreɪʃn/"},
-  {word:"carnival",pos:"n.",meaning:"a public festival with music, dancing, and entertainment on the streets",example:"The whole town came out to enjoy the summer carnival.",translation:"കാർണിവൽ",ipa:"/ˈkɑːnɪvl/"},
-  {word:"wrapped",pos:"adj.",meaning:"covered in paper or cloth, especially a gift for a celebration",example:"There were many wrapped presents under the Christmas tree.",translation:"പൊതിഞ്ഞ",ipa:"/ræpt/"},
-  {word:"national",pos:"adj.",meaning:"related to the whole country, especially a public holiday for everyone",example:"July 4th is a national holiday in the United States.",translation:"ദേശീയ",ipa:"/ˈnæʃnəl/"},
-  {word:"bonfire",pos:"n.",meaning:"a large fire built outside, often as part of a celebration",example:"The children danced around the bonfire on the festival night.",translation:"ഉത്സവ അഗ്നി",ipa:"/ˈbɒnfaɪər/"},
-  {word:"cheers",pos:"excl.",meaning:"something you say when you raise your glass before drinking at a celebration",example:"Everyone shouted 'Cheers!' and drank their juice at the party.",translation:"ആഹ്ലാദം",ipa:"/tʃɪəz/"},
-  {word:"memorable",pos:"adj.",meaning:"special or important enough to be easily remembered",example:"The wedding was a truly memorable event for the whole family.",translation:"അവിസ്മരണീയമായ",ipa:"/ˈmemərəbl/"},
-  {word:"joy",pos:"n.",meaning:"a feeling of great happiness, often felt during celebrations",example:"The children were full of joy on Christmas morning.",translation:"സന്തോഷം",ipa:"/dʒɔɪ/"},
-  {word:"ribbon",pos:"n.",meaning:"a long, thin strip of cloth used to tie gifts or decorate things",example:"She tied a red ribbon around the birthday present.",translation:"റിബൺ",ipa:"/ˈrɪbən/"},
-  {word:"alarm",pos:"n.",meaning:"a device that makes a loud sound to wake you up",example:"I set my alarm for six o'clock every morning.",translation:"അലാറം",ipa:"/əˈlɑːm/"},
-  {word:"shower",pos:"n.",meaning:"washing your body by standing under running water",example:"He takes a shower before going to work.",translation:"ഷവർ",ipa:"/ˈʃaʊər/"},
-  {word:"breakfast",pos:"n.",meaning:"the first meal you eat in the morning",example:"I always eat breakfast at seven o'clock.",translation:"പ്രഭാതഭക്ഷണം",ipa:"/ˈbrekfəst/"},
-  {word:"commute",pos:"v.",meaning:"to travel regularly to and from work",example:"She commutes to the office by bus every day.",translation:"യാത്ര ചെയ്യുക",ipa:"/kəˈmjuːt/"},
-  {word:"nap",pos:"n.",meaning:"a short sleep during the day",example:"He takes a short nap after lunch.",translation:"ഉറക്കം",ipa:"/næp/"},
-  {word:"jog",pos:"v.",meaning:"to run slowly as a form of exercise",example:"She jogs in the park every morning.",translation:"ജോഗ് ചെയ്യുക",ipa:"/dʒɒɡ/"},
-  {word:"habit",pos:"n.",meaning:"something you do regularly without thinking",example:"Drinking water in the morning is a good habit.",translation:"ശീലം",ipa:"/ˈhæbɪt/"},
-  {word:"routine",pos:"n.",meaning:"a set of activities you do regularly in the same order",example:"My morning routine takes about one hour.",translation:"ദിനചര്യ",ipa:"/ruːˈtiːn/"},
-  {word:"wake",pos:"v.",meaning:"to stop sleeping and become conscious",example:"I wake up at six every morning.",translation:"ഉണരുക",ipa:"/weɪk/"},
-  {word:"prepare",pos:"v.",meaning:"to make something ready before you need it",example:"She prepares her lunch the night before.",translation:"തയ്യാറാക്കുക",ipa:"/prɪˈpeər/"},
-  {word:"grocery",pos:"n.",meaning:"food and other goods bought from a shop",example:"She buys groceries every Sunday evening.",translation:"പലചരക്ക്",ipa:"/ˈɡrəʊsəri/"},
-  {word:"diary",pos:"n.",meaning:"a book where you write about your daily activities",example:"He writes in his diary before going to bed.",translation:"ഡയറി",ipa:"/ˈdaɪəri/"},
-  {word:"bedtime",pos:"n.",meaning:"the time when you usually go to sleep",example:"My bedtime is ten o'clock on weekdays.",translation:"ഉറങ്ങാൻ പോകുന്ന സമയം",ipa:"/ˈbedtaɪm/"},
-  {word:"remind",pos:"v.",meaning:"to help someone remember something",example:"I remind myself to drink water every hour.",translation:"ഓർമ്മിപ്പിക്കുക",ipa:"/rɪˈmaɪnd/"},
-  {word:"organize",pos:"v.",meaning:"to arrange things in a neat and useful way",example:"She organizes her bag every evening.",translation:"ക്രമീകരിക്കുക",ipa:"/ˈɔːɡənaɪz/"},
-  {word:"stretch",pos:"v.",meaning:"to extend your arms and legs to exercise your muscles",example:"He stretches for ten minutes every morning.",translation:"നീട്ടുക",ipa:"/stretʃ/"},
-  {word:"cook",pos:"v.",meaning:"to prepare food using heat",example:"She cooks dinner for her family every evening.",translation:"പാചകം ചെയ്യുക",ipa:"/kʊk/"},
-  {word:"meditate",pos:"v.",meaning:"to sit quietly and focus your mind to relax",example:"He meditates for fifteen minutes each morning.",translation:"ധ്യാനിക്കുക",ipa:"/ˈmedɪteɪt/"},
-  {word:"sleep",pos:"v.",meaning:"to rest your body and mind with your eyes closed",example:"I try to sleep for eight hours every night.",translation:"ഉറങ്ങുക",ipa:"/sliːp/"},
-  {word:"dress",pos:"v.",meaning:"to put clothes on yourself",example:"She dresses quickly before catching the bus.",translation:"വസ്ത്രം ധരിക്കുക",ipa:"/dres/"},
-  {word:"snack",pos:"n.",meaning:"a small amount of food eaten between meals",example:"She eats a healthy snack in the afternoon.",translation:"ലഘുഭക്ഷണം",ipa:"/snæk/"},
-  {word:"calendar",pos:"n.",meaning:"a chart showing the days, weeks, and months of the year",example:"I mark important tasks on my calendar every week.",translation:"കലണ്ടർ",ipa:"/ˈkælɪndər/"},
-  {word:"building",pos:"n.",meaning:"a structure with walls and a roof",example:"There is a tall building near the park.",translation:"കെട്ടിടം",ipa:"ˈbɪldɪŋ"},
-  {word:"street",pos:"n.",meaning:"a road in a town or city with houses or shops",example:"Our school is on a quiet street.",translation:"തെരുവ്",ipa:"striːt"},
-  {word:"bridge",pos:"n.",meaning:"a structure built over water or a road so people can cross",example:"We walked across the old bridge.",translation:"പാലം",ipa:"brɪdʒ"},
-  {word:"square",pos:"n.",meaning:"an open area in a town surrounded by buildings",example:"People sit in the town square in the evening.",translation:"ചത്വരം",ipa:"skweər"},
-  {word:"fountain",pos:"n.",meaning:"a structure in a public place that shoots water upward",example:"There is a beautiful fountain in the garden.",translation:"ജലധാര",ipa:"ˈfaʊntɪn"},
-  {word:"narrow",pos:"adj.",meaning:"not wide; small from side to side",example:"The streets in the old town are very narrow.",translation:"ഇടുങ്ങിയ",ipa:"ˈnærəʊ"},
-  {word:"ancient",pos:"adj.",meaning:"very old; from a long time ago",example:"We visited an ancient castle on our trip.",translation:"പ്രാചീനമായ",ipa:"ˈeɪnʃənt"},
-  {word:"crowded",pos:"adj.",meaning:"full of many people",example:"The market is very crowded on Saturdays.",translation:"തിരക്കേറിയ",ipa:"ˈkraʊdɪd"},
-  {word:"dirty",pos:"adj.",meaning:"not clean; covered in dirt or marks",example:"The old factory looks dirty and broken.",translation:"മലിനമായ",ipa:"ˈdɜːti"},
-  {word:"clean",pos:"adj.",meaning:"free from dirt or marks",example:"The new shopping centre is clean and bright.",translation:"വൃത്തിയുള്ള",ipa:"kliːn"},
-  {word:"entrance",pos:"n.",meaning:"the door or gate you use to go into a place",example:"Please use the main entrance of the museum.",translation:"പ്രവേശനകവാടം",ipa:"ˈentrəns"},
-  {word:"exit",pos:"n.",meaning:"the door or way out of a building or place",example:"The exit is at the back of the cinema.",translation:"പുറത്തുകടക്കാനുള്ള വഴി",ipa:"ˈeksɪt"},
-  {word:"floor",pos:"n.",meaning:"a level of a building",example:"The offices are on the third floor.",translation:"നില",ipa:"flɔː"},
-  {word:"roof",pos:"n.",meaning:"the top covering of a building",example:"The roof of the old church is very beautiful.",translation:"മേൽക്കൂര",ipa:"ruːf"},
-  {word:"wall",pos:"n.",meaning:"a vertical surface that forms the side of a building or room",example:"The walls of the room are painted white.",translation:"ചുവർ",ipa:"wɔːl"},
-  {word:"tower",pos:"n.",meaning:"a tall, narrow structure or part of a building",example:"You can see the whole city from the tower.",translation:"ഗോപുരം",ipa:"ˈtaʊər"},
-  {word:"path",pos:"n.",meaning:"a narrow way for walking between places",example:"There is a stone path through the garden.",translation:"നടപ്പാത",ipa:"pɑːθ"},
-  {word:"courtyard",pos:"n.",meaning:"an open area surrounded by walls or buildings",example:"Students eat lunch in the courtyard.",translation:"മുറ്റം",ipa:"ˈkɔːtjɑːd"},
-  {word:"basement",pos:"n.",meaning:"a room or floor below ground level",example:"The car park is in the basement.",translation:"നിലവറ",ipa:"ˈbeɪsmənt"},
-  {word:"balcony",pos:"n.",meaning:"a small platform on the outside of a building above ground level",example:"They have breakfast on the balcony.",translation:"ബാൽക്കണി",ipa:"ˈbælkəni"},
-  {word:"statue",pos:"n.",meaning:"a model of a person or animal made from stone or metal",example:"There is a large statue in the centre of the square.",translation:"പ്രതിമ",ipa:"ˈstætʃuː"},
-  {word:"pavement",pos:"n.",meaning:"a hard path at the side of a road for people to walk on",example:"Children ride their bikes on the pavement.",translation:"നടപ്പാത",ipa:"ˈpeɪvmənt"},
-  {word:"neighbourhood",pos:"n.",meaning:"the area around where you live",example:"Our neighbourhood has a small park and a bakery.",translation:"അയൽപ്രദേശം",ipa:"ˈneɪbəhʊd"},
-  {word:"ruined",pos:"adj.",meaning:"badly damaged and no longer usable",example:"The ruined castle is very popular with visitors.",translation:"നശിച്ചുപോയ",ipa:"ˈruːɪnd"},
-  {word:"fitting room",pos:"n.",meaning:"a small room in a shop where you try on clothes",example:"Can I use the fitting room to try this skirt?",translation:"ഫിറ്റിംഗ് റൂം",ipa:"/ˈfɪtɪŋ ruːm/"},
-  {word:"cashier",pos:"n.",meaning:"a person who takes payment in a shop",example:"Please pay the cashier at the front desk.",translation:"കാഷ്യർ",ipa:"/kæˈʃɪər/"},
-  {word:"size",pos:"n.",meaning:"how big or small a piece of clothing is",example:"Do you have this shirt in a larger size?",translation:"വലിപ്പം",ipa:"/saɪz/"},
-  {word:"affordable",pos:"adj.",meaning:"not too expensive; cheap enough to buy",example:"These shoes are very affordable.",translation:"താങ്ങാവുന്ന",ipa:"/əˈfɔːrdəbəl/"},
-  {word:"try on",pos:"v.",meaning:"to put on clothing to see if it fits",example:"I want to try on these trousers before I buy them.",translation:"ധരിച്ചുനോക്കുക",ipa:"/traɪ ɒn/"},
-  {word:"wardrobe",pos:"n.",meaning:"a tall cupboard where you keep clothes",example:"Her wardrobe is full of new dresses.",translation:"വസ്ത്രസൂക്ഷിക്കുന്ന അലമാര",ipa:"/ˈwɔːrdroʊb/"},
-  {word:"cotton",pos:"n.",meaning:"a natural material used to make clothes",example:"I prefer cotton shirts because they are cool.",translation:"പരുത്തി",ipa:"/ˈkɒtən/"},
-  {word:"fabric",pos:"n.",meaning:"the material used to make clothes",example:"This fabric feels very soft and smooth.",translation:"തുണി",ipa:"/ˈfæbrɪk/"},
-  {word:"fashion",pos:"n.",meaning:"a popular style of clothing at a particular time",example:"She always follows the latest fashion trends.",translation:"ഫാഷൻ",ipa:"/ˈfæʃən/"},
-  {word:"brand",pos:"n.",meaning:"the name of a company that makes products",example:"This brand makes very good quality jeans.",translation:"ബ്രാൻഡ്",ipa:"/brænd/"},
-  {word:"queue",pos:"n.",meaning:"a line of people waiting to pay or be served",example:"There was a long queue at the checkout.",translation:"ക്യൂ",ipa:"/kjuː/"},
-  {word:"outfit",pos:"n.",meaning:"a set of clothes worn together",example:"She bought a new outfit for the party.",translation:"വേഷം",ipa:"/ˈaʊtfɪt/"},
-  {word:"jacket",pos:"n.",meaning:"a short coat worn on the upper body",example:"He bought a leather jacket from that shop.",translation:"ജാക്കറ്റ്",ipa:"/ˈdʒækɪt/"},
-  {word:"scarf",pos:"n.",meaning:"a piece of cloth worn around the neck or head",example:"She chose a colourful scarf to match her coat.",translation:"സ്കാർഫ്",ipa:"/skɑːrf/"},
-  {word:"gloves",pos:"n.",meaning:"coverings for your hands worn in cold weather",example:"I need to buy warm gloves for winter.",translation:"ഗ്ലൗസ്",ipa:"/ɡlʌvz/"},
-  {word:"payment",pos:"n.",meaning:"the act of giving money for something",example:"She made the payment by card.",translation:"പണമടക്കൽ",ipa:"/ˈpeɪmənt/"},
-  {word:"menu",pos:"n.",meaning:"a list of food and drinks available in a restaurant",example:"Can I see the menu, please?",translation:"മെനു (ഭക്ഷണ പട്ടിക)",ipa:"/ˈmenjuː/"},
-  {word:"order",pos:"v.",meaning:"to ask for food or drink in a restaurant",example:"I would like to order a soup.",translation:"ഓർഡർ ചെയ്യുക",ipa:"/ˈɔːrdər/"},
-  {word:"waiter",pos:"n.",meaning:"a person who serves food in a restaurant",example:"The waiter brought our food quickly.",translation:"വെയിറ്റർ",ipa:"/ˈweɪtər/"},
-  {word:"main course",pos:"n.",meaning:"the largest and most important part of a meal",example:"I chose pasta as my main course.",translation:"പ്രധാന വിഭവം",ipa:"/meɪn kɔːrs/"},
-  {word:"dessert",pos:"n.",meaning:"sweet food eaten at the end of a meal",example:"She ordered ice cream for dessert.",translation:"മധുരപലഹാരം",ipa:"/dɪˈzɜːrt/"},
-  {word:"tip",pos:"n.",meaning:"extra money given to a waiter for good service",example:"We left a tip for the waiter.",translation:"ടിപ്പ് (അധിക പ്രതിഫലം)",ipa:"/tɪp/"},
-  {word:"beverage",pos:"n.",meaning:"any drink, such as water, juice, or coffee",example:"What beverage would you like?",translation:"പാനീയം",ipa:"/ˈbevərɪdʒ/"},
-  {word:"napkin",pos:"n.",meaning:"a piece of cloth or paper used to clean your mouth while eating",example:"Please put the napkin on your lap.",translation:"നാപ്കിൻ",ipa:"/ˈnæpkɪn/"},
-  {word:"cutlery",pos:"n.",meaning:"knives, forks, and spoons used for eating",example:"The waiter placed the cutlery on the table.",translation:"കത്തിയും മുള്ളും ചമ്മട്ടിയും",ipa:"/ˈkʌtləri/"},
-  {word:"recommend",pos:"v.",meaning:"to suggest something good to eat or drink",example:"Can you recommend a good dish?",translation:"ശുപാർശ ചെയ്യുക",ipa:"/ˌrekəˈmend/"},
-  {word:"specialty",pos:"n.",meaning:"a particular food that a restaurant is famous for",example:"The specialty here is grilled fish.",translation:"പ്രത്യേക വിഭവം",ipa:"/ˈspeʃəlti/"},
-  {word:"takeaway",pos:"n.",meaning:"food bought at a restaurant to eat somewhere else",example:"Let's get a takeaway tonight.",translation:"കൊണ്ടുപോകാനുള്ള ഭക്ഷണം",ipa:"/ˈteɪkəweɪ/"},
-  {word:"vegetarian",pos:"adj.",meaning:"containing no meat or fish",example:"Do you have a vegetarian option?",translation:"സസ്യാഹാര",ipa:"/ˌvedʒɪˈteəriən/"},
-  {word:"allergic",pos:"adj.",meaning:"having a bad reaction to certain foods",example:"I am allergic to nuts.",translation:"അലർജി ഉള്ള",ipa:"/əˈlɜːrdʒɪk/"},
-  {word:"refill",pos:"v.",meaning:"to fill a glass or cup again",example:"Can you refill my water glass?",translation:"വീണ്ടും നിറയ്ക്കുക",ipa:"/ˌriːˈfɪl/"},
-  {word:"spicy",pos:"adj.",meaning:"having a strong hot flavor from spices",example:"Is this dish very spicy?",translation:"എരിവുള്ള",ipa:"/ˈspaɪsi/"},
-  {word:"grilled",pos:"adj.",meaning:"cooked on a grill using direct heat",example:"I would like the grilled chicken, please.",translation:"ഗ്രിൽ ചെയ്ത",ipa:"/ɡrɪld/"},
-  {word:"booked",pos:"adj.",meaning:"having a table already reserved",example:"The restaurant was fully booked.",translation:"മുൻകൂർ ബുക്ക് ചെയ്ത",ipa:"/bʊkt/"},
-  {word:"serve",pos:"v.",meaning:"to bring food or drink to someone at a table",example:"The waiter will serve you shortly.",translation:"വിളമ്പുക",ipa:"/sɜːrv/"},
-  {word:"table",pos:"n.",meaning:"a piece of furniture where people sit to eat",example:"We need a table for four people.",translation:"മേശ",ipa:"/ˈteɪbəl/"},
-  {word:"starter",pos:"n.",meaning:"the first small dish of a meal",example:"I'll have the salad as a starter.",translation:"ആദ്യ ഭക്ഷണം",ipa:"/ˈstɑːrtər/"},
-  {word:"choice",pos:"n.",meaning:"the act of selecting between different food options",example:"You have a choice of soup or salad.",translation:"തിരഞ്ഞെടുപ്പ്",ipa:"/tʃɔɪs/"},
-  {word:"craft",pos:"n.",meaning:"making things with your hands as a fun activity",example:"She does craft on weekends and makes cards.",translation:"കൈത്തൊഴിൽ, കരകൗശലം",ipa:"/krɑːft/"},
-  {word:"knit",pos:"v.",meaning:"to make cloth or clothes using needles and wool",example:"My grandmother likes to knit warm scarves.",translation:"നൂൽ നെയ്യുക",ipa:"/nɪt/"},
-  {word:"sew",pos:"v.",meaning:"to join fabric together using a needle and thread",example:"She can sew a simple dress by hand.",translation:"തയ്ക്കുക",ipa:"/soʊ/"},
-  {word:"collect",pos:"v.",meaning:"to gather many of the same type of thing over time",example:"He likes to collect old coins from different countries.",translation:"ശേഖരിക്കുക",ipa:"/kəˈlekt/"},
-  {word:"collection",pos:"n.",meaning:"a group of things gathered together over time",example:"She has a big collection of stamps on her desk.",translation:"ശേഖരം",ipa:"/kəˈlekʃən/"},
-  {word:"drawing",pos:"n.",meaning:"a picture made with a pencil or pen",example:"Her drawing of a cat looked very real.",translation:"വരക്കൽ, ചിത്രരചന",ipa:"/ˈdrɔːɪŋ/"},
-  {word:"gardening",pos:"n.",meaning:"growing and taking care of plants and flowers",example:"Gardening is a relaxing hobby for many people.",translation:"തോട്ടപ്പണി",ipa:"/ˈɡɑːrdənɪŋ/"},
-  {word:"cycling",pos:"n.",meaning:"riding a bicycle as a sport or hobby",example:"Cycling in the park every morning keeps her healthy.",translation:"സൈക്കിൾ ചവിട്ടൽ",ipa:"/ˈsaɪklɪŋ/"},
-  {word:"baking",pos:"n.",meaning:"cooking bread or cakes in an oven as a hobby",example:"Baking cookies is her favourite weekend activity.",translation:"ബേക്കിംഗ്, ചുട്ടെടുക്കൽ",ipa:"/ˈbeɪkɪŋ/"},
-  {word:"photography",pos:"n.",meaning:"taking photos as a hobby or art",example:"He studied photography and takes beautiful pictures.",translation:"ഫോട്ടോഗ്രഫി",ipa:"/fəˈtɒɡrəfi/"},
-  {word:"reading",pos:"n.",meaning:"looking at and understanding written words in books",example:"Reading before bed helps her relax.",translation:"വായന",ipa:"/ˈriːdɪŋ/"},
-  {word:"novel",pos:"n.",meaning:"a long book that tells a fictional story",example:"She finished reading a novel about pirates.",translation:"നോവൽ",ipa:"/ˈnɒvəl/"},
-  {word:"puzzle",pos:"n.",meaning:"a game where you put pieces together to make a picture",example:"He spent two hours doing a puzzle at home.",translation:"പസിൽ, കടംകഥ",ipa:"/ˈpʌzəl/"},
-  {word:"boardgame",pos:"n.",meaning:"a game played on a flat board with pieces or cards",example:"They played a boardgame together on Friday night.",translation:"ബോർഡ് ഗെയിം",ipa:"/ˈbɔːrdɡeɪm/"},
-  {word:"swimming",pos:"n.",meaning:"moving through water using your arms and legs",example:"Swimming in the sea is her favourite summer hobby.",translation:"നീന്തൽ",ipa:"/ˈswɪmɪŋ/"},
-  {word:"dancing",pos:"n.",meaning:"moving your body to music as a hobby or art",example:"She takes dancing lessons every Saturday afternoon.",translation:"നൃത്തം",ipa:"/ˈdɑːnsɪŋ/"},
-  {word:"singing",pos:"n.",meaning:"making musical sounds with your voice",example:"Singing in the shower makes him feel happy.",translation:"പാടൽ",ipa:"/ˈsɪŋɪŋ/"},
-  {word:"origami",pos:"n.",meaning:"the Japanese art of folding paper into shapes",example:"She makes animals with origami in her spare time.",translation:"ഒറിഗാമി",ipa:"/ˌɒrɪˈɡɑːmi/"},
-  {word:"scrapbook",pos:"n.",meaning:"a book where you stick photos and memories",example:"She made a scrapbook of her last holiday.",translation:"സ്ക്രാപ്പ്ബുക്ക്",ipa:"/ˈskræpbʊk/"},
-  {word:"journal",pos:"n.",meaning:"a personal book where you write about your daily life",example:"He writes in his journal every night before sleeping.",translation:"ഡയറി, ജേർണൽ",ipa:"/ˈdʒɜːrnəl/"},
-  {word:"volunteer",pos:"v.",meaning:"to do helpful work without getting paid",example:"She volunteers at an animal shelter on Sundays.",translation:"സ്വമേധയാ സേവനം ചെയ്യുക",ipa:"/ˌvɒlənˈtɪər/"},
-  {word:"yoga",pos:"n.",meaning:"a physical and relaxing exercise with slow movements",example:"She does yoga in the garden every morning.",translation:"യോഗ",ipa:"/ˈjoʊɡə/"},
-  {word:"windy",pos:"adj.",meaning:"with strong winds blowing",example:"It is very windy outside today.",translation:"കാറ്റുള്ള",ipa:"/ˈwɪndi/"},
-  {word:"snowy",pos:"adj.",meaning:"covered with or having snow",example:"The children played outside on a snowy morning.",translation:"മഞ്ഞുവീഴ്ചയുള്ള",ipa:"/ˈsnoʊi/"},
-  {word:"stormy",pos:"adj.",meaning:"with strong winds and heavy rain",example:"We cancelled the trip because the weather was stormy.",translation:"കൊടുങ്കാറ്റുള്ള",ipa:"/ˈstɔːrmi/"},
-  {word:"humid",pos:"adj.",meaning:"warm and containing a lot of water in the air",example:"Summer here is very humid and uncomfortable.",translation:"ആർദ്രതയുള്ള",ipa:"/ˈhjuːmɪd/"},
-  {word:"dry",pos:"adj.",meaning:"having very little rain or moisture",example:"The weather has been very dry this month.",translation:"വരണ്ട",ipa:"/draɪ/"},
-  {word:"frost",pos:"n.",meaning:"thin layer of ice that forms on surfaces in cold weather",example:"There was frost on the grass this morning.",translation:"മഞ്ഞുറഞ്ഞ പാട",ipa:"/frɒst/"},
-  {word:"mist",pos:"n.",meaning:"thin, light fog near the ground",example:"There was a light mist over the river in the morning.",translation:"നേർത്ത മൂടൽ",ipa:"/mɪst/"},
-  {word:"snowfall",pos:"n.",meaning:"an occasion when snow falls from the sky",example:"The heavy snowfall closed the roads.",translation:"മഞ്ഞുവീഴ്ച",ipa:"/ˈsnoʊfɔːl/"},
-  {word:"rainfall",pos:"n.",meaning:"the amount of rain that falls in a place",example:"The annual rainfall here is very high.",translation:"മഴളവ്",ipa:"/ˈreɪnfɔːl/"},
-  {word:"blizzard",pos:"n.",meaning:"a severe snowstorm with strong winds",example:"The blizzard made it impossible to go outside.",translation:"ശക്തമായ മഞ്ഞുകൊടുങ്കാറ്റ്",ipa:"/ˈblɪzərd/"},
-  {word:"chilly",pos:"adj.",meaning:"quite cold in an unpleasant way",example:"It is chilly outside, so wear a coat.",translation:"തണുത്ത",ipa:"/ˈtʃɪli/"},
-  {word:"mild",pos:"adj.",meaning:"not too cold and not too hot",example:"We had a mild winter this year.",translation:"മിതമായ",ipa:"/maɪld/"},
-  {word:"simmer",pos:"v.",meaning:"to cook gently just below boiling point",example:"Let the sauce simmer for ten minutes.",translation:"മന്ദമായി തിളപ്പിക്കുക",ipa:"ˈsɪmər"},
-  {word:"drain",pos:"v.",meaning:"to remove water from cooked food",example:"Drain the pasta after boiling it.",translation:"വെള്ളം വാർക്കുക",ipa:"dreɪn"},
-  {word:"measure",pos:"v.",meaning:"to find out the exact amount of something",example:"Measure two cups of flour for the recipe.",translation:"അളക്കുക",ipa:"ˈmeʒər"},
-  {word:"knead",pos:"v.",meaning:"to press and stretch dough with your hands",example:"Knead the dough for five minutes.",translation:"കുഴയ്ക്കുക",ipa:"niːd"},
-  {word:"pan",pos:"n.",meaning:"a flat metal container used for cooking",example:"Heat the pan before adding oil.",translation:"പാൻ",ipa:"pæn"},
-  {word:"pot",pos:"n.",meaning:"a deep round container used for cooking",example:"Fill the pot with water and salt.",translation:"പാത്രം",ipa:"pɒt"},
-  {word:"oven",pos:"n.",meaning:"a kitchen appliance used for baking or roasting",example:"Preheat the oven to 180 degrees.",translation:"അടുപ്പ്",ipa:"ˈʌvən"},
-  {word:"ladle",pos:"n.",meaning:"a large deep spoon used for serving soup",example:"Use the ladle to serve the hot soup.",translation:"തവി",ipa:"ˈleɪdl"},
-  {word:"colander",pos:"n.",meaning:"a bowl with small holes used to drain food",example:"Put the pasta in the colander to drain.",translation:"അരിപ്പ",ipa:"ˈkɒləndər"},
-  {word:"spatula",pos:"n.",meaning:"a flat tool used to turn or lift food",example:"Use a spatula to flip the pancakes.",translation:"സ്പാറ്റുല",ipa:"ˈspætʃʊlə"},
-  {word:"whisk",pos:"n.",meaning:"a kitchen tool used to beat eggs or cream",example:"Use a whisk to beat the eggs quickly.",translation:"വിസ്ക്",ipa:"wɪsk"},
-  {word:"marinade",pos:"n.",meaning:"a liquid used to add flavour to meat before cooking",example:"Put the chicken in the marinade overnight.",translation:"മാരിനേഡ്",ipa:"ˈmærɪneɪd"},
-  {word:"seasoning",pos:"n.",meaning:"salt, pepper, or spices added to food for flavour",example:"Add seasoning to the soup to taste.",translation:"സുഗന്ധദ്രവ്യം",ipa:"ˈsiːzənɪŋ"},
-  {word:"cutting board",pos:"n.",meaning:"a flat surface used to cut food on",example:"Always use a cutting board when chopping vegetables.",translation:"കട്ടിംഗ് ബോർഡ്",ipa:"ˈkʌtɪŋ bɔːd"},
-  {word:"tablespoon",pos:"n.",meaning:"a large spoon used for measuring food",example:"Add one tablespoon of sugar to the mix.",translation:"ടേബിൾസ്പൂൺ",ipa:"ˈteɪblspuːn"},
-  {word:"saucepan",pos:"n.",meaning:"a deep round pan with a handle used for cooking",example:"Heat the milk in a small saucepan.",translation:"സോസ്പാൻ",ipa:"ˈsɔːspæn"},
-  {word:"tongs",pos:"n.",meaning:"a tool with two arms used to hold or turn food",example:"Use tongs to turn the meat on the grill.",translation:"ടോങ്ങ്സ്",ipa:"tɒŋz"},
-  {word:"happy",pos:"adj.",meaning:"feeling pleasure and joy",example:"She felt happy when she saw her friends.",translation:"സന്തോഷമുള്ള",ipa:"ˈhæpi"},
-  {word:"sad",pos:"adj.",meaning:"feeling unhappy or upset",example:"He was sad when his dog got lost.",translation:"സങ്കടമുള്ള",ipa:"sæd"},
-  {word:"angry",pos:"adj.",meaning:"feeling strong displeasure",example:"She was angry when someone broke her cup.",translation:"ദേഷ്യമുള്ള",ipa:"ˈæŋɡri"},
-  {word:"scared",pos:"adj.",meaning:"feeling fear about something",example:"The child was scared of the dark room.",translation:"പേടിച്ച",ipa:"skɛrd"},
-  {word:"excited",pos:"adj.",meaning:"feeling very happy and enthusiastic",example:"He was excited about his birthday party.",translation:"ഉത്സാഹഭരിതനായ",ipa:"ɪkˈsaɪtɪd"},
-  {word:"worried",pos:"adj.",meaning:"feeling anxious about something bad happening",example:"She was worried about her exam results.",translation:"ആശങ്കപ്പെടുന്ന",ipa:"ˈwʌrid"},
-  {word:"proud",pos:"adj.",meaning:"feeling pleased about your achievement",example:"He was proud of his good grades.",translation:"അഭിമാനമുള്ള",ipa:"praʊd"},
-  {word:"lonely",pos:"adj.",meaning:"feeling sad because you are alone",example:"She felt lonely in her new city.",translation:"ഏകാകിതയുള്ള",ipa:"ˈloʊnli"},
-  {word:"nervous",pos:"adj.",meaning:"feeling worried and anxious",example:"She was nervous before her presentation.",translation:"പരിഭ്രാന്തിയുള്ള",ipa:"ˈnɜːrvəs"},
-  {word:"bored",pos:"adj.",meaning:"feeling uninterested and restless",example:"He was bored because there was nothing to do.",translation:"മടുത്ത",ipa:"bɔːrd"},
-  {word:"embarrassed",pos:"adj.",meaning:"feeling ashamed or awkward",example:"He was embarrassed when he forgot her name.",translation:"ലജ്ജിച്ച",ipa:"ɪmˈbærəst"},
-  {word:"jealous",pos:"adj.",meaning:"feeling upset because someone has something you want",example:"She felt jealous of her sister's new bike.",translation:"അസൂയയുള്ള",ipa:"ˈdʒɛləs"},
-  {word:"grateful",pos:"adj.",meaning:"feeling thankful for something received",example:"He was grateful for her help.",translation:"നന്ദിയുള്ള",ipa:"ˈɡreɪtfəl"},
-  {word:"upset",pos:"adj.",meaning:"feeling unhappy or troubled",example:"She was upset after the argument.",translation:"അസ്വസ്ഥനായ",ipa:"ʌpˈsɛt"},
-  {word:"confused",pos:"adj.",meaning:"unable to understand or think clearly",example:"He was confused by the complicated instructions.",translation:"ആശയക്കുഴപ്പത്തിലായ",ipa:"kənˈfjuːzd"},
-  {word:"hopeful",pos:"adj.",meaning:"feeling that good things will happen",example:"She was hopeful about finding a new job.",translation:"പ്രത്യാശയുള്ള",ipa:"ˈhoʊpfəl"},
-  {word:"disappointed",pos:"adj.",meaning:"feeling sad because something did not happen as expected",example:"He was disappointed when the trip was cancelled.",translation:"നിരാശപ്പെട്ട",ipa:"ˌdɪsəˈpɔɪntɪd"},
-  {word:"relieved",pos:"adj.",meaning:"feeling glad that a worry has ended",example:"She was relieved when she found her wallet.",translation:"ആശ്വാസം തോന്നിയ",ipa:"rɪˈliːvd"},
-  {word:"fear",pos:"n.",meaning:"a strong feeling of being scared",example:"She had a fear of spiders.",translation:"ഭയം",ipa:"fɪər"},
-  {word:"grief",pos:"n.",meaning:"deep sadness caused by loss",example:"He felt great grief after losing his grandfather.",translation:"ദുഃഖം",ipa:"ɡriːf"},
-  {word:"mood",pos:"n.",meaning:"the way you feel at a particular time",example:"She was in a good mood today.",translation:"മനോഭാവം",ipa:"muːd"},
-  {word:"affection",pos:"n.",meaning:"a warm feeling of liking or love",example:"He showed affection by hugging his mother.",translation:"വാത്സല്യം",ipa:"əˈfɛkʃən"},
-  {word:"shame",pos:"n.",meaning:"a painful feeling of having done something wrong",example:"She felt shame after lying to her friend.",translation:"ലജ്ജ",ipa:"ʃeɪm"},
-  {word:"envy",pos:"n.",meaning:"wanting what someone else has",example:"He felt envy when he saw her new phone.",translation:"അസൂയ",ipa:"ˈɛnvi"},
-  {word:"guilt",pos:"n.",meaning:"a feeling that you have done something bad",example:"She felt guilt after forgetting her friend's birthday.",translation:"കുറ്റബോധം",ipa:"ɡɪlt"},
-  {word:"anxiety",pos:"n.",meaning:"a feeling of worry and unease",example:"He had anxiety before speaking in front of the class.",translation:"ഉത്കണ്ഠ",ipa:"æŋˈzaɪəti"},
-  {word:"bus",pos:"n.",meaning:"a large vehicle that carries many passengers along a fixed path",example:"I take the bus to school every morning.",translation:"ബസ്സ്",ipa:"/bʌs/"},
-  {word:"train",pos:"n.",meaning:"a vehicle that travels on rails and carries people or goods",example:"The train arrives at nine o'clock.",translation:"തീവണ്ടി",ipa:"/treɪn/"},
-  {word:"left",pos:"adv.",meaning:"toward the side that is west when you face north",example:"Turn left at the traffic lights.",translation:"ഇടത്",ipa:"/left/"},
-  {word:"right",pos:"adv.",meaning:"toward the side that is east when you face north",example:"Go right at the corner.",translation:"വലത്",ipa:"/raɪt/"},
-  {word:"corner",pos:"n.",meaning:"the point where two roads or streets meet",example:"The shop is on the corner of the street.",translation:"കോണ്",ipa:"/ˈkɔːrnər/"},
-  {word:"stop",pos:"n.",meaning:"a place where a bus or train regularly picks up passengers",example:"Get off at the next stop.",translation:"സ്റ്റോപ്പ്",ipa:"/stɒp/"},
-  {word:"underground",pos:"n.",meaning:"a railway system that runs below the ground in a city",example:"We took the underground to the city centre.",translation:"ഭൂഗർഭ റെയിൽവേ",ipa:"/ˈʌndərɡraʊnd/"},
-  {word:"crossroads",pos:"n.",meaning:"a place where two roads cross each other",example:"Turn right at the crossroads.",translation:"കവലsections",ipa:"/ˈkrɒsrəʊdz/"},
-  {word:"slim",pos:"adj.",meaning:"thin in an attractive way",example:"She is slim and tall.",translation:"മെലിഞ്ഞ",ipa:"/slɪm/"},
-  {word:"curly",pos:"adj.",meaning:"having hair that forms curves or rings",example:"He has curly brown hair.",translation:"곱슬곱슬한 (곱슬한)",ipa:"/ˈkɜːli/"},
-  {word:"beard",pos:"n.",meaning:"hair that grows on a man's chin and cheeks",example:"My father has a long beard.",translation:"താടി",ipa:"/bɪəd/"},
-  {word:"pale",pos:"adj.",meaning:"having skin that is light in color or looks white",example:"She looks pale today.",translation:"വിളർത്ത",ipa:"/peɪl/"},
-  {word:"bald",pos:"adj.",meaning:"having little or no hair on the head",example:"My uncle is bald.",translation:"കഷണ്ടിയുള്ള",ipa:"/bɔːld/"},
-  {word:"freckles",pos:"n.",meaning:"small brown spots on a person's skin",example:"She has freckles on her nose.",translation:"മുഖക്കുരു പോലുള്ള കറുത്ത പൊട്ടുകൾ",ipa:"/ˈfreklz/"},
-  {word:"chubby",pos:"adj.",meaning:"slightly fat in a cute or round way",example:"The baby has chubby cheeks.",translation:"തടിച്ച",ipa:"/ˈtʃʌbi/"},
-  {word:"muscular",pos:"adj.",meaning:"having strong, well-developed muscles",example:"He is very muscular from exercise.",translation:"പേശീബലമുള്ള",ipa:"/ˈmʌskjələr/"}],
+],
 
 // ─────────────────────────────────────────────────────────────
 // B1 - INTERMEDIATE (300 words)
@@ -2854,702 +1448,7 @@ B1: [
   {word:"typical",pos:"adj.",meaning:"Having all the usual qualities",example:"This is a typical mistake.",translation:"സ്ഥിരം"},
   {word:"various",pos:"adj.",meaning:"Many different types",example:"Various options are available.",translation:"വ്യത്യസ്ത"},
   {word:"value",pos:"n.",meaning:"Importance or worth",example:"Education has great value.",translation:"മൂല്യം"},
-,
-  {word:"colleague",pos:"n.",meaning:"a person you work with",example:"My colleague helped me finish the report on time.",translation:"സഹപ്രവർത്തകൻ",ipa:"/ˈkɒliːɡ/"},
-  {word:"deadline",pos:"n.",meaning:"the last date or time to finish something",example:"We must submit the project before the deadline.",translation:"അവസാന തീയതി",ipa:"/ˈdɛdlaɪn/"},
-  {word:"promote",pos:"v.",meaning:"to give someone a higher position at work",example:"She was promoted to manager after two years.",translation:"സ്ഥാനക്കയറ്റം നൽകുക",ipa:"/prəˈməʊt/"},
-  {word:"resign",pos:"v.",meaning:"to officially leave your job",example:"He decided to resign from his position last Friday.",translation:"രാജിവയ്ക്കുക",ipa:"/rɪˈzaɪn/"},
-  {word:"salary",pos:"n.",meaning:"the money you earn regularly from your job",example:"Her salary increased after she got promoted.",translation:"ശമ്പളം",ipa:"/ˈsæləri/"},
-  {word:"employer",pos:"n.",meaning:"a person or company that pays others to work",example:"My employer offers good health insurance.",translation:"തൊഴിലുടമ",ipa:"/ɪmˈplɔɪər/"},
-  {word:"employee",pos:"n.",meaning:"a person who is paid to work for someone",example:"Every employee received a bonus this year.",translation:"ജീവനക്കാരൻ",ipa:"/ɪmˈplɔɪiː/"},
-  {word:"apply",pos:"v.",meaning:"to formally ask for a job or position",example:"She decided to apply for the marketing job.",translation:"അപേക്ഷിക്കുക",ipa:"/əˈplaɪ/"},
-  {word:"hire",pos:"v.",meaning:"to officially take someone to work for you",example:"The company plans to hire ten new staff members.",translation:"നിയമിക്കുക",ipa:"/haɪər/"},
-  {word:"retire",pos:"v.",meaning:"to stop working permanently, usually at an older age",example:"My father plans to retire when he turns sixty.",translation:"വിരമിക്കുക",ipa:"/rɪˈtaɪər/"},
-  {word:"workplace",pos:"n.",meaning:"the physical location where people work",example:"A clean workplace helps people feel more comfortable.",translation:"ജോലിസ്ഥലം",ipa:"/ˈwɜːkpleɪs/"},
-  {word:"overtime",pos:"n.",meaning:"extra time worked beyond normal working hours",example:"He earned more money by working overtime last week.",translation:"അധിക സമയ ജോലി",ipa:"/ˈəʊvətaɪm/"},
-  {word:"contract",pos:"n.",meaning:"a written agreement between employer and employee",example:"Please read your contract carefully before signing it.",translation:"കരാർ",ipa:"/ˈkɒntrækt/"},
-  {word:"promotion",pos:"n.",meaning:"a move to a higher or better job position",example:"He worked hard and finally got a promotion.",translation:"സ്ഥാനക്കയറ്റം",ipa:"/prəˈməʊʃən/"},
-  {word:"qualification",pos:"n.",meaning:"a certificate or degree that shows your ability",example:"You need the right qualification to apply for this role.",translation:"യോഗ്യത",ipa:"/ˌkwɒlɪfɪˈkeɪʃən/"},
-  {word:"workload",pos:"n.",meaning:"the amount of work a person has to do",example:"Her workload became too heavy this month.",translation:"ജോലിഭാരം",ipa:"/ˈwɜːkləʊd/"},
-  {word:"profession",pos:"n.",meaning:"a type of job that needs special training or education",example:"Teaching is a very respected profession in this country.",translation:"തൊഴിൽ",ipa:"/prəˈfɛʃən/"},
-  {word:"teamwork",pos:"n.",meaning:"working together with others to achieve something",example:"Good teamwork made the project a great success.",translation:"സംഘപ്രവർത്തനം",ipa:"/ˈtiːmwɜːk/"},
-  {word:"feedback",pos:"n.",meaning:"information about how well someone has done something",example:"My manager gave me useful feedback after the meeting.",translation:"പ്രതികരണം",ipa:"/ˈfiːdbæk/"},
-  {word:"network",pos:"v.",meaning:"to meet and talk with people to help your career",example:"It is important to network at industry events.",translation:"ബന്ധം സ്ഥാപിക്കുക",ipa:"/ˈnɛtwɜːk/"},
-  {word:"applicant",pos:"n.",meaning:"a person who formally asks for a job",example:"Over fifty applicants came for the job interview.",translation:"അപേക്ഷകൻ",ipa:"/ˈæplɪkənt/"},
-  {word:"supervisor",pos:"n.",meaning:"a person who watches and directs others at work",example:"My supervisor checked my work every morning.",translation:"മേൽനോട്ടക്കാരൻ",ipa:"/ˈsuːpəvaɪzər/"},
-  {word:"punctual",pos:"adj.",meaning:"arriving or doing things at the correct time",example:"It is important to be punctual in a new job.",translation:"സമയനിഷ്ഠയുള്ള",ipa:"/ˈpʌŋktʃuəl/"},
-  {word:"ambitious",pos:"adj.",meaning:"having a strong desire to succeed or achieve things",example:"She is very ambitious and wants to lead the company.",translation:"മോഹാലുവായ",ipa:"/æmˈbɪʃəs/"},
-  {word:"productive",pos:"adj.",meaning:"achieving a lot of work in a given time",example:"Working from home made him more productive.",translation:"ഉൽപ്പാദനക്ഷമമായ",ipa:"/prəˈdʌktɪv/"},
-  {word:"negotiate",pos:"v.",meaning:"to talk with others to reach an agreement",example:"She negotiated a higher salary before accepting the offer.",translation:"ചർച്ച ചെയ്യുക",ipa:"/nɪˈɡəʊʃieɪt/"},
-  {word:"assignment",pos:"n.",meaning:"a piece of work given to someone to do",example:"My boss gave me a difficult assignment this week.",translation:"നിയോഗം",ipa:"/əˈsaɪnmənt/"},
-  {word:"apprentice",pos:"n.",meaning:"a person learning a skill by working with an expert",example:"He joined the company as an apprentice electrician.",translation:"പരിശീലനാർഥി",ipa:"/əˈprɛntɪs/"},
-  {word:"initiative",pos:"n.",meaning:"the ability to decide and act without being told",example:"She showed great initiative by solving the problem alone.",translation:"മുൻകൈ",ipa:"/ɪˈnɪʃətɪv/"},
-  {word:"vacant",pos:"adj.",meaning:"describes a job position that is empty and available",example:"There is a vacant position in the finance department.",translation:"ഒഴിഞ്ഞ",ipa:"/ˈveɪkənt/"},
-  {word:"lecture",pos:"n.",meaning:"a talk given to a group of students at a university",example:"The professor gave an interesting lecture on history.",translation:"പ്രഭാഷണം",ipa:"/ˈlektʃər/"},
-  {word:"semester",pos:"n.",meaning:"one of two periods that a school or university year is divided into",example:"She passed all her exams at the end of the first semester.",translation:"അർദ്ധവർഷം",ipa:"/sɪˈmestər/"},
-  {word:"syllabus",pos:"n.",meaning:"a list of topics that are studied in a particular course",example:"The teacher handed out the syllabus on the first day of class.",translation:"പാഠ്യക്രമം",ipa:"/ˈsɪləbəs/"},
-  {word:"tuition",pos:"n.",meaning:"teaching or instruction, especially when given to a small group or individual",example:"He paid for private tuition to improve his mathematics.",translation:"അധ്യാപനം",ipa:"/tjuːˈɪʃən/"},
-  {word:"campus",pos:"n.",meaning:"the land and buildings of a university or college",example:"The new library is located in the center of the campus.",translation:"കാമ്പസ്",ipa:"/ˈkæmpəs/"},
-  {word:"enroll",pos:"v.",meaning:"to officially join a course or school",example:"She decided to enroll in an English language course.",translation:"ചേർന്നെഴുതുക",ipa:"/ɪnˈroʊl/"},
-  {word:"graduate",pos:"v.",meaning:"to successfully finish your studies at a school or university",example:"He will graduate from university next year.",translation:"ബിരുദം നേടുക",ipa:"/ˈɡrædʒueɪt/"},
-  {word:"thesis",pos:"n.",meaning:"a long written piece of work that you do as part of a university degree",example:"She spent two years writing her thesis on climate change.",translation:"പ്രബന്ധം",ipa:"/ˈθiːsɪs/"},
-  {word:"curriculum",pos:"n.",meaning:"all the subjects that are taught at a school or university",example:"The school updated its curriculum to include more science subjects.",translation:"പാഠ്യപദ്ധതി",ipa:"/kəˈrɪkjʊləm/"},
-  {word:"scholarship",pos:"n.",meaning:"money given to a student to help pay for their education",example:"She received a scholarship to study abroad.",translation:"സ്കോളർഷിപ്പ്",ipa:"/ˈskɒlərʃɪp/"},
-  {word:"dormitory",pos:"n.",meaning:"a large building at a college or university where students live",example:"He moved into the dormitory at the start of term.",translation:"ഡോർമിറ്ററി",ipa:"/ˈdɔːrmɪtɔːri/"},
-  {word:"academic",pos:"adj.",meaning:"relating to schools, colleges, and education",example:"Her academic performance improved greatly this year.",translation:"അക്കാദമിക്",ipa:"/ˌækəˈdemɪk/"},
-  {word:"diploma",pos:"n.",meaning:"an official document showing you have completed a course of study",example:"He received his diploma at the graduation ceremony.",translation:"ഡിപ്ലോമ",ipa:"/dɪˈploʊmə/"},
-  {word:"notebook",pos:"n.",meaning:"a book with blank or lined pages used for writing notes",example:"She filled her notebook with important information from the lecture.",translation:"നോട്ട്ബുക്ക്",ipa:"/ˈnoʊtbʊk/"},
-  {word:"textbook",pos:"n.",meaning:"a book used for studying a particular subject in school",example:"The students were asked to buy the new textbook before class.",translation:"പാഠപുസ്തകം",ipa:"/ˈtekstbʊk/"},
-  {word:"revise",pos:"v.",meaning:"to study something again, especially before an exam",example:"She stayed up late to revise for her chemistry test.",translation:"പുനരവലോകനം ചെയ്യുക",ipa:"/rɪˈvaɪz/"},
-  {word:"tutorial",pos:"n.",meaning:"a small class at a university where a teacher helps a few students",example:"He attended a weekly tutorial with his professor.",translation:"ട്യൂട്ടോറിയൽ",ipa:"/tjuːˈtɔːriəl/"},
-  {word:"undergraduate",pos:"n.",meaning:"a student who is studying for their first university degree",example:"As an undergraduate, she studied biology for three years.",translation:"ബിരുദ വിദ്യാർത്ഥി",ipa:"/ˌʌndərˈɡrædʒuət/"},
-  {word:"postgraduate",pos:"n.",meaning:"a student who already has a degree and is doing more advanced study",example:"He applied for a postgraduate program in engineering.",translation:"ബിരുദാനന്തര വിദ്യാർത്ഥി",ipa:"/ˌpoʊstˈɡrædʒuət/"},
-  {word:"attendance",pos:"n.",meaning:"the act of going to a class or school regularly",example:"Good attendance is required to pass the course.",translation:"ഹാജർ",ipa:"/əˈtendəns/"},
-  {word:"plagiarism",pos:"n.",meaning:"copying someone else's work and pretending it is your own",example:"The student was punished for plagiarism in his essay.",translation:"സാഹിത്യമോഷണം",ipa:"/ˈpleɪdʒərɪzəm/"},
-  {word:"faculty",pos:"n.",meaning:"a department or group of related departments in a university",example:"She studied in the faculty of law for four years.",translation:"ഫാക്കൽറ്റി",ipa:"/ˈfækəlti/"},
-  {word:"comprehend",pos:"v.",meaning:"to understand something fully",example:"It was difficult to comprehend all the new vocabulary at once.",translation:"മനസ്സിലാക്കുക",ipa:"/ˌkɒmprɪˈhend/"},
-  {word:"submit",pos:"v.",meaning:"to give your work to a teacher or authority for them to look at",example:"You must submit your essay before Friday afternoon.",translation:"സമർപ്പിക്കുക",ipa:"/səbˈmɪt/"},
-  {word:"enrollment",pos:"n.",meaning:"the process of officially joining a course or school",example:"Enrollment for the new semester begins next Monday.",translation:"ചേർന്നെഴുത്ത്",ipa:"/ɪnˈroʊlmənt/"},
-  {word:"degree",pos:"n.",meaning:"a qualification given by a university when you complete your studies",example:"She earned a degree in computer science.",translation:"ബിരുദം",ipa:"/dɪˈɡriː/"},
-  {word:"discipline",pos:"n.",meaning:"a subject that is studied at a university",example:"Mathematics is a discipline that requires a lot of practice.",translation:"വിഷയശാഖ",ipa:"/ˈdɪsɪplɪn/"},
-  {word:"memorize",pos:"v.",meaning:"to learn something so well that you can remember it exactly",example:"She tried to memorize all the important dates before the exam.",translation:"കാണാതെ പഠിക്കുക",ipa:"/ˈmeməraɪz/"},
-  {word:"assessment",pos:"n.",meaning:"a test or piece of work used to measure a student's ability",example:"The final assessment counts for fifty percent of your grade.",translation:"വിലയിരുത്തൽ",ipa:"/əˈsesmənt/"},
-  {word:"instructor",pos:"n.",meaning:"a person who teaches a subject or skill",example:"The instructor explained the experiment step by step.",translation:"അധ്യാപകൻ",ipa:"/ɪnˈstrʌktər/"},
-  {word:"recycle",pos:"v.",meaning:"to process used materials so they can be used again",example:"We should recycle paper and plastic bottles instead of throwing them away.",translation:"പുനരുപയോഗിക്കുക",ipa:"/ˌriːˈsaɪkəl/"},
-  {word:"pollution",pos:"n.",meaning:"harmful substances that damage the air, water, or land",example:"Air pollution in the city has become a serious health problem.",translation:"മലിനീകരണം",ipa:"/pəˈluːʃən/"},
-  {word:"renewable",pos:"adj.",meaning:"describing energy from natural sources that will not run out",example:"Solar and wind power are examples of renewable energy.",translation:"പുനരുപയോഗ്യമായ",ipa:"/rɪˈnjuːəbəl/"},
-  {word:"fossil fuel",pos:"n.",meaning:"coal, oil, or gas formed from ancient living things underground",example:"Burning fossil fuels releases harmful gases into the atmosphere.",translation:"ഫോസിൽ ഇന്ധനം",ipa:"/ˈfɒsəl fjuːəl/"},
-  {word:"deforestation",pos:"n.",meaning:"the cutting down of large areas of trees and forests",example:"Deforestation destroys the homes of many wild animals.",translation:"വനനശീകരണം",ipa:"/dɪˌfɒrɪˈsteɪʃən/"},
-  {word:"emission",pos:"n.",meaning:"gases or other substances released into the air",example:"The factory agreed to lower its carbon emissions.",translation:"പുറന്തള്ളൽ",ipa:"/ɪˈmɪʃən/"},
-  {word:"sustainable",pos:"adj.",meaning:"able to continue without harming the environment or using up resources",example:"The company uses sustainable farming methods to protect the soil.",translation:"സുസ്ഥിരമായ",ipa:"/səˈsteɪnəbəl/"},
-  {word:"conserve",pos:"v.",meaning:"to protect and save natural resources from waste or damage",example:"We need to conserve water during the dry season.",translation:"സംരക്ഷിക്കുക",ipa:"/kənˈsɜːv/"},
-  {word:"ecosystem",pos:"n.",meaning:"all the living things in an area and how they depend on each other",example:"Cutting down trees can damage the entire local ecosystem.",translation:"ആവാസവ്യവസ്ഥ",ipa:"/ˈiːkəʊˌsɪstəm/"},
-  {word:"landfill",pos:"n.",meaning:"a large area of land where waste is buried under the ground",example:"Too much plastic waste ends up in landfills every year.",translation:"മാലിന്യ നിക്ഷേപ കേന്ദ്രം",ipa:"/ˈlændfɪl/"},
-  {word:"drought",pos:"n.",meaning:"a long period of time with very little or no rain",example:"The drought caused many farmers to lose their crops.",translation:"വരൾച്ച",ipa:"/draʊt/"},
-  {word:"habitat",pos:"n.",meaning:"the natural environment where an animal or plant lives",example:"Coral reefs are the habitat of thousands of species of fish.",translation:"ആവാസ സ്ഥലം",ipa:"/ˈhæbɪtæt/"},
-  {word:"carbon footprint",pos:"n.",meaning:"the total amount of carbon dioxide a person or activity produces",example:"Taking the bus can help lower your carbon footprint.",translation:"കാർബൺ ഫൂട്ട്പ്രിന്റ്",ipa:"/ˈkɑːbən ˈfʊtprɪnt/"},
-  {word:"biodiversity",pos:"n.",meaning:"the variety of different plants and animals in a particular place",example:"The rainforest is known for its amazing biodiversity.",translation:"ജൈവവൈവിധ്യം",ipa:"/ˌbaɪəʊdaɪˈvɜːsɪti/"},
-  {word:"contaminate",pos:"v.",meaning:"to make water, air, or land dirty and dangerous by adding harmful substances",example:"Chemical waste from the factory contaminated the nearby river.",translation:"മലിനമാക്കുക",ipa:"/kənˈtæmɪneɪt/"},
-  {word:"greenhouse gas",pos:"n.",meaning:"a gas such as carbon dioxide that traps heat in the atmosphere",example:"Greenhouse gases are the main cause of rising temperatures on Earth.",translation:"ഹരിതഗൃഹ വാതകം",ipa:"/ˈɡriːnhaʊs ɡæs/"},
-  {word:"reforestation",pos:"n.",meaning:"the act of planting new trees in an area where forests have been cut down",example:"The government started a reforestation programme to restore the hills.",translation:"വനനിർമ്മാണം",ipa:"/ˌriːˌfɒrɪˈsteɪʃən/"},
-  {word:"compost",pos:"n.",meaning:"a mixture of decayed food and plant material used to improve soil",example:"She puts vegetable scraps in the garden to make compost.",translation:"കമ്പോസ്റ്റ്",ipa:"/ˈkɒmpɒst/"},
-  {word:"flood",pos:"n.",meaning:"a large amount of water covering an area that is usually dry",example:"Heavy rain caused a flood that damaged many homes in the village.",translation:"വെള്ളപ്പൊക്കം",ipa:"/flʌd/"},
-  {word:"solar panel",pos:"n.",meaning:"a device that collects energy from sunlight and converts it into electricity",example:"They installed solar panels on the roof to save electricity.",translation:"സോളാർ പാനൽ",ipa:"/ˈsəʊlə ˈpænəl/"},
-  {word:"organic",pos:"adj.",meaning:"produced without using artificial chemicals or pesticides",example:"She prefers to buy organic vegetables from the local market.",translation:"ജൈവ",ipa:"/ɔːˈɡænɪk/"},
-  {word:"extinct",pos:"adj.",meaning:"describing a type of animal or plant that no longer exists anywhere",example:"The dodo bird became extinct hundreds of years ago.",translation:"വംശനാശം സംഭവിച്ച",ipa:"/ɪkˈstɪŋkt/"},
-  {word:"ozone layer",pos:"n.",meaning:"a layer of gas in the atmosphere that protects Earth from harmful sun rays",example:"Scientists are worried about damage to the ozone layer.",translation:"ഓസോൺ പാളി",ipa:"/ˈəʊzəʊn ˈleɪə/"},
-  {word:"sewage",pos:"n.",meaning:"waste water and human waste carried away through pipes underground",example:"Untreated sewage being dumped into the sea causes serious pollution.",translation:"മലിനജലം",ipa:"/ˈsuːɪdʒ/"},
-  {word:"reusable",pos:"adj.",meaning:"able to be used many times instead of being thrown away",example:"Bringing a reusable bag to the shop helps reduce plastic waste.",translation:"പുനരുപയോഗിക്കാവുന്ന",ipa:"/ˌriːˈjuːzəbəl/"},
-  {word:"temperature",pos:"n.",meaning:"how hot or cold something is, measured in degrees",example:"Scientists have recorded that the average temperature of the Earth is rising.",translation:"താപനില",ipa:"/ˈtemprɪtʃə/"},
-  {word:"wildlife",pos:"n.",meaning:"animals and plants that live naturally in the wild",example:"The national park protects local wildlife from hunters.",translation:"വന്യജീവികൾ",ipa:"/ˈwaɪldlaɪf/"},
-  {word:"turbine",pos:"n.",meaning:"a machine that uses wind or water to produce electricity",example:"Wind turbines are becoming a common sight in many countries.",translation:"ടർബൈൻ",ipa:"/ˈtɜːbaɪn/"},
-  {word:"litter",pos:"v.",meaning:"to throw rubbish carelessly in a public place",example:"It is illegal to litter in parks and public areas.",translation:"മാലിന്യം വലിച്ചെറിയുക",ipa:"/ˈlɪtə/"},
-  {word:"awareness",pos:"n.",meaning:"knowledge and understanding of an environmental issue",example:"The campaign helped raise awareness about ocean pollution among young people.",translation:"അവബോധം",ipa:"/əˈweənəs/"},
-  {word:"ceremony",pos:"n.",meaning:"a formal event or ritual performed on a special occasion",example:"The wedding ceremony was held in a beautiful old church.",translation:"ചടങ്ങ്",ipa:"/ˈsɛrɪməni/"},
-  {word:"festival",pos:"n.",meaning:"a special celebration, often connected to a culture or religion",example:"People wear colorful clothes during the harvest festival.",translation:"ഉത്സവം",ipa:"/ˈfɛstɪvəl/"},
-  {word:"ancestor",pos:"n.",meaning:"a family member from the past, such as a great-grandparent",example:"She learned about her ancestors by reading old family letters.",translation:"പൂർവ്വികൻ",ipa:"/ˈænsɛstə/"},
-  {word:"ritual",pos:"n.",meaning:"an action or series of actions done regularly as part of a tradition",example:"Lighting candles is an important ritual during this holiday.",translation:"ആചാരം",ipa:"/ˈrɪtʃuəl/"},
-  {word:"heritage",pos:"n.",meaning:"the traditions, customs, and history passed down from earlier generations",example:"The old temple is part of our national heritage.",translation:"പൈതൃകം",ipa:"/ˈhɛrɪtɪdʒ/"},
-  {word:"folklore",pos:"n.",meaning:"traditional stories, beliefs, and customs of a community",example:"The folklore of this region includes many stories about magical animals.",translation:"നാടോടി കഥകൾ",ipa:"/ˈfoʊklɔːr/"},
-  {word:"costume",pos:"n.",meaning:"special clothing worn for a cultural event or celebration",example:"The dancers wore traditional costumes for the performance.",translation:"വേഷം",ipa:"/ˈkɒstjuːm/"},
-  {word:"shrine",pos:"n.",meaning:"a holy place connected to a religious or cultural tradition",example:"Visitors leave flowers at the ancient shrine every morning.",translation:"തീർഥസ്ഥാനം",ipa:"/ʃraɪn/"},
-  {word:"custom",pos:"n.",meaning:"a usual way of behaving that is accepted in a particular society",example:"It is a local custom to bow when greeting an elder.",translation:"ആചാരം",ipa:"/ˈkʌstəm/"},
-  {word:"mythology",pos:"n.",meaning:"a collection of traditional stories about gods, heroes, or the history of a people",example:"Greek mythology explains many natural events through stories of gods.",translation:"പുരാണകഥകൾ",ipa:"/mɪˈθɒlədʒi/"},
-  {word:"dialect",pos:"n.",meaning:"a form of a language spoken in a particular region or by a particular group",example:"He speaks a regional dialect that is difficult for outsiders to understand.",translation:"പ്രാദേശിക ഭാഷ",ipa:"/ˈdaɪəlɛkt/"},
-  {word:"pilgrimage",pos:"n.",meaning:"a journey made to a holy or important place for religious or cultural reasons",example:"Thousands of people make a pilgrimage to that mountain every year.",translation:"തീർഥയാത്ര",ipa:"/ˈpɪlɡrɪmɪdʒ/"},
-  {word:"weave",pos:"v.",meaning:"to make cloth or fabric by crossing threads over and under each other",example:"Local women weave colorful baskets using traditional methods.",translation:"നെയ്ത്ത് ചെയ്യുക",ipa:"/wiːv/"},
-  {word:"carve",pos:"v.",meaning:"to cut a material such as wood or stone into a shape or design",example:"The artist carved beautiful patterns into the wooden door.",translation:"കൊത്തുക",ipa:"/kɑːv/"},
-  {word:"sacred",pos:"adj.",meaning:"considered very important and holy in a religion or culture",example:"This forest is sacred to the local indigenous community.",translation:"പവിത്രമായ",ipa:"/ˈseɪkrɪd/"},
-  {word:"indigenous",pos:"adj.",meaning:"originally living or existing in a place; native to a region",example:"Indigenous people have lived in this valley for thousands of years.",translation:"തദ്ദേശീയമായ",ipa:"/ɪnˈdɪdʒɪnəs/"},
-  {word:"craft",pos:"n.",meaning:"a skill of making things by hand, often as part of a cultural tradition",example:"Pottery is a traditional craft that requires great patience.",translation:"കരകൗശലം",ipa:"/krɑːft/"},
-  {word:"banquet",pos:"n.",meaning:"a large formal meal held to celebrate a special occasion",example:"A grand banquet was organized after the wedding ceremony.",translation:"വിരുന്ന്",ipa:"/ˈbæŋkwɪt/"},
-  {word:"proverb",pos:"n.",meaning:"a short, well-known saying that expresses a general truth or belief",example:"My grandmother often uses a proverb to give advice.",translation:"പഴഞ്ചൊല്ല്",ipa:"/ˈprɒvɜːb/"},
-  {word:"mourning",pos:"n.",meaning:"the period of sadness and remembrance after someone dies",example:"Family members wore black clothes as a sign of mourning.",translation:"ദുഃഖാചരണം",ipa:"/ˈmɔːnɪŋ/"},
-  {word:"nomadic",pos:"adj.",meaning:"moving from place to place without a permanent home, as part of a lifestyle",example:"Nomadic tribes follow their animals across the open land.",translation:"നാടോടി",ipa:"/nəʊˈmædɪk/"},
-  {word:"taboo",pos:"n.",meaning:"something that is not allowed or considered wrong in a particular culture",example:"In some cultures, it is a taboo to discuss money at the dinner table.",translation:"നിഷിദ്ധം",ipa:"/təˈbuː/"},
-  {word:"preserve",pos:"v.",meaning:"to keep something safe and unchanged over time",example:"The museum works hard to preserve old cultural artifacts.",translation:"സംരക്ഷിക്കുക",ipa:"/prɪˈzɜːv/"},
-  {word:"narrative",pos:"n.",meaning:"a story or account of events, especially one passed through a culture",example:"The oral narrative of the tribe has been told for hundreds of years.",translation:"കഥനം",ipa:"/ˈnærətɪv/"},
-  {word:"assimilate",pos:"v.",meaning:"to become part of a new culture or community and adopt its ways",example:"It took her several years to assimilate into the new country's culture.",translation:"ലയിച്ചുചേരുക",ipa:"/əˈsɪmɪleɪt/"},
-  {word:"handicraft",pos:"n.",meaning:"an object made by hand using traditional skills",example:"The market sells beautiful handicrafts made by local artisans.",translation:"കൈത്തൊഴിൽ ഉൽപ്പന്നം",ipa:"/ˈhændɪkrɑːft/"},
-  {word:"mosaic",pos:"n.",meaning:"a picture or pattern made from small pieces; also used to describe a mix of cultures",example:"The city is a mosaic of different languages and traditions.",translation:"മൊസൈക്ക്",ipa:"/məʊˈzeɪɪk/"},
-  {word:"courtship",pos:"n.",meaning:"the period when two people develop a romantic relationship before marriage, often following cultural customs",example:"In this community, courtship follows strict traditional rules.",translation:"പ്രണയകാലം",ipa:"/ˈkɔːtʃɪp/"},
-  {word:"inscription",pos:"n.",meaning:"words or symbols carved or written on a surface, often for historical purposes",example:"The inscription on the ancient stone was written in an old language.",translation:"ലിഖിതം",ipa:"/ɪnˈskrɪpʃən/"},
-  {word:"artifact",pos:"n.",meaning:"an object made by people in the past that has historical or cultural importance",example:"The museum displayed an artifact from a civilization over 3,000 years old.",translation:"പൗരാണിക വസ്തു",ipa:"/ˈɑːtɪfækt/"},
-  {word:"headline",pos:"n.",meaning:"the title of a news story printed in large letters",example:"The headline on the front page was about the election results.",translation:"തലക്കെട്ട്",ipa:"/ˈhedlaɪn/"},
-  {word:"broadcast",pos:"v.",meaning:"to send out news or programmes on television or radio",example:"The channel will broadcast the press conference live tonight.",translation:"സംപ്രേഷണം ചെയ്യുക",ipa:"/ˈbrɔːdkɑːst/"},
-  {word:"reporter",pos:"n.",meaning:"a person whose job is to collect and write news stories",example:"The reporter interviewed the mayor about the new project.",translation:"റിപ്പോർട്ടർ",ipa:"/rɪˈpɔːtər/"},
-  {word:"article",pos:"n.",meaning:"a piece of writing published in a newspaper or magazine",example:"She read an interesting article about climate change.",translation:"ലേഖനം",ipa:"/ˈɑːtɪkəl/"},
-  {word:"editorial",pos:"n.",meaning:"a newspaper article that gives the opinion of the editor",example:"The editorial criticized the government's new tax policy.",translation:"എഡിറ്റോറിയൽ",ipa:"/ˌedɪˈtɔːriəl/"},
-  {word:"correspondent",pos:"n.",meaning:"a journalist who sends news reports from a particular place",example:"Our foreign correspondent is reporting from Paris this week.",translation:"ലേഖകൻ",ipa:"/ˌkɒrɪˈspɒndənt/"},
-  {word:"breaking news",pos:"phrase",meaning:"important news that is happening right now and being reported immediately",example:"Breaking news interrupted the show to announce the earthquake.",translation:"നടന്നുകൊണ്ടിരിക്കുന്ന വാർത്ത"},
-  {word:"bulletin",pos:"n.",meaning:"a short news report on television or radio",example:"We heard the morning news bulletin before leaving home.",translation:"വാർത്താ ബുള്ളറ്റിൻ",ipa:"/ˈbʊlɪtɪn/"},
-  {word:"coverage",pos:"n.",meaning:"the reporting of a particular event by the media",example:"The election received wide coverage on all major TV channels.",translation:"മാധ്യമ കവറേജ്",ipa:"/ˈkʌvərɪdʒ/"},
-  {word:"journalist",pos:"n.",meaning:"a person who writes or reports news for media",example:"The journalist spent months investigating the corruption story.",translation:"പത്രപ്രവർത്തകൻ",ipa:"/ˈdʒɜːnəlɪst/"},
-  {word:"press conference",pos:"phrase",meaning:"a meeting where someone gives information to journalists",example:"The president held a press conference after the summit.",translation:"പത്രസമ്മേളനം"},
-  {word:"source",pos:"n.",meaning:"a person or document that provides information for a news story",example:"The reporter refused to reveal her source to protect them.",translation:"വിവര സ്രോതസ്സ്",ipa:"/sɔːs/"},
-  {word:"publish",pos:"v.",meaning:"to print and make available a newspaper, book, or article",example:"The newspaper published the story on its front page.",translation:"പ്രസിദ്ധീകരിക്കുക",ipa:"/ˈpʌblɪʃ/"},
-  {word:"accurate",pos:"adj.",meaning:"correct and without errors; giving true information",example:"It is important for journalists to give accurate information.",translation:"കൃത്യമായ",ipa:"/ˈækjərət/"},
-  {word:"misleading",pos:"adj.",meaning:"giving a wrong idea or false impression",example:"The misleading headline caused a lot of confusion online.",translation:"തെറ്റിദ്ധരിപ്പിക്കുന്ന",ipa:"/ˌmɪsˈliːdɪŋ/"},
-  {word:"editor",pos:"n.",meaning:"a person who checks and decides what is published in a newspaper",example:"The editor rejected the article because it had too many errors.",translation:"എഡിറ്റർ",ipa:"/ˈedɪtər/"},
-  {word:"update",pos:"v.",meaning:"to give the most recent information about something",example:"The website updates its news stories every hour.",translation:"പുതിയ വിവരം നൽകുക",ipa:"/ˌʌpˈdeɪt/"},
-  {word:"announce",pos:"v.",meaning:"to officially tell people about something important",example:"The minister announced plans for a new hospital.",translation:"പ്രഖ്യാപിക്കുക",ipa:"/əˈnaʊns/"},
-  {word:"crisis",pos:"n.",meaning:"a time of serious difficulty or danger that needs urgent action",example:"The country is dealing with a financial crisis this year.",translation:"പ്രതിസന്ധി",ipa:"/ˈkraɪsɪs/"},
-  {word:"protest",pos:"n.",meaning:"a strong public statement or action against something",example:"Thousands of people joined the protest in the city centre.",translation:"പ്രതിഷേധം",ipa:"/ˈprəʊtest/"},
-  {word:"election",pos:"n.",meaning:"a time when people vote to choose who will lead them",example:"The election results will be announced tomorrow morning.",translation:"തിരഞ്ഞെടുപ്പ്",ipa:"/ɪˈlekʃən/"},
-  {word:"policy",pos:"n.",meaning:"a plan or set of rules made by a government or organisation",example:"The new policy will change how schools are funded.",translation:"നയം",ipa:"/ˈpɒlɪsi/"},
-  {word:"summit",pos:"n.",meaning:"an important meeting between leaders of different countries",example:"World leaders gathered for the climate summit in Geneva.",translation:"ഉച്ചകോടി",ipa:"/ˈsʌmɪt/"},
-  {word:"treaty",pos:"n.",meaning:"a formal agreement between two or more countries",example:"Both countries signed a peace treaty to end the conflict.",translation:"ഉടമ്പടി",ipa:"/ˈtriːti/"},
-  {word:"conflict",pos:"n.",meaning:"a serious disagreement or armed fighting between groups",example:"The conflict in the region has forced many people to leave.",translation:"സംഘർഷം",ipa:"/ˈkɒnflɪkt/"},
-  {word:"official",pos:"adj.",meaning:"approved by or connected to an authority or government",example:"The official statement was released by the president's office.",translation:"ഔദ്യോഗിക",ipa:"/əˈfɪʃəl/"},
-  {word:"eyewitness",pos:"n.",meaning:"a person who saw an event happen and can describe it",example:"An eyewitness told reporters what she saw at the scene.",translation:"നേരിട്ട് കണ്ട സാക്ഷി",ipa:"/ˈaɪwɪtnəs/"},
-  {word:"bias",pos:"n.",meaning:"an unfair preference for or against something in reporting",example:"Some readers felt the article showed a political bias.",translation:"പക്ഷപാതം",ipa:"/ˈbaɪəs/"},
-  {word:"statement",pos:"n.",meaning:"an official or formal remark or declaration",example:"The company released a statement denying the allegations.",translation:"പ്രസ്താവന",ipa:"/ˈsteɪtmənt/"},
-  {word:"tabloid",pos:"n.",meaning:"a type of popular newspaper with short articles and many photos",example:"The tabloid printed a sensational story about the celebrity.",translation:"ടാബ്ലോയ്ഡ്",ipa:"/ˈtæblɔɪd/"},
-  {word:"claim",pos:"v.",meaning:"to say that something is true, even without proof",example:"She claims that the new rule is unfair to students.",translation:"അവകാശപ്പെടുക",ipa:"/kleɪm/"},
-  {word:"viewpoint",pos:"n.",meaning:"a particular way of thinking about something; a personal opinion",example:"Everyone has a different viewpoint on this matter.",translation:"വീക്ഷണബിന്ദു",ipa:"/ˈvjuːpɔɪnt/"},
-  {word:"disagree",pos:"v.",meaning:"to have a different opinion from someone else",example:"I disagree with your idea about the project.",translation:"വിയോജിക്കുക",ipa:"/ˌdɪsəˈɡriː/"},
-  {word:"persuade",pos:"v.",meaning:"to make someone believe or do something by giving good reasons",example:"He tried to persuade his friend to change his mind.",translation:"പ്രേരിപ്പിക്കുക",ipa:"/pəˈsweɪd/"},
-  {word:"justify",pos:"v.",meaning:"to give reasons to show that something is correct or fair",example:"Can you justify why you made that decision?",translation:"ന്യായീകരിക്കുക",ipa:"/ˈdʒʌstɪfaɪ/"},
-  {word:"objection",pos:"n.",meaning:"a reason for disagreeing with or opposing something",example:"She raised an objection to the new school timetable.",translation:"എതിർപ്പ്",ipa:"/əbˈdʒekʃən/"},
-  {word:"assumption",pos:"n.",meaning:"something you believe is true without having proof",example:"His argument was based on a wrong assumption.",translation:"അനുമാനം",ipa:"/əˈsʌmpʃən/"},
-  {word:"logical",pos:"adj.",meaning:"based on clear and sensible reasoning",example:"She made a logical argument that everyone could understand.",translation:"യുക്തിസഹമായ",ipa:"/ˈlɒdʒɪkəl/"},
-  {word:"point out",pos:"phrase",meaning:"to direct attention to a fact or problem",example:"The teacher pointed out that the data was incorrect.",translation:"ചൂണ്ടിക്കാണിക്കുക",ipa:"/pɔɪnt aʊt/"},
-  {word:"counterargument",pos:"n.",meaning:"a reason given against another person's opinion or argument",example:"She had a strong counterargument for every point he made.",translation:"എതിർവാദം",ipa:"/ˈkaʊntərˌɑːɡjumənt/"},
-  {word:"standpoint",pos:"n.",meaning:"a position or attitude from which you judge things",example:"From a student's standpoint, the homework is too much.",translation:"നിലപാട്",ipa:"/ˈstændpɔɪnt/"},
-  {word:"assert",pos:"v.",meaning:"to state something clearly and firmly as the truth",example:"He asserted that his version of events was correct.",translation:"ഉറപ്പിച്ചു പറയുക",ipa:"/əˈsɜːt/"},
-  {word:"imply",pos:"v.",meaning:"to suggest something without saying it directly",example:"Are you implying that I made a mistake?",translation:"സൂചിപ്പിക്കുക",ipa:"/ɪmˈplaɪ/"},
-  {word:"reasoning",pos:"n.",meaning:"the process of thinking clearly to form an opinion or judgment",example:"His reasoning for the choice was very clear.",translation:"യുക്തി",ipa:"/ˈriːzənɪŋ/"},
-  {word:"oppose",pos:"v.",meaning:"to disagree strongly with something and try to stop it",example:"Many people oppose the plan to cut down the trees.",translation:"എതിർക്കുക",ipa:"/əˈpəʊz/"},
-  {word:"valid",pos:"adj.",meaning:"based on truth or strong reasoning; acceptable",example:"That is a valid point that we should think about.",translation:"സാധുവായ",ipa:"/ˈvælɪd/"},
-  {word:"stance",pos:"n.",meaning:"a strong opinion or position about a subject",example:"What is your stance on reducing school holidays?",translation:"നിലപാട്",ipa:"/stæns/"},
-  {word:"credible",pos:"adj.",meaning:"able to be trusted or believed",example:"You need a credible source to support your argument.",translation:"വിശ്വസനീയമായ",ipa:"/ˈkredɪbəl/"},
-  {word:"reject",pos:"v.",meaning:"to refuse to accept an idea or argument",example:"The committee rejected the proposal after long discussion.",translation:"നിരസിക്കുക",ipa:"/rɪˈdʒekt/"},
-  {word:"notion",pos:"n.",meaning:"an idea or belief about something",example:"Some people hold the notion that exams are unfair.",translation:"ആശയം",ipa:"/ˈnəʊʃən/"},
-  {word:"elaborate",pos:"v.",meaning:"to explain something in more detail",example:"Could you elaborate on your opinion about the new rule?",translation:"വിശദീകരിക്കുക",ipa:"/ɪˈlæbəreɪt/"},
-  {word:"emphasize",pos:"v.",meaning:"to show that something is especially important",example:"The speaker emphasized the need for better communication.",translation:"ഊന്നിപ്പറയുക",ipa:"/ˈemfəsaɪz/"},
-  {word:"perspective",pos:"n.",meaning:"a particular way of thinking about something",example:"From my perspective, the plan needs more time.",translation:"വീക്ഷണം",ipa:"/pəˈspektɪv/"},
-  {word:"skeptical",pos:"adj.",meaning:"having doubts about whether something is true",example:"I am skeptical about his reasons for changing the plan.",translation:"സംശയക്കാരനായ",ipa:"/ˈskeptɪkəl/"},
-  {word:"concede",pos:"v.",meaning:"to admit that something said by another person is true",example:"She conceded that his argument had some good points.",translation:"സമ്മതിക്കുക",ipa:"/kənˈsiːd/"},
-  {word:"irrational",pos:"adj.",meaning:"not based on clear thinking or good reasons",example:"Fear of change can sometimes lead to irrational decisions.",translation:"അയുക്തികമായ",ipa:"/ɪˈræʃənəl/"},
-  {word:"rebut",pos:"v.",meaning:"to give reasons to prove that a claim or argument is wrong",example:"She rebutted his claim with clear facts.",translation:"ഖണ്ഡിക്കുക",ipa:"/rɪˈbʌt/"},
-  {word:"contend",pos:"v.",meaning:"to state your opinion firmly, especially in a discussion",example:"He contends that the new policy will not work.",translation:"വാദിക്കുക",ipa:"/kənˈtend/"},
-  {word:"open-minded",pos:"adj.",meaning:"willing to consider new ideas and other people's opinions",example:"Try to be open-minded when listening to different arguments.",translation:"മനസ്സ് തുറന്നിരിക്കുന്ന",ipa:"/ˌəʊpən ˈmaɪndɪd/"},
-  {word:"bond",pos:"n.",meaning:"a close connection or relationship between people",example:"The bond between siblings often lasts a lifetime.",translation:"ബന്ധം",ipa:"/bɒnd/"},
-  {word:"trust",pos:"n.",meaning:"a firm belief in the honesty and reliability of someone",example:"Building trust in a friendship takes time and effort.",translation:"വിശ്വാസം",ipa:"/trʌst/"},
-  {word:"loyalty",pos:"n.",meaning:"the quality of being faithful and supportive to someone",example:"She showed great loyalty to her best friend during difficult times.",translation:"വിശ്വസ്തത",ipa:"/ˈlɔɪ.əl.ti/"},
-  {word:"commitment",pos:"n.",meaning:"a promise or decision to stay dedicated to a person or relationship",example:"A strong marriage requires commitment from both partners.",translation:"പ്രതിബദ്ധത",ipa:"/kəˈmɪt.mənt/"},
-  {word:"divorce",pos:"n.",meaning:"the legal ending of a marriage",example:"The divorce affected the whole family, especially the children.",translation:"വിവാഹമോചനം",ipa:"/dɪˈvɔːs/"},
-  {word:"peer",pos:"n.",meaning:"a person who is the same age or has the same social position as you",example:"It is natural to want approval from your peers at school.",translation:"സമപ്രായക്കാരൻ",ipa:"/pɪər/"},
-  {word:"community",pos:"n.",meaning:"a group of people living in the same area or sharing common interests",example:"The local community came together to help flood victims.",translation:"സമൂഹം",ipa:"/kəˈmjuː.nɪ.ti/"},
-  {word:"norm",pos:"n.",meaning:"a standard or pattern of behaviour that is considered typical in a society",example:"It is a social norm to greet people when you enter a room.",translation:"മാനദണ്ഡം",ipa:"/nɔːm/"},
-  {word:"prejudice",pos:"n.",meaning:"an unfair opinion about a person or group without knowing the facts",example:"Racial prejudice is a serious problem in many societies.",translation:"മുൻവിധി",ipa:"/ˈpredʒ.ʊ.dɪs/"},
-  {word:"tolerance",pos:"n.",meaning:"the willingness to accept behaviour or opinions different from your own",example:"Tolerance between different religions helps society stay peaceful.",translation:"സഹിഷ്ണുത",ipa:"/ˈtɒl.ər.əns/"},
-  {word:"equality",pos:"n.",meaning:"the state of having the same rights and opportunities as others",example:"Many people fight for equality between men and women in the workplace.",translation:"സമത്വം",ipa:"/ɪˈkwɒl.ɪ.ti/"},
-  {word:"minority",pos:"n.",meaning:"a small group of people who are different from the larger group in a society",example:"The government should protect the rights of every minority group.",translation:"ന്യൂനപക്ഷം",ipa:"/maɪˈnɒr.ɪ.ti/"},
-  {word:"mutual",pos:"adj.",meaning:"shared or felt equally by two or more people",example:"A good friendship is based on mutual respect and understanding.",translation:"പരസ്പര",ipa:"/ˈmjuː.tʃu.əl/"},
-  {word:"volunteer",pos:"v.",meaning:"to offer to do something without being paid",example:"She decided to volunteer at the local shelter every weekend.",translation:"സന്നദ്ധസേവകനാകുക",ipa:"/ˌvɒl.ənˈtɪər/"},
-  {word:"companion",pos:"n.",meaning:"a person you spend time with or travel with",example:"His dog was his closest companion during the long journey.",translation:"സഹചാരി",ipa:"/kəmˈpæn.jən/"},
-  {word:"rivalry",pos:"n.",meaning:"a situation in which two people or groups compete with each other",example:"There has always been a friendly rivalry between the two football clubs.",translation:"മത്സരം",ipa:"/ˈraɪ.vəl.ri/"},
-  {word:"obligation",pos:"n.",meaning:"something you must do because of a rule, duty, or promise",example:"Parents have an obligation to take care of their children.",translation:"ബാധ്യത",ipa:"/ˌɒb.lɪˈɡeɪ.ʃən/"},
-  {word:"gossip",pos:"n.",meaning:"informal talk about other people's personal lives, often unkind",example:"Gossip can seriously damage someone's reputation in a small town.",translation:"അഭ്യൂഹം",ipa:"/ˈɡɒs.ɪp/"},
-  {word:"empathy",pos:"n.",meaning:"the ability to understand and share the feelings of another person",example:"Showing empathy towards others makes you a kinder person.",translation:"സഹാനുഭൂതി",ipa:"/ˈem.pə.θi/"},
-  {word:"stereotype",pos:"n.",meaning:"a fixed, oversimplified idea about a particular group of people",example:"It is wrong to judge someone based on a stereotype.",translation:"ചിട്ടപ്പെടുത്തിയ ധാരണ",ipa:"/ˈster.i.ə.taɪp/"},
-  {word:"household",pos:"n.",meaning:"all the people who live together in one home",example:"Every member of the household shared the cleaning duties.",translation:"കുടുംബം",ipa:"/ˈhaʊs.həʊld/"},
-  {word:"gender",pos:"n.",meaning:"the state of being male, female, or another identity in society",example:"Gender roles have changed significantly over the past century.",translation:"ലിംഗഭേദം",ipa:"/ˈdʒen.dər/"},
-  {word:"admire",pos:"v.",meaning:"to respect and think highly of someone",example:"Many young people admire athletes who work hard to succeed.",translation:"ആദരിക്കുക",ipa:"/ədˈmaɪər/"},
-  {word:"forgive",pos:"v.",meaning:"to stop feeling angry at someone who has done something wrong",example:"It is important to forgive others in order to move forward in life.",translation:"മാപ്പ് നൽകുക",ipa:"/fəˈɡɪv/"},
-  {word:"reunion",pos:"n.",meaning:"a social event where people who have not met for a long time come together",example:"The family reunion brought relatives from different countries together.",translation:"പുനഃസമ്മേളനം",ipa:"/riːˈjuː.ni.ən/"},
-  {word:"upbringing",pos:"n.",meaning:"the way a child is raised and taught by their parents",example:"Her strict upbringing taught her the value of discipline and hard work.",translation:"വളർത്തൽ",ipa:"/ˈʌpˌbrɪŋ.ɪŋ/"},
-  {word:"isolation",pos:"n.",meaning:"the state of being separated from other people",example:"Long periods of isolation can have a negative effect on mental health.",translation:"ഒറ്റപ്പെടൽ",ipa:"/ˌaɪ.səˈleɪ.ʃən/"},
-  {word:"cooperate",pos:"v.",meaning:"to work together with someone to achieve a shared goal",example:"Neighbours need to cooperate to keep their street clean and safe.",translation:"സഹകരിക്കുക",ipa:"/kəʊˈɒp.ər.eɪt/"},
-  {word:"kinship",pos:"n.",meaning:"the relationship between members of the same family or group",example:"A sense of kinship among villagers made the community very strong.",translation:"കുടുംബബന്ധം",ipa:"/ˈkɪn.ʃɪp/"},
-  {word:"well-being",pos:"n.",meaning:"the state of being comfortable, healthy, and happy in life",example:"Good relationships with others are essential for your emotional well-being.",translation:"ക്ഷേമം",ipa:"/ˈwel.biː.ɪŋ/"},
-  {word:"bandwidth",pos:"n.",meaning:"the amount of data that can be sent over an internet connection in a given time",example:"Streaming videos uses a lot of bandwidth, so my internet becomes slow.",translation:"ബാൻഡ്‌വിഡ്ത്ത്",ipa:"/ˈbændwɪdθ/"},
-  {word:"browser",pos:"n.",meaning:"a program used to access and view websites on the internet",example:"I use a browser to search for information online every day.",translation:"ബ്രൗസർ",ipa:"/ˈbraʊzər/"},
-  {word:"cache",pos:"n.",meaning:"temporary storage of data on a device to make it load faster",example:"Clearing your cache can help fix problems with websites loading slowly.",translation:"കാഷെ",ipa:"/kæʃ/"},
-  {word:"chatbot",pos:"n.",meaning:"a computer program designed to simulate conversation with users online",example:"The customer service chatbot answered my question within seconds.",translation:"ചാറ്റ്‌ബോട്ട്",ipa:"/ˈtʃætbɒt/"},
-  {word:"click",pos:"v.",meaning:"to press a button on a mouse or tap a link to perform an action on a screen",example:"Click on the link to open the registration page.",translation:"ക്ലിക്ക് ചെയ്യുക",ipa:"/klɪk/"},
-  {word:"cloud",pos:"n.",meaning:"a system of storing and accessing data over the internet rather than on a local device",example:"I save all my photos to the cloud so I never lose them.",translation:"ക്ലൗഡ്",ipa:"/klaʊd/"},
-  {word:"coding",pos:"n.",meaning:"the process of writing instructions for a computer using a programming language",example:"She learned coding so she could build her own website.",translation:"കോഡിങ്",ipa:"/ˈkoʊdɪŋ/"},
-  {word:"cursor",pos:"n.",meaning:"the movable symbol on a screen that shows where you are clicking or typing",example:"Move the cursor to the search bar and type your question.",translation:"കഴ്‌സർ",ipa:"/ˈkɜːrsər/"},
-  {word:"cyberattack",pos:"n.",meaning:"an attempt by criminals to damage or gain access to a computer system",example:"The company lost important data after a serious cyberattack.",translation:"സൈബർ ആക്രമണം",ipa:"/ˈsaɪbərəˌtæk/"},
-  {word:"database",pos:"n.",meaning:"an organized collection of information stored and accessed electronically",example:"The hospital keeps all patient records in a secure database.",translation:"ഡേറ്റാബേസ്",ipa:"/ˈdeɪtəbeɪs/"},
-  {word:"download",pos:"v.",meaning:"to copy or transfer data from the internet to your device",example:"It took five minutes to download the software onto my laptop.",translation:"ഡൗൺലോഡ് ചെയ്യുക",ipa:"/ˈdaʊnloʊd/"},
-  {word:"encrypt",pos:"v.",meaning:"to convert data into a coded form to prevent unauthorized access",example:"Banks encrypt your personal information to keep it safe online.",translation:"എൻക്രിപ്റ്റ് ചെയ്യുക",ipa:"/ɪnˈkrɪpt/"},
-  {word:"firewall",pos:"n.",meaning:"a security system that controls the flow of data between networks to block threats",example:"Install a firewall to protect your computer from harmful websites.",translation:"ഫയർവോൾ",ipa:"/ˈfaɪərwɔːl/"},
-  {word:"firmware",pos:"n.",meaning:"permanent software programmed into a device to control how it works",example:"Updating the firmware on your router can improve its performance.",translation:"ഫേംവെയർ",ipa:"/ˈfɜːrmwer/"},
-  {word:"glitch",pos:"n.",meaning:"a small error or fault in a computer system or program",example:"There was a glitch in the app that caused it to crash unexpectedly.",translation:"ഗ്ലിച്ച്",ipa:"/ɡlɪtʃ/"},
-  {word:"hacker",pos:"n.",meaning:"a person who illegally gains access to computer systems or networks",example:"A hacker broke into the website and stole thousands of passwords.",translation:"ഹാക്കർ",ipa:"/ˈhækər/"},
-  {word:"hashtag",pos:"n.",meaning:"a word or phrase preceded by # used on social media to label content",example:"Add a hashtag to your post so more people can find it easily.",translation:"ഹാഷ്‌ടാഗ്",ipa:"/ˈhæʃtæɡ/"},
-  {word:"hyperlink",pos:"n.",meaning:"a clickable link in a digital document that takes you to another page or resource",example:"Click the hyperlink at the bottom of the email for more details.",translation:"ഹൈപ്പർലിങ്ക്",ipa:"/ˈhaɪpərlɪŋk/"},
-  {word:"interface",pos:"n.",meaning:"the visual layout and controls that allow a user to interact with a device or software",example:"The new interface of the app is much easier and simpler to use.",translation:"ഇന്റർഫേസ്",ipa:"/ˈɪntərfeɪs/"},
-  {word:"log in",pos:"phrase",meaning:"to enter your username and password to access an account or system",example:"You need to log in before you can see your messages.",translation:"ലോഗ് ഇൻ ചെയ്യുക",ipa:"/lɒɡ ɪn/"},
-  {word:"malware",pos:"n.",meaning:"software designed to damage or disrupt a computer system",example:"My computer got infected with malware after I opened a suspicious email.",translation:"മാൽവെയർ",ipa:"/ˈmælwer/"},
-  {word:"navigate",pos:"v.",meaning:"to move around a website or application to find what you need",example:"It is easy to navigate the website because the menu is very clear.",translation:"നാവിഗേറ്റ് ചെയ്യുക",ipa:"/ˈnævɪɡeɪt/"},
-  {word:"offline",pos:"adj.",meaning:"not connected to the internet or a computer network",example:"You can read the document offline after you have downloaded it.",translation:"ഓഫ്‌ലൈൻ",ipa:"/ˈɒflaɪn/"},
-  {word:"password",pos:"n.",meaning:"a secret combination of letters and numbers used to access an account",example:"Always use a strong password that is difficult for others to guess.",translation:"പാസ്‌വേർഡ്",ipa:"/ˈpæswɜːrd/"},
-  {word:"pixel",pos:"n.",meaning:"the smallest unit of a digital image displayed on a screen",example:"The higher the number of pixels, the clearer the photo will look.",translation:"പിക്സൽ",ipa:"/ˈpɪksəl/"},
-  {word:"platform",pos:"n.",meaning:"an online service or website where people can share content or communicate",example:"Social media platforms allow people to share photos and ideas easily.",translation:"പ്ലാറ്റ്‌ഫോം",ipa:"/ˈplætfɔːrm/"},
-  {word:"plugin",pos:"n.",meaning:"a small software addition that adds a specific feature to an existing program",example:"Install this plugin to add a spell-checker to your browser.",translation:"പ്ലഗ്‌ഇൻ",ipa:"/ˈplʌɡɪn/"},
-  {word:"server",pos:"n.",meaning:"a powerful computer that stores data and provides services to other computers",example:"The website went down because the server stopped working suddenly.",translation:"സർവർ",ipa:"/ˈsɜːrvər/"},
-  {word:"upload",pos:"v.",meaning:"to transfer data from your device to the internet or another system",example:"She decided to upload her video to the platform so others could watch it.",translation:"അപ്‌ലോഡ് ചെയ്യുക",ipa:"/ˈʌploʊd/"},
-  {word:"wireless",pos:"adj.",meaning:"able to connect to a network or transmit data without using physical cables",example:"The wireless connection in the library lets students work without cables.",translation:"വയർലെസ്",ipa:"/ˈwaɪərləs/"},
-  {word:"budget",pos:"n.",meaning:"a plan for how to spend money over a period of time",example:"She made a monthly budget to control her spending.",translation:"ബജറ്റ്",ipa:"/ˈbʌdʒɪt/"},
-  {word:"inflation",pos:"n.",meaning:"a general rise in prices over time, making money worth less",example:"Inflation made everyday goods more expensive this year.",translation:"പണപ്പെരുപ്പം",ipa:"/ɪnˈfleɪʃən/"},
-  {word:"loan",pos:"n.",meaning:"money borrowed from a bank or person that must be paid back",example:"He took out a loan to buy his first car.",translation:"വായ്പ",ipa:"/loʊn/"},
-  {word:"interest",pos:"n.",meaning:"extra money paid when borrowing, or earned when saving",example:"The bank charges 5% interest on personal loans.",translation:"പലിശ",ipa:"/ˈɪntrəst/"},
-  {word:"deposit",pos:"n.",meaning:"an amount of money placed into a bank account",example:"She made a deposit of $200 into her savings account.",translation:"നിക്ഷേപം",ipa:"/dɪˈpɒzɪt/"},
-  {word:"withdraw",pos:"v.",meaning:"to take money out of a bank account",example:"He went to the ATM to withdraw some cash.",translation:"പിൻവലിക്കുക",ipa:"/wɪðˈdrɔː/"},
-  {word:"account",pos:"n.",meaning:"an arrangement with a bank to keep and manage your money",example:"She opened a new bank account last week.",translation:"അക്കൗണ്ട്",ipa:"/əˈkaʊnt/"},
-  {word:"currency",pos:"n.",meaning:"the system of money used in a particular country",example:"The euro is the currency used in many European countries.",translation:"നാണയം / കറൻസി",ipa:"/ˈkɜːrənsi/"},
-  {word:"exchange rate",pos:"n.",meaning:"the value of one country's money compared to another's",example:"The exchange rate made travelling abroad more expensive.",translation:"വിനിമയ നിരക്ക്",ipa:"/ɪksˈtʃeɪndʒ reɪt/"},
-  {word:"investment",pos:"n.",meaning:"money put into something to earn more money in the future",example:"Buying property can be a good long-term investment.",translation:"നിക്ഷേപം",ipa:"/ɪnˈvestmənt/"},
-  {word:"profit",pos:"n.",meaning:"money earned after all costs have been paid",example:"The small business made a profit of $5,000 last month.",translation:"ലാഭം",ipa:"/ˈprɒfɪt/"},
-  {word:"debt",pos:"n.",meaning:"money that is owed to someone else",example:"It took him three years to pay off his credit card debt.",translation:"കടം",ipa:"/det/"},
-  {word:"credit",pos:"n.",meaning:"an arrangement allowing someone to pay later for goods or services",example:"She bought the laptop on credit and paid it back monthly.",translation:"ക്രെഡിറ്റ്",ipa:"/ˈkredɪt/"},
-  {word:"mortgage",pos:"n.",meaning:"a loan from a bank used to buy a house or property",example:"They took out a 25-year mortgage to buy their home.",translation:"മോർട്ട്ഗേജ്",ipa:"/ˈmɔːɡɪdʒ/"},
-  {word:"recession",pos:"n.",meaning:"a period when economic activity slows down significantly",example:"Many people lost their jobs during the economic recession.",translation:"സാമ്പത്തിക മാന്ദ്യം",ipa:"/rɪˈseʃən/"},
-  {word:"tax",pos:"n.",meaning:"money collected by the government from people and businesses",example:"Everyone who works must pay income tax to the government.",translation:"നികുതി",ipa:"/tæks/"},
-  {word:"dividend",pos:"n.",meaning:"a share of a company's profit paid to its shareholders",example:"Investors received a dividend payment at the end of the year.",translation:"ഡിവിഡന്റ്",ipa:"/ˈdɪvɪdend/"},
-  {word:"expenditure",pos:"n.",meaning:"the total amount of money spent by a person or organisation",example:"The company reduced its expenditure to save money.",translation:"ചെലവ്",ipa:"/ɪkˈspendɪtʃər/"},
-  {word:"revenue",pos:"n.",meaning:"money that a business or government receives regularly",example:"The company's revenue increased by 20% this quarter.",translation:"വരുമാനം",ipa:"/ˈrevənjuː/"},
-  {word:"transaction",pos:"n.",meaning:"an instance of buying or selling something",example:"Every transaction is recorded in your bank statement.",translation:"ഇടപാട്",ipa:"/trænˈzækʃən/"},
-  {word:"instalment",pos:"n.",meaning:"one of several regular payments made over time",example:"She paid for the phone in monthly instalments.",translation:"തവണ",ipa:"/ɪnˈstɔːlmənt/"},
-  {word:"collateral",pos:"n.",meaning:"something valuable offered as security when taking a loan",example:"He used his car as collateral for the bank loan.",translation:"ഈട്",ipa:"/kəˈlætərəl/"},
-  {word:"overhead",pos:"n.",meaning:"regular costs involved in running a business, such as rent and bills",example:"Reducing overhead helped the small shop earn more profit.",translation:"പ്രവർത്തനച്ചെലവ്",ipa:"/ˈoʊvərhed/"},
-  {word:"surplus",pos:"n.",meaning:"an amount of money left over after all needs have been met",example:"The government reported a budget surplus for the first time.",translation:"മിച്ചം",ipa:"/ˈsɜːpləs/"},
-  {word:"deficit",pos:"n.",meaning:"when spending is greater than income or revenue",example:"The country ran a large deficit after increased public spending.",translation:"കമ്മി",ipa:"/ˈdefɪsɪt/"},
-  {word:"asset",pos:"n.",meaning:"something of value owned by a person or company",example:"Her house is her most valuable asset.",translation:"ആസ്തി",ipa:"/ˈæset/"},
-  {word:"liability",pos:"n.",meaning:"money or debts that a person or company owes",example:"The firm's liabilities were greater than its assets.",translation:"ബാധ്യത",ipa:"/ˌlaɪəˈbɪlɪti/"},
-  {word:"invoice",pos:"n.",meaning:"a document requesting payment for goods or services provided",example:"The supplier sent an invoice for the delivery of materials.",translation:"ഇൻവോയ്സ്",ipa:"/ˈɪnvɔɪs/"},
-  {word:"subsidy",pos:"n.",meaning:"money given by the government to help reduce costs for people or businesses",example:"Farmers received a government subsidy to keep food prices low.",translation:"സബ്സിഡി",ipa:"/ˈsʌbsɪdi/"},
-  {word:"pension",pos:"n.",meaning:"regular payments made to someone who has retired from work",example:"He saved throughout his career to receive a good pension.",translation:"പെൻഷൻ",ipa:"/ˈpenʃən/"},
-  {word:"symptom",pos:"n.",meaning:"a sign or feeling that shows you may have an illness",example:"A sore throat is a common symptom of a cold.",translation:"രോഗലക്ഷണം",ipa:"/ˈsɪmptəm/"},
-  {word:"diagnose",pos:"v.",meaning:"to identify what illness or problem someone has",example:"The doctor diagnosed her with diabetes after several tests.",translation:"രോഗനിർണ്ണയം നടത്തുക",ipa:"/ˈdaɪəɡnoʊz/"},
-  {word:"prescription",pos:"n.",meaning:"a written order from a doctor for medicine",example:"He took the prescription to the pharmacy to get his medication.",translation:"പ്രിസ്ക്രിപ്ഷൻ",ipa:"/prɪˈskrɪpʃən/"},
-  {word:"vaccine",pos:"n.",meaning:"a substance given to protect against a disease",example:"Children receive a vaccine to protect them from measles.",translation:"വാക്സിൻ",ipa:"/ˈvæksiːn/"},
-  {word:"surgery",pos:"n.",meaning:"a medical operation performed by a doctor",example:"She needed surgery to repair the broken bone in her leg.",translation:"ശസ്ത്രക്രിയ",ipa:"/ˈsɜːrdʒəri/"},
-  {word:"allergy",pos:"n.",meaning:"a bad reaction of the body to a specific food or substance",example:"He has an allergy to peanuts and must avoid them completely.",translation:"അലർജി",ipa:"/ˈælərdʒi/"},
-  {word:"chronic",pos:"adj.",meaning:"describing an illness that lasts for a long time",example:"She manages chronic back pain with regular physiotherapy sessions.",translation:"ദീർഘകാലമായ",ipa:"/ˈkrɒnɪk/"},
-  {word:"therapy",pos:"n.",meaning:"treatment designed to improve a physical or mental condition",example:"He attends speech therapy every week to improve his communication.",translation:"ചികിത്സ",ipa:"/ˈθerəpi/"},
-  {word:"dose",pos:"n.",meaning:"a measured amount of medicine taken at one time",example:"Take one dose of this syrup after every meal.",translation:"അളവ്",ipa:"/doʊs/"},
-  {word:"infection",pos:"n.",meaning:"an illness caused by bacteria or viruses entering the body",example:"She got a skin infection after cutting her hand on a rusty nail.",translation:"അണുബാധ",ipa:"/ɪnˈfekʃən/"},
-  {word:"physician",pos:"n.",meaning:"a medical doctor who treats people who are ill",example:"The physician examined the patient and ordered blood tests.",translation:"വൈദ്യൻ",ipa:"/fɪˈzɪʃən/"},
-  {word:"bandage",pos:"n.",meaning:"a strip of cloth used to cover and protect a wound",example:"The nurse wrapped a bandage around his injured ankle.",translation:"വേദന മൂടുന്ന തുണി",ipa:"/ˈbændɪdʒ/"},
-  {word:"nutrition",pos:"n.",meaning:"the process of eating the right foods to stay healthy",example:"Good nutrition is essential for children's growth and development.",translation:"പോഷണം",ipa:"/njuːˈtrɪʃən/"},
-  {word:"epidemic",pos:"n.",meaning:"a widespread outbreak of a disease affecting many people",example:"The city faced a cholera epidemic during the rainy season.",translation:"മഹാമാരി",ipa:"/ˌepɪˈdemɪk/"},
-  {word:"inhale",pos:"v.",meaning:"to breathe air or a substance into your lungs",example:"Doctors advised him not to inhale smoke from the fire.",translation:"ശ്വസിക്കുക",ipa:"/ɪnˈheɪl/"},
-  {word:"fracture",pos:"n.",meaning:"a break or crack in a bone",example:"The X-ray showed a fracture in her right wrist.",translation:"എല്ലൊടിവ്",ipa:"/ˈfræktʃər/"},
-  {word:"obesity",pos:"n.",meaning:"a condition of being very overweight in an unhealthy way",example:"Obesity increases the risk of heart disease and type 2 diabetes.",translation:"അമിതവണ്ണം",ipa:"/oʊˈbiːsɪti/"},
-  {word:"nausea",pos:"n.",meaning:"an unpleasant feeling that you are about to vomit",example:"She felt nausea after taking the new medication on an empty stomach.",translation:"ഓക്കാനം",ipa:"/ˈnɔːziə/"},
-  {word:"immune",pos:"adj.",meaning:"protected against a particular disease or infection",example:"Once you have had chickenpox, you are usually immune to it.",translation:"പ്രതിരോധശേഷിയുള്ള",ipa:"/ɪˈmjuːn/"},
-  {word:"sterile",pos:"adj.",meaning:"completely clean and free from bacteria or germs",example:"Medical instruments must be sterile before being used in an operation.",translation:"അണുവിമുക്തമായ",ipa:"/ˈsterəl/"},
-  {word:"fatigue",pos:"n.",meaning:"extreme tiredness, often caused by illness or hard work",example:"One common symptom of anemia is constant fatigue throughout the day.",translation:"ക്ഷീണം",ipa:"/fəˈtiːɡ/"},
-  {word:"pharmaceutical",pos:"adj.",meaning:"relating to the production and sale of medicines",example:"Several pharmaceutical companies are developing new treatments for cancer.",translation:"ഔഷധ സംബന്ധിയായ",ipa:"/ˌfɑːrməˈsuːtɪkəl/"},
-  {word:"ward",pos:"n.",meaning:"a room in a hospital where patients stay and are treated",example:"He was moved to the recovery ward after his operation was complete.",translation:"ആശുപത്രി മുറി",ipa:"/wɔːrd/"},
-  {word:"transplant",pos:"n.",meaning:"a medical operation to replace a damaged organ with a healthy one",example:"She received a kidney transplant from a generous donor last year.",translation:"അവയവ മാറ്റം",ipa:"/ˈtrænsplænt/"},
-  {word:"antidote",pos:"n.",meaning:"a substance that stops the harmful effects of a poison",example:"The doctor quickly gave an antidote after the child swallowed the chemical.",translation:"വിഷഹരൗഷധം",ipa:"/ˈæntɪdoʊt/"},
-  {word:"discharge",pos:"v.",meaning:"to officially allow a patient to leave the hospital",example:"The doctors decided to discharge her after three days of recovery.",translation:"ആശുപത്രിയിൽ നിന്ന് വിടുക",ipa:"/dɪsˈtʃɑːrdʒ/"},
-  {word:"pulse",pos:"n.",meaning:"the regular beating of the heart that can be felt in the wrist",example:"The nurse checked his pulse to make sure his heart was beating normally.",translation:"നാഡീസ്പന്ദനം",ipa:"/pʌls/"},
-  {word:"rehabilitation",pos:"n.",meaning:"the process of recovering from illness or injury through treatment",example:"After his stroke, he underwent rehabilitation to regain his ability to walk.",translation:"പുനരധിവാസം",ipa:"/ˌriːəˌbɪlɪˈteɪʃən/"},
-  {word:"hygiene",pos:"n.",meaning:"the practice of keeping clean to maintain health and prevent disease",example:"Good personal hygiene, like washing hands, helps stop the spread of illness.",translation:"ശുചിത്വം",ipa:"/ˈhaɪdʒiːn/"},
-  {word:"diagnose",pos:"v.",meaning:"to identify a disease or condition based on symptoms",example:"The specialist was able to diagnose the rare condition within a week.",translation:"രോഗനിർണ്ണയം നടത്തുക",ipa:"/ˈdaɪəɡnoʊz/"},
-  {word:"itinerary",pos:"n.",meaning:"a detailed plan or route for a journey",example:"She printed out the itinerary before leaving for her trip to Europe.",translation:"യാത്രാ പദ്ധതി",ipa:"/aɪˈtɪn.ər.er.i/"},
-  {word:"accommodation",pos:"n.",meaning:"a place where travellers stay, such as a hotel or hostel",example:"We booked our accommodation two weeks before the holiday.",translation:"താമസ സൗകര്യം",ipa:"/əˌkɒm.əˈdeɪ.ʃən/"},
-  {word:"departure",pos:"n.",meaning:"the act of leaving a place, especially to start a journey",example:"Our departure from the airport was delayed by two hours.",translation:"പുറപ്പെടൽ",ipa:"/dɪˈpɑː.tʃər/"},
-  {word:"arrival",pos:"n.",meaning:"the act of reaching a place at the end of a journey",example:"The arrival of the train was announced over the speaker.",translation:"വരവ്",ipa:"/əˈraɪ.vəl/"},
-  {word:"sightseeing",pos:"n.",meaning:"visiting famous or interesting places as a tourist",example:"We spent the afternoon sightseeing in the old part of the city.",translation:"കാഴ്ചസ്ഥലങ്ങൾ സന്ദർശിക്കൽ",ipa:"/ˈsaɪtˌsiː.ɪŋ/"},
-  {word:"souvenir",pos:"n.",meaning:"an object you buy or keep to remember a place you visited",example:"She bought a small souvenir from every country she visited.",translation:"സ്മരണിക",ipa:"/ˌsuː.vəˈnɪər/"},
-  {word:"passport",pos:"n.",meaning:"an official document that proves your identity when travelling abroad",example:"Make sure your passport is valid before booking the flight.",translation:"പാസ്പോർട്ട്",ipa:"/ˈpɑːs.pɔːt/"},
-  {word:"visa",pos:"n.",meaning:"an official stamp in your passport that allows you to enter a country",example:"He applied for a tourist visa three weeks before his trip.",translation:"വിസ",ipa:"/ˈviː.zə/"},
-  {word:"excursion",pos:"n.",meaning:"a short trip made for pleasure, usually as part of a holiday",example:"The hotel organised a day excursion to a nearby waterfall.",translation:"ഹ്രസ്വ പര്യടനം",ipa:"/ɪkˈskɜː.ʃən/"},
-  {word:"boarding pass",pos:"n.",meaning:"a card that allows a passenger to get on an aeroplane",example:"You must show your boarding pass at the gate before the flight.",translation:"ബോർഡിങ് പാസ്",ipa:"/ˈbɔː.dɪŋ pɑːs/"},
-  {word:"layover",pos:"n.",meaning:"a stop during a long journey, especially between two flights",example:"We had a four-hour layover in Dubai before continuing to London.",translation:"ഇടത്താവളം",ipa:"/ˈleɪ.oʊ.vər/"},
-  {word:"luggage",pos:"n.",meaning:"bags and suitcases that a traveller carries on a trip",example:"He struggled to lift his heavy luggage onto the overhead shelf.",translation:"യാത്രാ ബാഗുകൾ",ipa:"/ˈlʌɡ.ɪdʒ/"},
-  {word:"check-in",pos:"n.",meaning:"the process of registering at a hotel or airport before a journey",example:"Online check-in opens 24 hours before the flight departs.",translation:"ചെക്ക്-ഇൻ",ipa:"/ˈtʃek.ɪn/"},
-  {word:"resort",pos:"n.",meaning:"a place where many people go for holidays, often with beaches or mountains",example:"They stayed at a beachside resort during their summer vacation.",translation:"വിനോദ കേന്ദ്രം",ipa:"/rɪˈzɔːt/"},
-  {word:"landmark",pos:"n.",meaning:"a well-known or important place or building in a city or country",example:"The Eiffel Tower is one of the most famous landmarks in the world.",translation:"പ്രശസ്ത സ്ഥലം",ipa:"/ˈlænd.mɑːk/"},
-  {word:"backpacker",pos:"n.",meaning:"a traveller who carries a backpack and usually travels cheaply",example:"As a backpacker, she preferred cheap hostels over expensive hotels.",translation:"ബാക്ക്പാക്കർ",ipa:"/ˈbæk.pæk.ər/"},
-  {word:"cruise",pos:"n.",meaning:"a holiday on a large ship that stops at different places",example:"They went on a Mediterranean cruise for their anniversary.",translation:"കപ്പൽ യാത്ര",ipa:"/kruːz/"},
-  {word:"jet lag",pos:"n.",meaning:"tiredness and confusion felt after a long flight across time zones",example:"After flying from New York to Tokyo, she suffered from terrible jet lag.",translation:"ദീർഘദൂര യാത്രയ്ക്ക് ശേഷമുള്ള ക്ഷീണം",ipa:"/ˈdʒet læɡ/"},
-  {word:"itinerant",pos:"adj.",meaning:"travelling from place to place regularly",example:"The itinerant musician performed in different cities every week.",translation:"സഞ്ചരിക്കുന്ന",ipa:"/aɪˈtɪn.ər.ənt/"},
-  {word:"scenic",pos:"adj.",meaning:"having beautiful natural views or landscapes",example:"The train journey offered a scenic view of the mountains and valleys.",translation:"പ്രകൃതിഭംഗിയുള്ള",ipa:"/ˈsiː.nɪk/"},
-  {word:"embark",pos:"v.",meaning:"to get onto a ship or aeroplane to start a journey",example:"Passengers were asked to embark at the dock by 6 o'clock.",translation:"യാത്ര തുടങ്ങുക",ipa:"/ɪmˈbɑːk/"},
-  {word:"disembark",pos:"v.",meaning:"to get off a ship, aeroplane, or other vehicle after a journey",example:"Travellers must disembark and collect their luggage at Terminal 2.",translation:"വാഹനത്തിൽ നിന്ന് ഇറങ്ങുക",ipa:"/ˌdɪs.ɪmˈbɑːk/"},
-  {word:"charter",pos:"v.",meaning:"to hire a vehicle, especially a plane or boat, for private use",example:"The company decided to charter a private plane for the business trip.",translation:"വാടകയ്ക്ക് എടുക്കുക",ipa:"/ˈtʃɑː.tər/"},
-  {word:"detour",pos:"n.",meaning:"a longer route taken to avoid a problem or to visit somewhere extra",example:"We made a quick detour to see the famous waterfall on our way north.",translation:"വഴിമാറ്റം",ipa:"/ˈdiː.tʊər/"},
-  {word:"fare",pos:"n.",meaning:"the price you pay to travel on a bus, train, plane, or taxi",example:"The bus fare increased slightly at the beginning of the year.",translation:"യാത്രക്കൂലി",ipa:"/feər/"},
-  {word:"brochure",pos:"n.",meaning:"a small booklet with pictures and information about a place or service",example:"The travel agency gave us a colourful brochure about the tour packages.",translation:"വിവര ലഘുലേഖ",ipa:"/ˈbrəʊ.ʃər/"},
-  {word:"destination",pos:"n.",meaning:"the place where someone is going or travelling to",example:"Paris was her dream destination for her birthday holiday.",translation:"ലക്ഷ്യസ്ഥാനം",ipa:"/ˌdes.tɪˈneɪ.ʃən/"},
-  {word:"trek",pos:"v.",meaning:"to walk a long distance, especially through mountains or forests",example:"They decided to trek through the national park for three days.",translation:"നടന്ന് യാത്ര ചെയ്യുക",ipa:"/trek/"},
-  {word:"atlas",pos:"n.",meaning:"a book of maps used to find places and plan routes",example:"Before smartphones, travellers always carried an atlas in their car.",translation:"ഭൂപട പുസ്തകം",ipa:"/ˈæt.ləs/"},
-  {word:"hospitality",pos:"n.",meaning:"the friendly and generous treatment of guests or tourists",example:"The local people showed great hospitality to visitors during the festival.",translation:"ആതിഥ്യം",ipa:"/ˌhɒs.pɪˈtæl.ɪ.ti/"},
-  {word:"simmer",pos:"v.",meaning:"to cook food gently in liquid just below boiling point",example:"Let the soup simmer for twenty minutes before serving.",translation:"പതുക്കെ തിളപ്പിക്കുക",ipa:"/ˈsɪmər/"},
-  {word:"garnish",pos:"v.",meaning:"to decorate a dish with a small amount of food for visual appeal",example:"She garnished the plate with fresh herbs and a slice of lemon.",translation:"അലങ്കരിക്കുക",ipa:"/ˈɡɑːrnɪʃ/"},
-  {word:"staple",pos:"n.",meaning:"a basic food that is eaten regularly and forms a main part of the diet",example:"Rice is a staple in many Asian countries.",translation:"പ്രധാന ഭക്ഷണം",ipa:"/ˈsteɪpəl/"},
-  {word:"marinate",pos:"v.",meaning:"to soak food in a seasoned liquid before cooking to add flavor",example:"It is best to marinate the chicken overnight in spices and yogurt.",translation:"മസാലയിൽ കുതിർക്കുക",ipa:"/ˈmærɪneɪt/"},
-  {word:"cuisine",pos:"n.",meaning:"a style of cooking associated with a particular country or region",example:"French cuisine is famous around the world for its rich sauces.",translation:"പാചകശൈലി",ipa:"/kwɪˈziːn/"},
-  {word:"savory",pos:"adj.",meaning:"having a salty or spicy taste, not sweet",example:"He preferred savory snacks like nuts and cheese over cake.",translation:"ഉപ്പുരസമുള്ള",ipa:"/ˈseɪvəri/"},
-  {word:"ferment",pos:"v.",meaning:"to undergo a chemical process in which sugars are converted, used in making food or drink",example:"They ferment soybeans to make a traditional paste used in cooking.",translation:"അഴുകിക്കുക",ipa:"/fərˈment/"},
-  {word:"delicacy",pos:"n.",meaning:"a rare or special food considered very fine and often expensive",example:"Sea urchin is considered a delicacy in Japan.",translation:"വിശേഷ വിഭവം",ipa:"/ˈdelɪkəsi/"},
-  {word:"portion",pos:"n.",meaning:"an amount of food served to one person",example:"The restaurant is known for its generous portions at low prices.",translation:"വിഭാഗം / ഭക്ഷണ അളവ്",ipa:"/ˈpɔːrʃən/"},
-  {word:"blend",pos:"v.",meaning:"to mix ingredients together smoothly",example:"Blend the tomatoes and garlic until you get a smooth sauce.",translation:"കൂട്ടിക്കലർത്തുക",ipa:"/blend/"},
-  {word:"appetizer",pos:"n.",meaning:"a small dish eaten before the main meal to stimulate appetite",example:"We ordered bruschetta as an appetizer before the main course.",translation:"ആദ്യ വിഭവം",ipa:"/ˈæpɪtaɪzər/"},
-  {word:"exotic",pos:"adj.",meaning:"unusual and interesting because it comes from a distant or foreign place",example:"The market sold exotic fruits that she had never seen before.",translation:"വിദേശീയമായ",ipa:"/ɪɡˈzɒtɪk/"},
-  {word:"recipe",pos:"n.",meaning:"a set of instructions for preparing a particular dish",example:"My grandmother shared her secret recipe for homemade bread.",translation:"പാചകക്കുറിപ്പ്",ipa:"/ˈresɪpi/"},
-  {word:"ingredient",pos:"n.",meaning:"any of the foods or substances combined to make a dish",example:"Fresh basil is the most important ingredient in this pasta sauce.",translation:"ചേരുവ",ipa:"/ɪnˈɡriːdiənt/"},
-  {word:"spice",pos:"n.",meaning:"a flavoring substance obtained from plants, used to season food",example:"Turmeric is a common spice used in Indian cooking.",translation:"സുഗന്ധവ്യഞ്ജനം",ipa:"/spaɪs/"},
-  {word:"vendor",pos:"n.",meaning:"a person who sells food, especially in a market or on the street",example:"The street vendor was selling freshly grilled corn on the roadside.",translation:"കച്ചവടക്കാരൻ",ipa:"/ˈvendər/"},
-  {word:"indulge",pos:"v.",meaning:"to allow yourself to enjoy something pleasurable, such as rich food",example:"Once a week, she would indulge in a slice of chocolate cake.",translation:"ആസ്വദിക്കുക",ipa:"/ɪnˈdʌldʒ/"},
-  {word:"texture",pos:"n.",meaning:"the feel or consistency of a food when you eat it",example:"The texture of the bread was soft inside and crispy outside.",translation:"ഘടന / കട്ടി",ipa:"/ˈtekstʃər/"},
-  {word:"harvest",pos:"n.",meaning:"the time when crops are gathered from the fields",example:"The harvest season brings many local food festivals to the village.",translation:"വിളവെടുപ്പ്",ipa:"/ˈhɑːrvɪst/"},
-  {word:"dietary",pos:"adj.",meaning:"relating to what a person regularly eats or their food choices",example:"She made dietary changes after her doctor advised her to eat less salt.",translation:"ആഹാരക്രമ സംബന്ധമായ",ipa:"/ˈdaɪətəri/"},
-  {word:"broth",pos:"n.",meaning:"a thin soup made by cooking meat or vegetables in water",example:"She made a warm chicken broth to help her feel better when she was ill.",translation:"സൂപ്പ്",ipa:"/brɒθ/"},
-  {word:"palate",pos:"n.",meaning:"a person's ability to taste and appreciate different flavors",example:"Traveling abroad helped him develop a more adventurous palate.",translation:"രുചിബോധം",ipa:"/ˈpælɪt/"},
-  {word:"aromatic",pos:"adj.",meaning:"having a strong, pleasant smell, often used to describe spiced foods",example:"The aromatic curry filled the entire kitchen with a wonderful smell.",translation:"സുഗന്ധമുള്ള",ipa:"/ˌærəˈmætɪk/"},
-  {word:"knead",pos:"v.",meaning:"to press and stretch dough with your hands to prepare it for baking",example:"You need to knead the dough for at least ten minutes to make good bread.",translation:"മാവ് കുഴയ്ക്കുക",ipa:"/niːd/"},
-  {word:"condiment",pos:"n.",meaning:"a sauce or seasoning added to food to enhance its flavor",example:"Mustard and ketchup are popular condiments served with burgers.",translation:"രുചി വർദ്ധിപ്പിക്കുന്ന ചേർക്കൽ",ipa:"/ˈkɒndɪmənt/"},
-  {word:"crave",pos:"v.",meaning:"to have a very strong desire for a particular food",example:"After traveling for weeks, she began to crave her mother's home cooking.",translation:"ആഗ്രഹിക്കുക",ipa:"/kreɪv/"},
-  {word:"portion",pos:"n.",meaning:"a serving of food for one person",example:"The chef carefully measured each portion to ensure equal servings.",translation:"ഓഹരി / ഭക്ഷണ അളവ്",ipa:"/ˈpɔːrʃən/"},
-  {word:"stuffed",pos:"adj.",meaning:"filled with a mixture of ingredients inside before cooking",example:"The stuffed peppers were filled with rice, meat, and vegetables.",translation:"നിറഞ്ഞ / ഉള്ളിൽ നിറച്ച",ipa:"/stʌft/"},
-  {word:"mince",pos:"v.",meaning:"to cut food into very small pieces using a knife or machine",example:"Mince the garlic finely before adding it to the pan.",translation:"നൂക്കമായി അരിയുക",ipa:"/mɪns/"},
-  {word:"buffet",pos:"n.",meaning:"a meal where guests serve themselves from a variety of dishes",example:"The hotel offered a breakfast buffet with dishes from around the world.",translation:"ബഫ്ഫേ ഭക്ഷണം",ipa:"/ˈbʊfeɪ/"},
-  {word:"canvas",pos:"n.",meaning:"a strong cloth used by artists for painting",example:"The artist stretched a fresh canvas before starting her new painting.",translation:"കാൻവാസ്",ipa:"/ˈkænvəs/"},
-  {word:"sculpture",pos:"n.",meaning:"a work of art made by shaping stone, wood, or metal",example:"The museum displayed a beautiful sculpture made from white marble.",translation:"ശില്പം",ipa:"/ˈskʌlptʃər/"},
-  {word:"portrait",pos:"n.",meaning:"a painting or drawing of a person, especially their face",example:"The gallery has a famous portrait of a queen from the 17th century.",translation:"ഛായാചിത്രം",ipa:"/ˈpɔːrtrɪt/"},
-  {word:"verse",pos:"n.",meaning:"a group of lines that form a unit in a poem or song",example:"She read the first verse of the poem aloud to the class.",translation:"പദ്യം",ipa:"/vɜːrs/"},
-  {word:"genre",pos:"n.",meaning:"a particular type or style of art, music, or writing",example:"Mystery is her favourite genre of fiction to read.",translation:"സാഹിത്യ വിഭാഗം",ipa:"/ˈʒɒnrə/"},
-  {word:"playwright",pos:"n.",meaning:"a person who writes plays for the theatre",example:"The young playwright won an award for his first stage production.",translation:"നാടകകൃത്ത്",ipa:"/ˈpleɪraɪt/"},
-  {word:"rehearsal",pos:"n.",meaning:"a practice session before a public performance",example:"The actors had a long rehearsal before opening night.",translation:"റിഹേഴ്സൽ",ipa:"/rɪˈhɜːrsəl/"},
-  {word:"metaphor",pos:"n.",meaning:"a way of describing something by saying it is something else, used in writing and speech",example:"The poet used the metaphor of a storm to describe his anger.",translation:"രൂപകം",ipa:"/ˈmetəfɔːr/"},
-  {word:"novelist",pos:"n.",meaning:"a person who writes novels",example:"The celebrated novelist published her tenth book last year.",translation:"നോവലിസ്റ്റ്",ipa:"/ˈnɒvəlɪst/"},
-  {word:"watercolor",pos:"n.",meaning:"a type of paint mixed with water, or a painting made with it",example:"She painted a delicate watercolor of the countryside.",translation:"ജലച്ചായം",ipa:"/ˈwɔːtərkʌlər/"},
-  {word:"stanza",pos:"n.",meaning:"a group of lines forming a section of a poem",example:"The poem has four stanzas, each describing a different season.",translation:"ശ്ലോകം",ipa:"/ˈstænzə/"},
-  {word:"exhibition",pos:"n.",meaning:"a public display of art or objects in a gallery or museum",example:"We visited an exhibition of modern paintings at the city gallery.",translation:"പ്രദർശനം",ipa:"/ˌeksɪˈbɪʃən/"},
-  {word:"manuscript",pos:"n.",meaning:"a handwritten or typed document, especially an author's original text",example:"The old manuscript was carefully stored in the library's archive.",translation:"കൈയെഴുത്തുപ്രതി",ipa:"/ˈmænjuskrɪpt/"},
-  {word:"allegory",pos:"n.",meaning:"a story where characters and events represent deeper moral or political meanings",example:"The teacher explained that the novel is an allegory about freedom and oppression.",translation:"ആലങ്കാരിക കഥ",ipa:"/ˈæləɡɔːri/"},
-  {word:"mural",pos:"n.",meaning:"a large painting done directly on a wall",example:"The students painted a colorful mural on the school wall.",translation:"ചുവർചിത്രം",ipa:"/ˈmjʊərəl/"},
-  {word:"prose",pos:"n.",meaning:"ordinary written language, not poetry",example:"His prose style is simple and easy to understand.",translation:"ഗദ്യം",ipa:"/proʊz/"},
-  {word:"encore",pos:"n.",meaning:"an extra performance given because the audience claps and asks for more",example:"The audience cheered so loudly that the band played an encore.",translation:"ആവർത്തന പ്രകടനം",ipa:"/ˈɒŋkɔːr/"},
-  {word:"sketch",pos:"n.",meaning:"a quick, rough drawing done without much detail",example:"The artist made a quick sketch of the landscape before painting it.",translation:"സ്കെച്ച്",ipa:"/skɛtʃ/"},
-  {word:"debut",pos:"n.",meaning:"the first public appearance of a performer or artist",example:"The young singer made her debut at the local theatre last month.",translation:"ആദ്യ പ്രകടനം",ipa:"/ˈdeɪbjuː/"},
-  {word:"anthology",pos:"n.",meaning:"a collection of poems, stories, or other writings by different authors",example:"The teacher gave us an anthology of short stories to read over summer.",translation:"സങ്കലനം",ipa:"/ænˈθɒlədʒi/"},
-  {word:"caption",pos:"n.",meaning:"a short text written below a picture or image to explain it",example:"The caption under the photograph described the scene in detail.",translation:"തലക്കെട്ട്",ipa:"/ˈkæpʃən/"},
-  {word:"improvise",pos:"v.",meaning:"to perform or create something without preparation or planning",example:"When the musician forgot his sheet music, he had to improvise on stage.",translation:"തൽക്കാലം ചെയ്യുക",ipa:"/ˈɪmprəvaɪz/"},
-  {word:"satirical",pos:"adj.",meaning:"using humor or irony to criticize people or society",example:"The satirical play made the audience laugh while also making them think.",translation:"വ്യംഗ്യാത്മകമായ",ipa:"/səˈtɪrɪkəl/"},
-  {word:"monologue",pos:"n.",meaning:"a long speech given by one person in a play or performance",example:"The actor delivered an emotional monologue that impressed everyone.",translation:"ഏകഭാഷണം",ipa:"/ˈmɒnəlɒɡ/"},
-  {word:"critique",pos:"n.",meaning:"a detailed review or judgment of something, especially a piece of art or writing",example:"The professor wrote a thoughtful critique of the student's short story.",translation:"നിരൂപണം",ipa:"/krɪˈtiːk/"},
-  {word:"lyrical",pos:"adj.",meaning:"expressing deep feelings in a beautiful way, like poetry or song",example:"Her lyrical writing style made the novel a pleasure to read.",translation:"ഗാനാത്മകമായ",ipa:"/ˈlɪrɪkəl/"},
-  {word:"premiere",pos:"n.",meaning:"the first public showing of a film, play, or performance",example:"We attended the premiere of the new play at the downtown theatre.",translation:"പ്രിമിയർ",ipa:"/prɪˈmɪər/"},
-  {word:"curator",pos:"n.",meaning:"a person who is in charge of a museum, gallery, or exhibition",example:"The curator explained the history of each painting to the visitors.",translation:"ക്യൂറേറ്റർ",ipa:"/kjʊˈreɪtər/"},
-  {word:"illuminate",pos:"v.",meaning:"to make something clearer or easier to understand, or to decorate a manuscript with color",example:"The author used vivid examples to illuminate the central theme of her book.",translation:"വ്യക്തമാക്കുക",ipa:"/ɪˈluːmɪneɪt/"},
-  {word:"atom",pos:"n.",meaning:"the smallest unit of a chemical element that can exist",example:"Everything around us is made up of atoms.",translation:"ആറ്റം",ipa:"/ˈætəm/"},
-  {word:"molecule",pos:"n.",meaning:"a group of two or more atoms bonded together",example:"Water is made of molecules containing hydrogen and oxygen.",translation:"തന്മാത്ര",ipa:"/ˈmɒlɪkjuːl/"},
-  {word:"gravity",pos:"n.",meaning:"the natural force that pulls objects toward the Earth",example:"Gravity keeps the planets in orbit around the Sun.",translation:"ഗുരുത്വാകർഷണം",ipa:"/ˈɡrævɪti/"},
-  {word:"orbit",pos:"n.",meaning:"the curved path an object takes around a planet or star",example:"The Moon travels in an orbit around the Earth.",translation:"ഭ്രമണപഥം",ipa:"/ˈɔːrbɪt/"},
-  {word:"element",pos:"n.",meaning:"a pure substance made of only one type of atom",example:"Gold is a chemical element found in nature.",translation:"മൂലകം",ipa:"/ˈelɪmənt/"},
-  {word:"hypothesis",pos:"n.",meaning:"an idea or explanation that has not yet been proven",example:"The scientist formed a hypothesis before starting the experiment.",translation:"സിദ്ധാന്തകൽപ്പന",ipa:"/haɪˈpɒθɪsɪs/"},
-  {word:"observation",pos:"n.",meaning:"the act of watching something carefully to learn about it",example:"Careful observation helped her notice changes in the plant's growth.",translation:"നിരീക്ഷണം",ipa:"/ˌɒbzəˈveɪʃən/"},
-  {word:"experiment",pos:"n.",meaning:"a scientific test done to discover or prove something",example:"The students conducted an experiment to see how plants respond to light.",translation:"പരീക്ഷണം",ipa:"/ɪkˈsperɪmənt/"},
-  {word:"variable",pos:"n.",meaning:"a factor in an experiment that can be changed or measured",example:"Temperature was the main variable in their science experiment.",translation:"വേരിയബിൾ",ipa:"/ˈveəriəbəl/"},
-  {word:"reaction",pos:"n.",meaning:"a chemical change that happens when two substances are combined",example:"Mixing vinegar and baking soda causes a chemical reaction.",translation:"പ്രതിക്രിയ",ipa:"/riˈækʃən/"},
-  {word:"laboratory",pos:"n.",meaning:"a room or building where scientific experiments are carried out",example:"She spent the afternoon working in the school laboratory.",translation:"പരീക്ഷണശാല",ipa:"/ləˈbɒrətri/"},
-  {word:"specimen",pos:"n.",meaning:"a sample of something collected for scientific study",example:"The biologist preserved a specimen of the rare insect.",translation:"മാതൃകാസാംപിൾ",ipa:"/ˈspesɪmən/"},
-  {word:"microscope",pos:"n.",meaning:"a scientific tool used to see objects that are too small for the naked eye",example:"We used a microscope to look at cells from a leaf.",translation:"സൂക്ഷ്മദർശിനി",ipa:"/ˈmaɪkrəskəʊp/"},
-  {word:"nucleus",pos:"n.",meaning:"the central part of an atom or a cell that controls its activity",example:"The nucleus of an atom contains protons and neutrons.",translation:"കേന്ദ്രകം",ipa:"/ˈnjuːkliəs/"},
-  {word:"classify",pos:"v.",meaning:"to arrange things into groups based on shared qualities",example:"Scientists classify living things into different categories.",translation:"വർഗ്ഗീകരിക്കുക",ipa:"/ˈklæsɪfaɪ/"},
-  {word:"absorb",pos:"v.",meaning:"to take in or soak up a substance or energy",example:"Dark surfaces absorb more heat from the sun than light surfaces.",translation:"ആഗിരണം ചെയ്യുക",ipa:"/əbˈzɔːrb/"},
-  {word:"evaporate",pos:"v.",meaning:"to change from a liquid into a gas or vapor",example:"Water will evaporate quickly on a hot summer day.",translation:"ബാഷ്പീകരിക്കുക",ipa:"/ɪˈvæpəreɪt/"},
-  {word:"conduct",pos:"v.",meaning:"to allow heat or electricity to pass through something",example:"Metal can conduct electricity very well.",translation:"ചാലകം ആകുക",ipa:"/kənˈdʌkt/"},
-  {word:"dense",pos:"adj.",meaning:"having a lot of mass packed closely together in a small space",example:"Iron is much more dense than wood.",translation:"സാന്ദ്രമായ",ipa:"/dens/"},
-  {word:"transparent",pos:"adj.",meaning:"allowing light to pass through so objects can be seen clearly",example:"Glass is transparent, so we can see through windows.",translation:"സുതാര്യമായ",ipa:"/trænsˈpærənt/"},
-  {word:"magnetic",pos:"adj.",meaning:"having the ability to attract iron or steel objects",example:"A magnetic field surrounds the Earth and protects us.",translation:"കാന്തിക",ipa:"/mæɡˈnetɪk/"},
-  {word:"soluble",pos:"adj.",meaning:"able to be dissolved in a liquid, especially water",example:"Sugar is soluble in water and disappears when stirred.",translation:"ലയിക്കുന്ന",ipa:"/ˈsɒljʊbəl/"},
-  {word:"neutral",pos:"adj.",meaning:"neither acidic nor alkaline; having a pH of 7",example:"Pure water is neutral on the pH scale.",translation:"നിഷ്പക്ষ",ipa:"/ˈnjuːtrəl/"},
-  {word:"fossil",pos:"n.",meaning:"the preserved remains of an ancient living thing found in rock",example:"The museum displayed a dinosaur fossil found in the desert.",translation:"ഫോസിൽ",ipa:"/ˈfɒsəl/"},
-  {word:"sediment",pos:"n.",meaning:"small particles of rock or soil that settle at the bottom of water",example:"Sediment collected at the bottom of the river over many years.",translation:"അവസാദം",ipa:"/ˈsedɪmənt/"},
-  {word:"friction",pos:"n.",meaning:"the resistance force that occurs when two surfaces rub together",example:"Friction between the tires and the road helps cars stop safely.",translation:"ഘർഷണം",ipa:"/ˈfrɪkʃən/"},
-  {word:"vibrate",pos:"v.",meaning:"to move back and forth very quickly",example:"Sound is created when objects vibrate and produce waves.",translation:"കമ്പനം ചെയ്യുക",ipa:"/vaɪˈbreɪt/"},
-  {word:"dilute",pos:"v.",meaning:"to make a liquid weaker by adding water or another substance",example:"You should dilute the acid with water before using it safely.",translation:"നേർപ്പിക്കുക",ipa:"/daɪˈluːt/"},
-  {word:"accelerate",pos:"v.",meaning:"to increase speed or cause something to move faster",example:"The car began to accelerate as it reached the open road.",translation:"ത്വരണം നൽകുക",ipa:"/əkˈseləreɪt/"},
-  {word:"insoluble",pos:"adj.",meaning:"unable to be dissolved in a liquid",example:"Sand is insoluble in water, so it sinks to the bottom.",translation:"അലേയമായ",ipa:"/ɪnˈsɒljʊbəl/"},
-  {word:"mayor",pos:"n.",meaning:"the elected leader of a city or town",example:"The mayor gave a speech about improving local parks.",translation:"മേയർ",ipa:"/ˈmeɪ.ər/"},
-  {word:"citizen",pos:"n.",meaning:"a person who legally belongs to a country or city",example:"Every citizen has the right to vote in the election.",translation:"പൗരൻ",ipa:"/ˈsɪt.ɪ.zən/"},
-  {word:"council",pos:"n.",meaning:"a group of people elected to manage a town or city",example:"The city council voted to build a new library.",translation:"കൗൺസിൽ",ipa:"/ˈkaʊn.səl/"},
-  {word:"amendment",pos:"n.",meaning:"an official change made to a law or document",example:"The parliament approved an amendment to the education law.",translation:"ഭേദഗതി",ipa:"/əˈmend.mənt/"},
-  {word:"ballot",pos:"n.",meaning:"a process or paper used for secret voting",example:"Residents cast their ballot to choose the new mayor.",translation:"ബാലറ്റ്",ipa:"/ˈbæl.ət/"},
-  {word:"representative",pos:"n.",meaning:"a person chosen to speak or act for others",example:"Our representative presented the community's concerns to the government.",translation:"പ്രതിനിധി",ipa:"/ˌrep.rɪˈzen.tə.tɪv/"},
-  {word:"rally",pos:"n.",meaning:"a large public meeting to support a cause",example:"Hundreds of people attended the rally for better housing.",translation:"റാലി",ipa:"/ˈræl.i/"},
-  {word:"petition",pos:"n.",meaning:"a written request signed by many people asking for change",example:"Local residents signed a petition to save the old park.",translation:"ഹർജി",ipa:"/pəˈtɪʃ.ən/"},
-  {word:"welfare",pos:"n.",meaning:"the health, happiness, and safety of people in society",example:"The government introduced new programs to improve public welfare.",translation:"ക്ഷേമം",ipa:"/ˈwel.feər/"},
-  {word:"parliament",pos:"n.",meaning:"the group of elected people who make laws for a country",example:"Parliament passed a new law to protect the environment.",translation:"പാർലമെന്റ്",ipa:"/ˈpɑː.lə.mənt/"},
-  {word:"enforce",pos:"v.",meaning:"to make sure a law or rule is followed",example:"The police are responsible for enforcing traffic laws.",translation:"നടപ്പിലാക്കുക",ipa:"/ɪnˈfɔːs/"},
-  {word:"regulate",pos:"v.",meaning:"to control something using rules or laws",example:"The government regulates how companies treat their workers.",translation:"നിയന്ത്രിക്കുക",ipa:"/ˈreɡ.jʊ.leɪt/"},
-  {word:"municipal",pos:"adj.",meaning:"relating to the local government of a town or city",example:"Municipal workers cleaned the streets after the storm.",translation:"മുനിസിപ്പൽ",ipa:"/mjuːˈnɪs.ɪ.pəl/"},
-  {word:"authority",pos:"n.",meaning:"the power to make decisions and enforce rules",example:"The local authority decided to repair the roads.",translation:"അധികാരം",ipa:"/ɔːˈθɒr.ɪ.ti/"},
-  {word:"legislation",pos:"n.",meaning:"laws made by a government",example:"New legislation was passed to improve workers' rights.",translation:"നിയമനിർമ്മാണം",ipa:"/ˌledʒ.ɪˈsleɪ.ʃən/"},
-  {word:"civic",pos:"adj.",meaning:"relating to a city or the duties of citizens",example:"Students learn about civic responsibility in school.",translation:"പൗരസംബന്ധമായ",ipa:"/ˈsɪv.ɪk/"},
-  {word:"accountability",pos:"n.",meaning:"being responsible for your actions and explaining them to others",example:"Citizens demand accountability from their elected leaders.",translation:"ഉത്തരവാദിത്തം",ipa:"/əˌkaʊn.təˈbɪl.ɪ.ti/"},
-  {word:"constitution",pos:"n.",meaning:"the set of basic laws and principles that govern a country",example:"The constitution guarantees freedom of speech to all citizens.",translation:"ഭരണഘടന",ipa:"/ˌkɒn.stɪˈtjuː.ʃən/"},
-  {word:"sanitation",pos:"n.",meaning:"systems that keep public places clean and healthy",example:"Better sanitation in the neighborhood reduced disease.",translation:"ശുചിത്വം",ipa:"/ˌsæn.ɪˈteɪ.ʃən/"},
-  {word:"infrastructure",pos:"n.",meaning:"basic systems like roads, water, and electricity that a society needs",example:"The government invested money in improving the country's infrastructure.",translation:"അടിസ്ഥാന സൗകര്യം",ipa:"/ˈɪn.frəˌstrʌk.tʃər/"},
-  {word:"nonprofit",pos:"adj.",meaning:"describing an organization that does not aim to make money",example:"She works for a nonprofit organization that helps homeless people.",translation:"ലാഭേച്ഛയില്ലാത്ത",ipa:"/ˌnɒnˈprɒf.ɪt/"},
-  {word:"grassroots",pos:"adj.",meaning:"coming from ordinary people rather than leaders or organizations",example:"The grassroots movement pushed the government to change the law.",translation:"ജനകീയ",ipa:"/ˈɡrɑːsruːts/"},
-  {word:"referendum",pos:"n.",meaning:"a public vote on one important question or issue",example:"The country held a referendum on whether to change the voting age.",translation:"റഫറണ്ടം",ipa:"/ˌref.əˈren.dəm/"},
-  {word:"transparency",pos:"n.",meaning:"being open and clear about decisions and actions",example:"The new leader promised greater transparency in government spending.",translation:"സുതാര്യത",ipa:"/trænsˈpær.ən.si/"},
-  {word:"ward off",pos:"phrase",meaning:"to take action to prevent something harmful",example:"The new policy was designed to ward off further economic problems.",translation:"തടയുക",ipa:"/wɔːd ɒf/"},
-  {word:"coalition",pos:"n.",meaning:"a group of different parties or people working together for a shared goal",example:"Several parties formed a coalition to win the election.",translation:"സഖ്യം",ipa:"/ˌkəʊ.əˈlɪʃ.ən/"},
-  {word:"bureaucracy",pos:"n.",meaning:"a system of government with many complicated rules and processes",example:"Starting a new business can be slow because of bureaucracy.",translation:"ബ്യൂറോക്രസി",ipa:"/bjʊəˈrɒk.rə.si/"},
-  {word:"incumbent",pos:"n.",meaning:"the person who currently holds an official position",example:"The incumbent mayor is running for a second term in office.",translation:"നിലവിലെ ഉദ്യോഗസ്ഥൻ",ipa:"/ɪnˈkʌm.bənt/"},
-  {word:"athlete",pos:"n.",meaning:"a person who trains and competes in sports",example:"The young athlete trained every morning before school.",translation:"കായികതാരം",ipa:"/ˈæθ.liːt/"},
-  {word:"tournament",pos:"n.",meaning:"a competition with many players or teams trying to win",example:"Our school team entered a national football tournament.",translation:"ടൂർണമെന്റ്",ipa:"/ˈtʊə.nə.mənt/"},
-  {word:"referee",pos:"n.",meaning:"an official who makes sure players follow the rules during a game",example:"The referee blew the whistle to stop the match.",translation:"റഫറി",ipa:"/ˌref.əˈriː/"},
-  {word:"champion",pos:"n.",meaning:"the winner of a competition or sport",example:"She became the national swimming champion at age sixteen.",translation:"ചാമ്പ്യൻ",ipa:"/ˈtʃæm.pi.ən/"},
-  {word:"spectator",pos:"n.",meaning:"a person who watches a sport or event but does not take part",example:"Thousands of spectators filled the stadium to watch the race.",translation:"കാണി",ipa:"/spekˈteɪ.tər/"},
-  {word:"penalty",pos:"n.",meaning:"a punishment given to a team or player for breaking a rule",example:"The team scored from a penalty kick in the final minute.",translation:"പെനാൽറ്റി",ipa:"/ˈpen.əl.ti/"},
-  {word:"sprint",pos:"v.",meaning:"to run as fast as possible over a short distance",example:"He had to sprint to the finish line to win the race.",translation:"വേഗത്തിൽ ഓടുക",ipa:"/sprɪnt/"},
-  {word:"medal",pos:"n.",meaning:"a small metal disc given as an award for winning or achieving something in sport",example:"She won a gold medal at the regional athletics competition.",translation:"മെഡൽ",ipa:"/ˈmed.əl/"},
-  {word:"opponent",pos:"n.",meaning:"a person or team you compete against in a game or sport",example:"His opponent was much taller, but he still won the match.",translation:"എതിരാളി",ipa:"/əˈpəʊ.nənt/"},
-  {word:"league",pos:"n.",meaning:"a group of sports teams that regularly play against each other",example:"The local football league has twelve teams this season.",translation:"ലീഗ്",ipa:"/liːɡ/"},
-  {word:"defend",pos:"v.",meaning:"to try to stop the other team from scoring in a game",example:"The players worked hard to defend their lead in the second half.",translation:"പ്രതിരോധിക്കുക",ipa:"/dɪˈfend/"},
-  {word:"trophy",pos:"n.",meaning:"a prize, usually a decorated cup or figure, given to the winner of a competition",example:"The captain lifted the trophy in front of the cheering crowd.",translation:"ട്രോഫി",ipa:"/ˈtrəʊ.fi/"},
-  {word:"qualify",pos:"v.",meaning:"to reach the standard needed to enter or continue in a competition",example:"Our team played well enough to qualify for the semifinals.",translation:"യോഗ്യത നേടുക",ipa:"/ˈkwɒl.ɪ.faɪ/"},
-  {word:"stadium",pos:"n.",meaning:"a large sports ground with seats all around it for spectators",example:"The new stadium can hold over fifty thousand fans.",translation:"സ്റ്റേഡിയം",ipa:"/ˈsteɪ.di.əm/"},
-  {word:"stamina",pos:"n.",meaning:"the physical or mental strength to do something difficult for a long time",example:"Long-distance runners need incredible stamina to finish a marathon.",translation:"സഹനശക്തി",ipa:"/ˈstæm.ɪ.nə/"},
-  {word:"defeat",pos:"v.",meaning:"to beat someone in a game, fight, or competition",example:"The home team managed to defeat their rivals by two goals.",translation:"പരാജയപ്പെടുത്തുക",ipa:"/dɪˈfiːt/"},
-  {word:"substitute",pos:"n.",meaning:"a player who replaces another player during a game",example:"The coach sent on a substitute after the midfielder was injured.",translation:"പകരക്കാരൻ",ipa:"/ˈsʌb.stɪ.tjuːt/"},
-  {word:"coach",pos:"n.",meaning:"a person who trains and teaches a sports team or athlete",example:"The coach gave the players advice during the halftime break.",translation:"പരിശീലകൻ",ipa:"/kəʊtʃ/"},
-  {word:"fitness",pos:"n.",meaning:"being in good physical health and shape through exercise",example:"Good fitness is essential for any competitive sport.",translation:"ആരോഗ്യക്ഷമത",ipa:"/ˈfɪt.nəs/"},
-  {word:"score",pos:"v.",meaning:"to get a point or goal in a game or competition",example:"She managed to score twice in the second half of the match.",translation:"സ്കോർ ചെയ്യുക",ipa:"/skɔːr/"},
-  {word:"spectacle",pos:"n.",meaning:"an impressive or exciting public event or display",example:"The opening ceremony of the Olympics was a wonderful spectacle.",translation:"കാഴ്ചവിരുന്ന്",ipa:"/ˈspek.tə.kəl/"},
-  {word:"athletic",pos:"adj.",meaning:"physically strong, fit, and good at sports",example:"She has an athletic build and excels at several different sports.",translation:"അത്‌ലറ്റിക്",ipa:"/æθˈlet.ɪk/"},
-  {word:"foul",pos:"n.",meaning:"an action in sport that breaks the rules of the game",example:"The referee awarded a free kick after the foul near the goal.",translation:"ഫൗൾ",ipa:"/faʊl/"},
-  {word:"championship",pos:"n.",meaning:"a competition to find the best player or team in a sport",example:"The national basketball championship attracts teams from every region.",translation:"ചാമ്പ്യൻഷിപ്പ്",ipa:"/ˈtʃæm.pi.ən.ʃɪp/"},
-  {word:"endurance",pos:"n.",meaning:"the ability to keep doing something difficult or painful for a long time",example:"Cycling long distances requires both strength and great endurance.",translation:"ക്ഷമാശക്തി",ipa:"/ɪnˈdjʊə.rəns/"},
-  {word:"competitive",pos:"adj.",meaning:"wanting very much to win or be the best at something",example:"She is very competitive and always tries her hardest in every race.",translation:"മത്സരാത്മക",ipa:"/kəmˈpet.ɪ.tɪv/"},
-  {word:"warm-up",pos:"n.",meaning:"light exercise done before a sport or activity to prepare the body",example:"The players did a ten-minute warm-up before the training session.",translation:"വാം-അപ്പ്",ipa:"/ˈwɔːm.ʌp/"},
-  {word:"lineup",pos:"n.",meaning:"the list of players chosen to play in a sports match",example:"The coach announced the lineup one hour before kickoff.",translation:"ലൈൻ-അപ്പ്",ipa:"/ˈlaɪn.ʌp/"},
-  {word:"underdog",pos:"n.",meaning:"a team or player who is expected to lose a competition",example:"Everyone was surprised when the underdog won the tournament.",translation:"പ്രതീക്ഷിക്കപ്പെടാത്ത വിജയി",ipa:"/ˈʌn.də.dɒɡ/"},
-  {word:"agility",pos:"n.",meaning:"the ability to move quickly and easily, especially in sport",example:"Gymnasts need great agility to perform their routines well.",translation:"ചടുലത",ipa:"/əˈdʒɪl.ɪ.ti/"},
-  {word:"subscribe",pos:"v.",meaning:"to sign up to receive content regularly from a channel or service",example:"Many people subscribe to online news channels to stay updated.",translation:"സബ്‌സ്‌ക്രൈബ് ചെയ്യുക",ipa:"/səbˈskraɪb/"},
-  {word:"podcast",pos:"n.",meaning:"a digital audio programme that people can listen to online or download",example:"She listens to a podcast about world news every morning.",translation:"പോഡ്കാസ്റ്റ്",ipa:"/ˈpɒdkɑːst/"},
-  {word:"anchor",pos:"n.",meaning:"a person who presents and reads the news on television or radio",example:"The anchor delivered the evening news with great confidence.",translation:"അവതാരകൻ",ipa:"/ˈæŋkər/"},
-  {word:"stream",pos:"v.",meaning:"to watch or listen to video or audio content directly over the internet",example:"Millions of people stream movies and shows every day.",translation:"സ്ട്രീം ചെയ്യുക",ipa:"/striːm/"},
-  {word:"viral",pos:"adj.",meaning:"spreading very quickly and widely among people online",example:"The funny video went viral within just a few hours.",translation:"വൈറൽ ആയ",ipa:"/ˈvaɪrəl/"},
-  {word:"column",pos:"n.",meaning:"a regular article written by the same person in a newspaper or magazine",example:"She writes a weekly column about environmental issues.",translation:"കോളം",ipa:"/ˈkɒləm/"},
-  {word:"censor",pos:"v.",meaning:"to officially remove or block parts of media that are considered harmful or inappropriate",example:"The government decided to censor certain websites.",translation:"സെൻസർ ചെയ്യുക",ipa:"/ˈsensər/"},
-  {word:"outlet",pos:"n.",meaning:"a media organisation such as a newspaper, TV channel, or website that shares news",example:"Several major news outlets covered the story.",translation:"മാധ്യമ സ്ഥാപനം",ipa:"/ˈaʊtlɛt/"},
-  {word:"footage",pos:"n.",meaning:"recorded video material, especially of a news event",example:"The camera crew captured rare footage of the protest.",translation:"ദൃശ്യശേഖരം",ipa:"/ˈfʊtɪdʒ/"},
-  {word:"notify",pos:"v.",meaning:"to send someone a message or alert about something new",example:"The app will notify you when a new episode is available.",translation:"അറിയിക്കുക",ipa:"/ˈnoʊtɪfaɪ/"},
-  {word:"forum",pos:"n.",meaning:"an online or physical place where people discuss topics and share opinions",example:"She posted her question on an online forum about technology.",translation:"ഫോറം",ipa:"/ˈfɔːrəm/"},
-  {word:"verify",pos:"v.",meaning:"to check that information or facts are true and correct",example:"Always verify the facts before sharing news online.",translation:"സ്ഥിരീകരിക്കുക",ipa:"/ˈvɛrɪfaɪ/"},
-  {word:"segment",pos:"n.",meaning:"a separate part or section of a TV or radio programme",example:"The cooking segment is the most popular part of the show.",translation:"ഭാഗം",ipa:"/ˈsɛɡmənt/"},
-  {word:"censorship",pos:"n.",meaning:"the practice of controlling what information is allowed to be shared publicly",example:"Journalists protested against the new censorship laws.",translation:"സെൻസർഷിപ്പ്",ipa:"/ˈsɛnsəʃɪp/"},
-  {word:"moderator",pos:"n.",meaning:"a person who manages discussions and ensures rules are followed online or in a debate",example:"The moderator removed offensive comments from the forum.",translation:"മോഡറേറ്റർ",ipa:"/ˈmɒdəreɪtər/"},
-  {word:"circulation",pos:"n.",meaning:"the number of copies of a newspaper or magazine that are sold or distributed",example:"The newspaper has a daily circulation of one million copies.",translation:"പ്രചാരം",ipa:"/ˌsɜːkjʊˈleɪʃən/"},
-  {word:"press",pos:"n.",meaning:"newspapers and journalists considered as a group",example:"The free press plays an important role in a democracy.",translation:"പത്രമാധ്യമം",ipa:"/prɛs/"},
-  {word:"scoop",pos:"n.",meaning:"an important news story that one journalist or outlet reports before others",example:"The young reporter got a scoop about the city's new project.",translation:"പ്രത്യേക വാർത്ത",ipa:"/skuːp/"},
-  {word:"notification",pos:"n.",meaning:"a short message from an app or website alerting you to new information",example:"He turned off all notifications to focus on his work.",translation:"അറിയിപ്പ്",ipa:"/ˌnoʊtɪfɪˈkeɪʃən/"},
-  {word:"feed",pos:"n.",meaning:"a continuously updated stream of posts or content on a social media platform",example:"She scrolled through her social media feed every morning.",translation:"ഫീഡ്",ipa:"/fiːd/"},
-  {word:"transmit",pos:"v.",meaning:"to send or pass information, signals, or data from one place to another",example:"The satellite transmits signals to televisions around the world.",translation:"പ്രേഷണം ചെയ്യുക",ipa:"/trænsˈmɪt/"},
-  {word:"press release",pos:"phrase",meaning:"an official statement given to journalists by an organisation or government",example:"The company sent a press release about its new product launch.",translation:"പ്രസ് റിലീസ്",ipa:"/ˈprɛs rɪˌliːs/"},
-  {word:"media literacy",pos:"phrase",meaning:"the ability to find, understand, and evaluate information from different media sources",example:"Schools now teach media literacy so students can spot fake news.",translation:"മീഡിയ സാക്ഷരത",ipa:"/ˈmiːdiə ˈlɪtərəsi/"},
-  {word:"filter",pos:"v.",meaning:"to select or remove certain content based on rules or preferences",example:"The software can filter out inappropriate content automatically.",translation:"ഫിൽട്ടർ ചെയ്യുക",ipa:"/ˈfɪltər/"},
-  {word:"clickbait",pos:"n.",meaning:"online content with misleading titles designed to attract people to click on it",example:"The article turned out to be clickbait with no real information.",translation:"ക്ലിക്ക്ബെയ്റ്റ്",ipa:"/ˈklɪkbeɪt/"},
-  {word:"profile",pos:"n.",meaning:"a personal page on a social media website containing a user's information",example:"She updated her profile picture on her social media account.",translation:"പ്രൊഫൈൽ",ipa:"/ˈproʊfaɪl/"},
-  {word:"misinformation",pos:"n.",meaning:"false or inaccurate information that is shared, sometimes without knowing it is wrong",example:"Misinformation about health can be dangerous if people believe it.",translation:"തെറ്റായ വിവരം",ipa:"/ˌmɪsɪnfərˈmeɪʃən/"},
-  {word:"engage",pos:"v.",meaning:"to actively interact with content or people online, such as liking or commenting",example:"The post encouraged followers to engage by sharing their opinions.",translation:"ഇടപഴകുക",ipa:"/ɪnˈɡeɪdʒ/"},
-  {word:"documentary",pos:"n.",meaning:"a film or television programme that gives factual information about a real topic",example:"The documentary about ocean pollution received many awards.",translation:"ഡോക്യുമെന്ററി",ipa:"/ˌdɒkjʊˈmɛntəri/"},
-  {word:"analyze",pos:"v.",meaning:"to examine something carefully to understand it",example:"We need to analyze the problem before finding a solution.",translation:"വിശകലനം ചെയ്യുക",ipa:"/ˈæn.ə.laɪz/"},
-  {word:"approach",pos:"n.",meaning:"a way of dealing with a situation or problem",example:"We tried a different approach to solve the issue.",translation:"സമീപനം",ipa:"/əˈprəʊtʃ/"},
-  {word:"attempt",pos:"v.",meaning:"to try to do something, especially something difficult",example:"She attempted to fix the broken machine herself.",translation:"ശ്രമിക്കുക",ipa:"/əˈtɛmpt/"},
-  {word:"barrier",pos:"n.",meaning:"something that prevents progress or makes things difficult",example:"Language can be a barrier to solving problems abroad.",translation:"തടസ്സം",ipa:"/ˈbær.i.ər/"},
-  {word:"brainstorm",pos:"v.",meaning:"to think of many ideas quickly to solve a problem",example:"The team brainstormed solutions for an hour.",translation:"ആശയങ്ങൾ കണ്ടെത്തുക",ipa:"/ˈbreɪn.stɔːm/"},
-  {word:"conclusion",pos:"n.",meaning:"a decision or opinion reached after thinking carefully",example:"We came to the conclusion that a new plan was needed.",translation:"നിഗമനം",ipa:"/kənˈkluː.ʒən/"},
-  {word:"creative",pos:"adj.",meaning:"having the ability to produce new and original ideas",example:"A creative thinker can find unusual solutions.",translation:"സൃഷ്ടിപരമായ",ipa:"/kriˈeɪ.tɪv/"},
-  {word:"decision",pos:"n.",meaning:"a choice made after thinking about something",example:"Making the right decision took a lot of time.",translation:"തീരുമാനം",ipa:"/dɪˈsɪʒ.ən/"},
-  {word:"determine",pos:"v.",meaning:"to find out or decide something by investigation",example:"We need to determine the cause of the error.",translation:"നിർണ്ണയിക്കുക",ipa:"/dɪˈtɜː.mɪn/"},
-  {word:"dilemma",pos:"n.",meaning:"a situation where a difficult choice must be made",example:"She faced a dilemma about which job offer to accept.",translation:"ധർമ്മസങ്കടം",ipa:"/dɪˈlem.ə/"},
-  {word:"identify",pos:"v.",meaning:"to recognize or discover what something is",example:"First, identify the main cause of the problem.",translation:"തിരിച്ചറിയുക",ipa:"/aɪˈden.tɪ.faɪ/"},
-  {word:"obstacle",pos:"n.",meaning:"something that makes it difficult to move forward",example:"Budget cuts were a major obstacle to the project.",translation:"തടസ്സം",ipa:"/ˈɒb.stɪ.kəl/"},
-  {word:"outcome",pos:"n.",meaning:"the result or effect of an action or event",example:"The outcome of the meeting was a new agreement.",translation:"ഫലം",ipa:"/ˈaʊt.kʌm/"},
-  {word:"practical",pos:"adj.",meaning:"relating to real situations rather than theory",example:"We need a practical solution, not just a good idea.",translation:"പ്രായോഗികമായ",ipa:"/ˈpræk.tɪ.kəl/"},
-  {word:"priority",pos:"n.",meaning:"something considered more important than other things",example:"Fixing the safety issue is our top priority.",translation:"മുൻഗണന",ipa:"/praɪˈɒr.ɪ.ti/"},
-  {word:"resource",pos:"n.",meaning:"something useful that helps achieve a goal",example:"Time is our most important resource right now.",translation:"വിഭവം",ipa:"/ˈriː.sɔːs/"},
-  {word:"suggest",pos:"v.",meaning:"to put forward an idea for someone to consider",example:"Can you suggest a better way to handle this?",translation:"നിർദ്ദേശിക്കുക",ipa:"/səˈdʒɛst/"},
-  {word:"workaround",pos:"n.",meaning:"a practical way to overcome a problem temporarily",example:"We found a workaround until the system was fixed.",translation:"താൽക്കാലിക പരിഹാരം",ipa:"/ˈwɜːk.ə.raʊnd/"},
-  {word:"advise",pos:"v.",meaning:"to give someone a recommendation about what they should do",example:"I would advise you to speak with your teacher before making a decision.",translation:"ഉപദേശിക്കുക",ipa:"/ədˈvaɪz/"},
-  {word:"guidance",pos:"n.",meaning:"helpful advice or direction given to someone",example:"The counselor offered useful guidance on choosing a career.",translation:"മാർഗദർശനം",ipa:"/ˈɡaɪdəns/"},
-  {word:"proposal",pos:"n.",meaning:"a formal suggestion or plan put forward for others to consider",example:"His proposal to improve the schedule was accepted by the team.",translation:"നിർദ്ദേശം",ipa:"/prəˈpoʊzəl/"},
-  {word:"urge",pos:"v.",meaning:"to strongly advise or push someone to do something",example:"The doctor urged him to rest for at least a week.",translation:"ആഗ്രഹിപ്പിക്കുക",ipa:"/ɜːrdʒ/"},
-  {word:"tip",pos:"n.",meaning:"a useful piece of practical advice",example:"She gave me some great tips on how to study effectively.",translation:"ഉപദേശക്കുറിപ്പ്",ipa:"/tɪp/"},
-  {word:"warn",pos:"v.",meaning:"to tell someone about a possible danger or problem in advance",example:"He warned us not to walk alone at night in that area.",translation:"മുന്നറിയിപ്പ് നൽകുക",ipa:"/wɔːrn/"},
-  {word:"opinion",pos:"n.",meaning:"a personal view or judgement about something",example:"In my opinion, you should apologize and move on.",translation:"അഭിപ്രായം",ipa:"/əˈpɪnjən/"},
-  {word:"option",pos:"n.",meaning:"a choice available among several possibilities",example:"One option is to study abroad for a semester.",translation:"തിരഞ്ഞെടുപ്പ്",ipa:"/ˈɒpʃən/"},
-  {word:"alternative",pos:"n.",meaning:"a different choice or possibility instead of another",example:"If you don't like coffee, herbal tea is a good alternative.",translation:"ബദൽ",ipa:"/ɔːlˈtɜːrnətɪv/"},
-  {word:"recommendation",pos:"n.",meaning:"a suggestion that something is good or suitable",example:"My recommendation is to start saving money as early as possible.",translation:"ശുപാർശ",ipa:"/ˌrɛkəmɛnˈdeɪʃən/"},
-  {word:"caution",pos:"n.",meaning:"a warning to be careful about something",example:"A word of caution: the road gets very icy in winter.",translation:"മുൻകരുതൽ",ipa:"/ˈkɔːʃən/"},
-  {word:"reminder",pos:"n.",meaning:"something that helps someone remember to do something",example:"Let me give you a reminder to submit the form by Friday.",translation:"ഓർമ്മപ്പെടുത്തൽ",ipa:"/rɪˈmaɪndər/"},
-  {word:"consult",pos:"v.",meaning:"to ask someone for their expert opinion or advice",example:"You should consult a lawyer before signing the contract.",translation:"ആലോചിക്കുക",ipa:"/kənˈsʌlt/"},
-  {word:"instruct",pos:"v.",meaning:"to give directions or orders on how to do something",example:"The trainer instructed the group to stretch before exercising.",translation:"നിർദേശം നൽകുക",ipa:"/ɪnˈstrʌkt/"},
-  {word:"propose",pos:"v.",meaning:"to put forward an idea or plan for consideration",example:"I propose that we meet earlier to avoid the rush.",translation:"മുന്നോട്ടുവയ്ക്കുക",ipa:"/prəˈpoʊz/"},
-  {word:"solution",pos:"n.",meaning:"a way of solving a problem or dealing with a difficult situation",example:"One solution to the problem is to hire more staff.",translation:"പരിഹാരം",ipa:"/səˈluːʃən/"},
-  {word:"prompt",pos:"v.",meaning:"to cause or encourage someone to take action",example:"Her advice prompted him to change his daily routine.",translation:"പ്രേരിപ്പിക്കുക",ipa:"/prɒmpt/"},
-  {word:"ought",pos:"modal v.",meaning:"used to say what is the right or sensible thing to do",example:"You ought to call your parents more often.",translation:"വേണം",ipa:"/ɔːt/"},
-  {word:"worthwhile",pos:"adj.",meaning:"worth the effort, time, or money spent on something",example:"Taking a short course in public speaking is really worthwhile.",translation:"മൂല്യമുള്ള",ipa:"/ˌwɜːrθˈwaɪl/"},
-  {word:"beneficial",pos:"adj.",meaning:"having a good or helpful effect on someone",example:"Regular exercise is beneficial for both the body and mind.",translation:"ഗുണകരമായ",ipa:"/ˌbɛnɪˈfɪʃəl/"},
-  {word:"reassure",pos:"v.",meaning:"to say something to reduce someone's worry or doubt",example:"He reassured her that everything would work out in the end.",translation:"ആശ്വസിപ്പിക്കുക",ipa:"/ˌriːəˈʃʊər/"},
-  {word:"follower",pos:"n.",meaning:"a person who subscribes to see someone's posts online",example:"His follower count grew after he posted the viral video.",translation:"അനുഗാമി",ipa:"/ˈfɒləʊər/"},
-  {word:"like",pos:"v.",meaning:"to press a button to show you enjoy a post",example:"He liked all of her holiday pictures.",translation:"ലൈക്ക് ചെയ്യുക",ipa:"/laɪk/"},
-  {word:"share",pos:"v.",meaning:"to send or repost content so others can see it",example:"Please share this post if you found it helpful.",translation:"പങ്കിടുക",ipa:"/ʃeər/"},
-  {word:"comment",pos:"n.",meaning:"a written response left below a post online",example:"She left a kind comment on his photo.",translation:"കമന്റ്",ipa:"/ˈkɒment/"},
-  {word:"post",pos:"n.",meaning:"a piece of content published on social media",example:"Her latest post received hundreds of reactions.",translation:"പോസ്റ്റ്",ipa:"/pəʊst/"},
-  {word:"influencer",pos:"n.",meaning:"a person with many online followers who can affect opinions",example:"The influencer promoted the new brand to her audience.",translation:"ഇൻഫ്ലുവൻസർ",ipa:"/ˈɪnfluənsər/"},
-  {word:"content",pos:"n.",meaning:"videos, photos, or text that people publish online",example:"She creates content about cooking every week.",translation:"ഉള്ളടക്കം",ipa:"/ˈkɒntent/"},
-  {word:"tag",pos:"v.",meaning:"to link another person's account in your post or photo",example:"Don't forget to tag me in that picture.",translation:"ടാഗ് ചെയ്യുക",ipa:"/tæɡ/"},
-  {word:"privacy",pos:"n.",meaning:"the ability to control who sees your personal information online",example:"Check your privacy settings before posting personal details.",translation:"സ്വകാര്യത",ipa:"/ˈprɪvəsi/"},
-  {word:"block",pos:"v.",meaning:"to prevent someone from seeing or contacting you online",example:"She decided to block the user who was being rude.",translation:"ബ്ലോക്ക് ചെയ്യുക",ipa:"/blɒk/"},
-  {word:"trend",pos:"n.",meaning:"a topic or style that is popular on social media right now",example:"That dance challenge is a big trend this week.",translation:"ട്രെൻഡ്",ipa:"/trend/"},
-  {word:"story",pos:"n.",meaning:"a short photo or video post that disappears after 24 hours",example:"I watched her story before it disappeared.",translation:"സ്റ്റോറി",ipa:"/ˈstɔːri/"},
-  {word:"cyberbullying",pos:"n.",meaning:"using the internet to repeatedly hurt or frighten someone",example:"Schools are teaching students how to prevent cyberbullying.",translation:"സൈബർ ഉപദ്രവം",ipa:"/ˈsaɪbəˌbʊliɪŋ/"},
-  {word:"username",pos:"n.",meaning:"the name you choose to identify yourself on a website",example:"Pick a username that is easy for your friends to remember.",translation:"യൂസർനേം",ipa:"/ˈjuːzərneɪm/"},
-  {word:"algorithm",pos:"n.",meaning:"a set of rules a platform uses to decide what you see online",example:"The algorithm showed me posts similar to ones I had liked.",translation:"അൽഗോരിതം",ipa:"/ˈælɡərɪðəm/"},
-  {word:"engagement",pos:"n.",meaning:"the number of likes, comments, and shares a post receives",example:"High engagement means your audience enjoys your content.",translation:"ഇടപഴകൽ",ipa:"/ɪnˈɡeɪdʒmənt/"},
-  {word:"meme",pos:"n.",meaning:"a funny image or video that spreads rapidly online",example:"Everyone in class was sharing that meme about Mondays.",translation:"മീം",ipa:"/miːm/"},
-  {word:"fake news",pos:"n.",meaning:"false information shared as if it were true on the internet",example:"Always check the source before believing fake news online.",translation:"വ്യാജ വാർത്ത",ipa:"/feɪk njuːz/"},
-  {word:"donate",pos:"v.",meaning:"to give something, especially money or goods, to help people",example:"They donated clothes to the community shelter last winter.",translation:"സംഭാവന നൽകുക",ipa:"/dəʊˈneɪt/"},
-  {word:"fundraiser",pos:"n.",meaning:"an event or person that collects money for a cause",example:"The school organized a fundraiser to buy books for children.",translation:"ഫണ്ട് ശേഖരിക്കുന്ന ആൾ",ipa:"/ˈfʌndreɪzər/"},
-  {word:"charity",pos:"n.",meaning:"an organization that helps people in need without profit",example:"He raised money for a charity that supports elderly people.",translation:"ചാരിറ്റി",ipa:"/ˈtʃærɪti/"},
-  {word:"outreach",pos:"n.",meaning:"efforts to provide help or information to people in the community",example:"The outreach program visited homeless people every month.",translation:"ഔട്ട്‌റീച്ച് പ്രവർത്തനം",ipa:"/ˈaʊtriːtʃ/"},
-  {word:"shelter",pos:"n.",meaning:"a place that provides protection or housing for people in need",example:"Volunteers cooked meals at the homeless shelter on Fridays.",translation:"അഭയകേന്ദ്രം",ipa:"/ˈʃeltər/"},
-  {word:"mentor",pos:"n.",meaning:"an experienced person who guides and supports someone less experienced",example:"She acted as a mentor to young students in the after-school program.",translation:"മാർഗദർശി",ipa:"/ˈmentɔːr/"},
-  {word:"campaign",pos:"n.",meaning:"a planned series of activities to achieve a community goal",example:"The clean-up campaign attracted over a hundred local residents.",translation:"പ്രചാരണം",ipa:"/kæmˈpeɪn/"},
-  {word:"contribution",pos:"n.",meaning:"something given or done to help a group or cause",example:"Her contribution to the food drive was greatly appreciated.",translation:"സംഭാവന",ipa:"/ˌkɒntrɪˈbjuːʃən/"},
-  {word:"coordinator",pos:"n.",meaning:"a person who organizes activities and people in a project",example:"The volunteer coordinator assigned tasks to each team member.",translation:"കോർഡിനേറ്റർ",ipa:"/kəʊˈɔːdɪneɪtər/"},
-  {word:"relief",pos:"n.",meaning:"help given to people who are suffering or in difficulty",example:"The organization provided flood relief to affected families.",translation:"ആശ്വാസം",ipa:"/rɪˈliːf/"},
-  {word:"participation",pos:"n.",meaning:"the act of taking part in an activity or event",example:"Community participation in the project made it a great success.",translation:"പങ്കാളിത്തം",ipa:"/pɑːˌtɪsɪˈpeɪʃən/"},
-  {word:"dedication",pos:"n.",meaning:"great effort and time given to helping others",example:"Her dedication to tutoring children inspired the whole team.",translation:"അർപ്പണബോധം",ipa:"/ˌdedɪˈkeɪʃən/"},
-  {word:"distribute",pos:"v.",meaning:"to give out items to a number of people",example:"They distributed blankets to families living without heating.",translation:"വിതരണം ചെയ്യുക",ipa:"/dɪˈstrɪbjuːt/"},
-  {word:"assist",pos:"v.",meaning:"to help someone do something",example:"Volunteers assisted nurses by carrying supplies in the clinic.",translation:"സഹായിക്കുക",ipa:"/əˈsɪst/"},
-  {word:"collection",pos:"n.",meaning:"the act of gathering items or money for a purpose",example:"The annual toy collection helped hundreds of children at Christmas.",translation:"ശേഖരണം",ipa:"/kəˈlekʃən/"},
-  {word:"rewarding",pos:"adj.",meaning:"giving a feeling of satisfaction or happiness",example:"Many people find volunteering at hospitals very rewarding.",translation:"സംതൃപ്തിദായകമായ",ipa:"/rɪˈwɔːdɪŋ/"},
-  {word:"assistance",pos:"n.",meaning:"help given to someone who needs it",example:"The center offered financial assistance to struggling families.",translation:"സഹായം",ipa:"/əˈsɪstəns/"},
-  {word:"advance",pos:"n.",meaning:"a development or improvement in something",example:"There have been great advances in technology over the past decade.",translation:"പുരോഗതി",ipa:"ədˈvɑːns"},
-  {word:"shift",pos:"n.",meaning:"a change in position, direction, or attitude",example:"There has been a shift in people's attitudes toward recycling.",translation:"മാറ്റം",ipa:"ʃɪft"},
-  {word:"reform",pos:"n.",meaning:"a change made to improve a system or situation",example:"The government introduced education reform to help students learn better.",translation:"പരിഷ്കാരം",ipa:"rɪˈfɔːm"},
-  {word:"transition",pos:"n.",meaning:"the process of changing from one state to another",example:"The country is going through a transition to clean energy.",translation:"പരിവർത്തനം",ipa:"trænˈzɪʃən"},
-  {word:"improvement",pos:"n.",meaning:"the act of getting better or making something better",example:"We noticed a big improvement in her English after six months.",translation:"മെച്ചപ്പെടൽ",ipa:"ɪmˈpruːvmənt"},
-  {word:"development",pos:"n.",meaning:"the process of growing or becoming more advanced",example:"Economic development in the region has been steady this year.",translation:"വികസനം",ipa:"dɪˈveləpmənt"},
-  {word:"adjustment",pos:"n.",meaning:"a small change made to achieve a better result",example:"He made a few adjustments to the plan before presenting it.",translation:"ക്രമീകരണം",ipa:"əˈdʒʌstmənt"},
-  {word:"growth",pos:"n.",meaning:"an increase in size, number, or importance",example:"The company showed strong growth in sales last quarter.",translation:"വളർച്ച",ipa:"ɡrəʊθ"},
-  {word:"evolution",pos:"n.",meaning:"a gradual process of change and development",example:"The evolution of smartphones has changed how we communicate.",translation:"പരിണാമം",ipa:"ˌiːvəˈluːʃən"},
-  {word:"modernize",pos:"v.",meaning:"to make something more modern or up to date",example:"The city plans to modernize its public transport system.",translation:"ആധുനികവൽക്കരിക്കുക",ipa:"ˈmɒdənaɪz"},
-  {word:"expand",pos:"v.",meaning:"to become larger or to make something larger",example:"The business hopes to expand into new markets next year.",translation:"വികസിക്കുക",ipa:"ɪkˈspænd"},
-  {word:"transform",pos:"v.",meaning:"to change completely in form or character",example:"The new manager transformed the way the team worked.",translation:"രൂപാന്തരപ്പെടുത്തുക",ipa:"trænsˈfɔːm"},
-  {word:"achieve",pos:"v.",meaning:"to successfully reach a goal after effort",example:"She worked hard and achieved her goal of passing the exam.",translation:"നേടുക",ipa:"əˈtʃiːv"},
-  {word:"milestone",pos:"n.",meaning:"an important event or stage in progress",example:"Finishing the first chapter was a milestone for the young writer.",translation:"നാഴികക്കല്ല്",ipa:"ˈmaɪlstəʊn"},
-  {word:"breakthrough",pos:"n.",meaning:"an important discovery or achievement after effort",example:"Scientists made a breakthrough in cancer research this year.",translation:"നേട്ടം",ipa:"ˈbreɪkθruː"},
-  {word:"setback",pos:"n.",meaning:"a problem that delays or stops progress",example:"Losing their funding was a major setback for the project.",translation:"തിരിച്ചടി",ipa:"ˈsetbæk"},
-  {word:"gradual",pos:"adj.",meaning:"happening slowly over a long period of time",example:"There was a gradual improvement in the patient's health.",translation:"ക്രമാനുഗതമായ",ipa:"ˈɡrædʒuəl"},
-  {word:"steady",pos:"adj.",meaning:"continuing at a regular pace without sudden changes",example:"The team made steady progress toward their deadline.",translation:"സ്ഥിരമായ",ipa:"ˈstedi"},
-  {word:"decline",pos:"n.",meaning:"a gradual decrease in quality, quantity, or importance",example:"There has been a decline in the number of students studying science.",translation:"കുറവ്",ipa:"dɪˈklaɪn"},
-  {word:"recover",pos:"v.",meaning:"to return to a normal state after a difficulty",example:"The economy began to recover after the recession ended.",translation:"വീണ്ടെടുക്കുക",ipa:"rɪˈkʌvə"},
-  {word:"restructure",pos:"v.",meaning:"to organize something in a new way",example:"The company decided to restructure its departments to work more efficiently.",translation:"പുനഃസംഘടിപ്പിക്കുക",ipa:"ˌriːˈstrʌktʃə"},
-  {word:"revision",pos:"n.",meaning:"a change or correction made to improve something",example:"The teacher asked for a revision of the essay before grading it.",translation:"പുനരവലോകനം",ipa:"rɪˈvɪʒən"},
-  {word:"upgrade",pos:"n.",meaning:"an improvement to something to make it better or newer",example:"The school got an upgrade to its computer systems last month.",translation:"നവീകരണം",ipa:"ˈʌpɡreɪd"},
-  {word:"although",pos:"conj.",meaning:"used to introduce a contrast between two ideas",example:"Although it was raining, we went for a walk.",translation:"എങ്കിലും",ipa:"/ɔːlˈðoʊ/"},
-  {word:"however",pos:"adv.",meaning:"used to show a contrast or difference with what was said before",example:"The exam was hard. However, most students passed.",translation:"എന്നിരുന്നാലും",ipa:"/haʊˈɛvər/"},
-  {word:"whereas",pos:"conj.",meaning:"used to compare two things that are different",example:"She likes coffee, whereas her brother prefers tea.",translation:"അതേസമയം",ipa:"/wɛrˈæz/"},
-  {word:"despite",pos:"prep.",meaning:"without being affected by something",example:"Despite the cold weather, he wore a t-shirt.",translation:"ഉണ്ടായിരുന്നിട്ടും",ipa:"/dɪˈspaɪt/"},
-  {word:"nevertheless",pos:"adv.",meaning:"in spite of something just mentioned",example:"The task was difficult; nevertheless, she completed it.",translation:"എന്നാലും",ipa:"/ˌnɛvərðəˈlɛs/"},
-  {word:"yet",pos:"conj.",meaning:"but at the same time; used to show contrast",example:"He is young, yet very responsible.",translation:"എന്നിട്ടും",ipa:"/jɛt/"},
-  {word:"still",pos:"adv.",meaning:"continuing to happen despite something else",example:"It was late, but she was still working.",translation:"ഇപ്പോഴും",ipa:"/stɪl/"},
-  {word:"on the other hand",pos:"phrase",meaning:"used to introduce a contrasting point of view",example:"Living in a city is exciting. On the other hand, it is very noisy.",translation:"മറുവശത്ത്"},
-  {word:"even so",pos:"phrase",meaning:"despite what has just been said",example:"The price was high. Even so, they bought the car.",translation:"അങ്ങനെ ആയിരുന്നാലും"},
-  {word:"in contrast",pos:"phrase",meaning:"used to show a clear difference between two things",example:"In contrast to winter, summer is very hot here.",translation:"വ്യത്യസ്തമായി"},
-  {word:"instead",pos:"adv.",meaning:"in place of something; as an alternative",example:"She did not call; instead, she sent a message.",translation:"പകരം",ipa:"/ɪnˈstɛd/"},
-  {word:"unlike",pos:"prep.",meaning:"different from someone or something",example:"Unlike his sister, he enjoys sports.",translation:"വ്യത്യസ്തമായി",ipa:"/ˌʌnˈlaɪk/"},
-  {word:"though",pos:"conj.",meaning:"despite the fact that; even if",example:"Though he studied hard, he failed the test.",translation:"ആണെങ്കിലും",ipa:"/ðoʊ/"},
-  {word:"but",pos:"conj.",meaning:"used to introduce a contrast",example:"The hotel was cheap but comfortable.",translation:"പക്ഷേ",ipa:"/bʌt/"},
-  {word:"while",pos:"conj.",meaning:"whereas; at the same time showing contrast",example:"While some people love city life, others prefer the countryside.",translation:"അതേ സമയത്ത്",ipa:"/waɪl/"},
-  {word:"by contrast",pos:"phrase",meaning:"when compared with something different",example:"The north is cold. By contrast, the south is warm.",translation:"വ്യതിരിക്തമായി"},
-  {word:"alternatively",pos:"adv.",meaning:"used to suggest a different option or contrast",example:"You can take the bus. Alternatively, you can walk.",translation:"പകരമായി",ipa:"/ɔːlˈtɜːrnətɪvli/"},
-  {word:"at the same time",pos:"phrase",meaning:"used to introduce a contrasting idea that is also true",example:"The plan is bold. At the same time, it carries risks.",translation:"അതേ സമയം"},
-  {word:"regardless",pos:"adv.",meaning:"despite what has happened or what exists",example:"Regardless of the weather, the match will continue.",translation:"കണക്കിലെടുക്കാതെ",ipa:"/rɪˈɡɑːrdlɪs/"},
-  {word:"even though",pos:"conj.",meaning:"despite the fact that",example:"Even though she was tired, she helped her friend.",translation:"ആണെങ്കിൽ പോലും"},
-  {word:"conversely",pos:"adv.",meaning:"introducing a fact that is the opposite of one just mentioned",example:"Exercise improves health. Conversely, sitting all day is harmful.",translation:"വിപരീതമായി",ipa:"/ˈkɒnvɜːrsli/"},
-  {word:"rather",pos:"adv.",meaning:"used to suggest something different or as a contrast",example:"He did not feel happy; rather, he felt relieved.",translation:"മറിച്ച്",ipa:"/ˈræðər/"},
-  {word:"nonetheless",pos:"adv.",meaning:"despite what has just been said or shown",example:"The journey was long; nonetheless, they enjoyed it.",translation:"എന്നിട്ടും",ipa:"/ˌnʌnðəˈlɛs/"},
-  {word:"in spite of",pos:"prep.",meaning:"without being stopped by something",example:"In spite of the noise, she slept well.",translation:"ഉണ്ടായിരുന്നിട്ടും"},
-  {word:"on the contrary",pos:"phrase",meaning:"used to say the opposite is true",example:"He is not lazy. On the contrary, he works very hard.",translation:"മറിച്ച്"},
-  {word:"differ",pos:"v.",meaning:"to be unlike something or someone else",example:"Their opinions differ on many topics.",translation:"വ്യത്യാസപ്പെടുക",ipa:"/ˈdɪfər/"},
-  {word:"contrast",pos:"n.",meaning:"a clear difference between two things",example:"There is a strong contrast between the two styles.",translation:"വൈരുദ്ധ്യം",ipa:"/ˈkɒntrɑːst/"},
-  {word:"opposite",pos:"adj.",meaning:"completely different in nature or direction",example:"They have opposite views on the issue.",translation:"വിപരീതം",ipa:"/ˈɒpəzɪt/"},
-  {word:"exception",pos:"n.",meaning:"something or someone not included in a general rule; a contrast to the norm",example:"Most students passed. Tom was the exception.",translation:"അപവാദം",ipa:"/ɪkˈsɛpʃən/"},
-  {word:"commute",pos:"v.",meaning:"to travel regularly between home and work",example:"She commutes to the city centre every morning by train.",translation:"ജോലിക്കായി നിത്യവും യാത്ര ചെയ്യുക",ipa:"/kəˈmjuːt/"},
-  {word:"suburb",pos:"n.",meaning:"a residential area on the edge of a city",example:"They moved to a quiet suburb to escape the noise of the city.",translation:"നഗരത്തിന്റെ പ്രാന്തപ്രദേശം",ipa:"/ˈsʌbɜːb/"},
-  {word:"pedestrian",pos:"n.",meaning:"a person who is walking in a town or city",example:"The pedestrian crossed the road at the traffic lights.",translation:"കാൽനടക്കാരൻ",ipa:"/pəˈdestriən/"},
-  {word:"intersection",pos:"n.",meaning:"a point where two or more roads meet",example:"Turn left at the next intersection near the park.",translation:"റോഡ് ക്രോസ്സിംഗ്",ipa:"/ˌɪntəˈsekʃən/"},
-  {word:"skyscraper",pos:"n.",meaning:"a very tall building in a city",example:"The new skyscraper can be seen from across the entire city.",translation:"ആകാശചുംബി കെട്ടിടം",ipa:"/ˈskaɪskreɪpə/"},
-  {word:"pavement",pos:"n.",meaning:"a path for pedestrians at the side of a road",example:"Children should always walk on the pavement, not the road.",translation:"നടപ്പാത",ipa:"/ˈpeɪvmənt/"},
-  {word:"rush hour",pos:"n.",meaning:"the busy time of day when many people travel to or from work",example:"Traffic jams are common during rush hour in the city.",translation:"തിരക്കേറിയ യാത്രാ സമയം",ipa:"/ˈrʌʃ aʊə/"},
-  {word:"landlord",pos:"n.",meaning:"a person who owns a property and rents it to others",example:"Her landlord increased the rent for the city apartment.",translation:"വീട്ടുടമ",ipa:"/ˈlændlɔːd/"},
-  {word:"tenant",pos:"n.",meaning:"a person who pays rent to live in a property",example:"The tenant complained about the broken heating system.",translation:"വാടകക്കാരൻ",ipa:"/ˈtenənt/"},
-  {word:"alley",pos:"n.",meaning:"a narrow street or path between buildings",example:"The café is hidden down a small alley behind the main street.",translation:"ഇടവഴി",ipa:"/ˈæli/"},
-  {word:"resident",pos:"n.",meaning:"a person who lives in a particular place",example:"Local residents protested against the new construction project.",translation:"നിവാസി",ipa:"/ˈrezɪdənt/"},
-  {word:"congestion",pos:"n.",meaning:"a situation where a place is too crowded or blocked, especially with traffic",example:"Road congestion in the city centre gets worse every year.",translation:"ഗതാഗതക്കുരുക്ക്",ipa:"/kənˈdʒestʃən/"},
-  {word:"district",pos:"n.",meaning:"an area of a city with a particular feature or purpose",example:"The shopping district is always busy on weekends.",translation:"ജില്ല / പ്രദേശം",ipa:"/ˈdɪstrɪkt/"},
-  {word:"apartment",pos:"n.",meaning:"a set of rooms for living in, usually on one floor of a building",example:"He rents a small apartment close to his workplace.",translation:"ഫ്ലാറ്റ്",ipa:"/əˈpɑːtmənt/"},
-  {word:"neighbourhood",pos:"n.",meaning:"the area around where you live, and the people who live there",example:"They chose a safe neighbourhood to raise their children.",translation:"അയൽപ്രദേശം",ipa:"/ˈneɪbəhʊd/"},
-  {word:"utility",pos:"n.",meaning:"a service such as water, gas, or electricity provided to homes",example:"Utility bills in the city are higher during winter months.",translation:"പൊതു സേവനം",ipa:"/juːˈtɪlɪti/"},
-  {word:"subway",pos:"n.",meaning:"an underground railway system in a city",example:"Taking the subway is the fastest way to cross the city.",translation:"ഭൂഗർഭ റെയിൽ",ipa:"/ˈsʌbweɪ/"},
-  {word:"skyline",pos:"n.",meaning:"the outline of buildings seen against the sky",example:"The city skyline looks beautiful at night with all the lights.",translation:"നഗര ചക്രവാളരേഖ",ipa:"/ˈskaɪlaɪn/"},
-  {word:"warehouse",pos:"n.",meaning:"a large building used for storing goods",example:"The old warehouse was converted into luxury apartments.",translation:"ചരക്കുപ്പുര",ipa:"/ˈweəhaʊs/"},
-  {word:"graffiti",pos:"n.",meaning:"writing or drawings made on a wall in a public place",example:"The city hired workers to remove graffiti from the bridge.",translation:"ചുമർ ചിത്രലേഖനം",ipa:"/ɡrəˈfiːti/"},
-  {word:"plaza",pos:"n.",meaning:"an open public square in a city",example:"People gathered in the plaza to watch the outdoor concert.",translation:"പൊതു ചത്വരം",ipa:"/ˈplɑːzə/"},
-  {word:"affordable",pos:"adj.",meaning:"cheap enough for ordinary people to buy or use",example:"It is difficult to find affordable housing in the city centre.",translation:"താങ്ങാവുന്ന വിലയുള്ള",ipa:"/əˈfɔːdəbəl/"},
-  {word:"permit",pos:"n.",meaning:"an official document that allows you to do something",example:"You need a parking permit to park in this area of the city.",translation:"അനുമതി പത്രം",ipa:"/ˈpɜːmɪt/"},
-  {word:"renovation",pos:"n.",meaning:"the process of repairing and improving a building",example:"The renovation of the old city hall took over two years.",translation:"നവീകരണം",ipa:"/ˌrenəˈveɪʃən/"},
-  {word:"queue",pos:"n.",meaning:"a line of people waiting for something",example:"There was a long queue outside the city bus terminal.",translation:"നിര / ക്യൂ",ipa:"/kjuː/"},
-  {word:"curfew",pos:"n.",meaning:"a rule that people must stay indoors after a certain time",example:"A night curfew was imposed in the city after the protests.",translation:"കർഫ്യൂ",ipa:"/ˈkɜːfjuː/"},
-  {word:"bystander",pos:"n.",meaning:"a person who sees something happening but is not involved",example:"Several bystanders helped the injured man after the accident.",translation:"സാക്ഷിക്കാരൻ",ipa:"/ˈbaɪstændə/"},
-  {word:"bargain",pos:"n.",meaning:"something bought at a lower price than usual",example:"She found a great bargain at the sale.",translation:"വില കുറഞ്ഞ നേട്ടം",ipa:"/ˈbɑːɡɪn/"},
-  {word:"receipt",pos:"n.",meaning:"a paper that proves you have paid for something",example:"Keep your receipt in case you want to return the item.",translation:"രസീത്",ipa:"/rɪˈsiːt/"},
-  {word:"refund",pos:"n.",meaning:"money returned to you after returning a product",example:"She asked for a refund because the shoes were damaged.",translation:"തിരിച്ചടവ്",ipa:"/ˈriːfʌnd/"},
-  {word:"discount",pos:"n.",meaning:"a reduction in the original price of something",example:"The store offered a 20% discount on all clothes.",translation:"കിഴിവ്",ipa:"/ˈdɪskaʊnt/"},
-  {word:"checkout",pos:"n.",meaning:"the place in a shop where you pay for goods",example:"There was a long queue at the checkout.",translation:"പണം അടക്കുന്ന സ്ഥലം",ipa:"/ˈtʃekaʊt/"},
-  {word:"aisle",pos:"n.",meaning:"a passage between rows of shelves in a shop",example:"The bread is in the third aisle on the left.",translation:"ഇടനാഴി",ipa:"/aɪl/"},
-  {word:"purchase",pos:"v.",meaning:"to buy something",example:"He purchased a new phone online.",translation:"വാങ്ങുക",ipa:"/ˈpɜːtʃəs/"},
-  {word:"browse",pos:"v.",meaning:"to look at things in a shop without a specific plan",example:"She liked to browse the market on weekends.",translation:"നോക്കിനടക്കുക",ipa:"/braʊz/"},
-  {word:"cart",pos:"n.",meaning:"a large basket on wheels used in a supermarket",example:"He filled his cart with vegetables and fruit.",translation:"ട്രോളി",ipa:"/kɑːt/"},
-  {word:"impulse",pos:"n.",meaning:"a sudden desire to buy something without planning",example:"He bought the jacket on impulse.",translation:"ആവേശം",ipa:"/ˈɪmpʌls/"},
-  {word:"retailer",pos:"n.",meaning:"a business or person that sells goods to the public",example:"This retailer sells electronics at good prices.",translation:"ചില്ലറ വ്യാപാരി",ipa:"/ˈriːteɪlə/"},
-  {word:"exchange",pos:"v.",meaning:"to return a product and get a different one",example:"She exchanged the blue shirt for a red one.",translation:"കൈമാറ്റം ചെയ്യുക",ipa:"/ɪksˈtʃeɪndʒ/"},
-  {word:"coupon",pos:"n.",meaning:"a small paper that gives you a price reduction",example:"She used a coupon to save money on groceries.",translation:"കൂപ്പൺ",ipa:"/ˈkuːpɒn/"},
-  {word:"overcharge",pos:"v.",meaning:"to charge someone too much money",example:"The shop overcharged him by five euros.",translation:"അധിക നിരക്ക് ഈടാക്കുക",ipa:"/ˌəʊvəˈtʃɑːdʒ/"},
-  {word:"warranty",pos:"n.",meaning:"a written promise to repair or replace a product",example:"The laptop came with a two-year warranty.",translation:"ഉറപ്പ്",ipa:"/ˈwɒrənti/"},
-  {word:"shelf",pos:"n.",meaning:"a flat surface in a shop where products are displayed",example:"The shelves were full of new products.",translation:"ഷെൽഫ്",ipa:"/ʃelf/"},
-  {word:"label",pos:"n.",meaning:"a small piece of paper attached to a product with information",example:"Always read the label before buying food.",translation:"ലേബൽ",ipa:"/ˈleɪbəl/"},
-  {word:"installment",pos:"n.",meaning:"one of several regular payments for something",example:"He paid for the TV in monthly installments.",translation:"ഗഡു",ipa:"/ɪnˈstɔːlmənt/"},
-  {word:"demand",pos:"n.",meaning:"the desire of consumers to buy a product",example:"There is high demand for organic food now.",translation:"ആവശ്യം",ipa:"/dɪˈmɑːnd/"},
-  {word:"splurge",pos:"v.",meaning:"to spend a lot of money on something special",example:"She decided to splurge on a designer bag.",translation:"ധാരാളം ചെലവഴിക്കുക",ipa:"/splɜːdʒ/"},
-  {word:"cashless",pos:"adj.",meaning:"relating to payments made without using physical money",example:"Many shops now prefer cashless payments.",translation:"പണരഹിതം",ipa:"/ˈkæʃləs/"},
-  {word:"stockpile",pos:"v.",meaning:"to collect and store a large amount of goods",example:"People started to stockpile food during the shortage.",translation:"സ്റ്റോക്ക് ചെയ്യുക",ipa:"/ˈstɒkpaɪl/"},
-  {word:"overspend",pos:"v.",meaning:"to spend more money than you planned",example:"It is easy to overspend when sales are on.",translation:"അധിക ചെലവ് ചെയ്യുക",ipa:"/ˌəʊvəˈspend/"},
-  {word:"secondhand",pos:"adj.",meaning:"previously owned by another person",example:"She bought a secondhand bicycle to save money.",translation:"ഉപയോഗിച്ചത്",ipa:"/ˌsekəndˈhænd/"},
-  {word:"consumer",pos:"n.",meaning:"a person who buys goods or services",example:"Consumers today prefer online shopping.",translation:"ഉപഭോക്താവ്",ipa:"/kənˈsjuːmə/"},
-  {word:"biodegradable",pos:"adj.",meaning:"able to be broken down naturally by bacteria without harming the environment",example:"This bag is biodegradable, so it will not pollute the soil.",translation:"ജൈവ വിഘടനീയം",ipa:"/ˌbaɪoʊdɪˈɡreɪdəbəl/"},
-  {word:"sustainability",pos:"n.",meaning:"the ability to use resources without damaging the environment for the future",example:"The company focuses on sustainability by reducing waste.",translation:"സുസ്ഥിരത",ipa:"/səˌsteɪnəˈbɪlɪti/"},
-  {word:"carpool",pos:"v.",meaning:"to share a car journey with others to reduce pollution",example:"My neighbours and I carpool to work on Mondays.",translation:"കാർപൂൾ ചെയ്യുക",ipa:"/ˈkɑːrpuːl/"},
-  {word:"pollutant",pos:"n.",meaning:"a harmful substance that makes air, water, or land dirty",example:"Factory smoke releases pollutants into the atmosphere.",translation:"മലിനീകാരി",ipa:"/pəˈluːtənt/"},
-  {word:"plant",pos:"v.",meaning:"to put a seed or tree in the ground so it can grow",example:"Volunteers gathered to plant trees along the river.",translation:"നടുക",ipa:"/plænt/"},
-  {word:"pressure",pos:"n.",meaning:"a feeling of stress caused by having too much to deal with at work",example:"She felt a lot of pressure to finish the report before Friday.",translation:"സമ്മർദ്ദം",ipa:"/ˈpreʃər/"},
-  {word:"balanced",pos:"adj.",meaning:"having the right amount of different things, especially food groups, for good health",example:"She tries to eat a balanced diet with plenty of vegetables and protein.",translation:"സമതുലിതമായ",ipa:"/ˈbælənst/"},
-  {word:"hydrate",pos:"v.",meaning:"to drink enough water so that your body has the fluid it needs",example:"It is important to hydrate properly when you exercise in hot weather.",translation:"ജലാംശം നൽകുക",ipa:"/ˈhaɪdreɪt/"},
-  {word:"routine",pos:"n.",meaning:"a regular set of activities or habits that you follow every day",example:"He has a morning routine that includes stretching and a healthy breakfast.",translation:"പതിവ് ദിനചര്യ",ipa:"/ruːˈtiːn/"},
-  {word:"stress",pos:"n.",meaning:"a feeling of worry or pressure that affects your mental and physical health",example:"Too much stress at work can lead to serious health problems over time.",translation:"മാനസിക സമ്മർദ്ദം",ipa:"/stres/"},
-  {word:"posture",pos:"n.",meaning:"the position in which you hold your body when sitting or standing",example:"Good posture is important for avoiding back pain, especially at a desk.",translation:"ശരീരഭംഗി / നിലപാട്",ipa:"/ˈpɒstʃər/"},
-  {word:"outline",pos:"n.",meaning:"a short plan or summary of the main points of a topic",example:"Before writing her essay, she made an outline of the key ideas she wanted to include.",translation:"രൂപരേഖ",ipa:"/ˈaʊtlaɪn/"}],
+],
 
 // ─────────────────────────────────────────────────────────────
 // B2 - UPPER INTERMEDIATE (300 words)
@@ -3651,711 +1550,7 @@ B2: [
   {word:"verify",pos:"v.",meaning:"To confirm accuracy",example:"Verify the information.",translation:"സ്ഥിരീകരിക്കുക"},
   {word:"vital",pos:"adj.",meaning:"Absolutely necessary",example:"Water is vital for life.",translation:"അത്യന്താപേക്ഷിതം"},
   {word:"widespread",pos:"adj.",meaning:"Affecting a large area",example:"Widespread damage.",translation:"വ്യാപകം"},
-,
-  {word:"invoice",pos:"n.",meaning:"a document requesting payment for goods or services",example:"The supplier sent an invoice for the delivery of office equipment.",translation:"ഇൻവോയ്സ്, ബിൽ",ipa:"/ˈɪnvɔɪs/"},
-  {word:"commodity",pos:"n.",meaning:"a raw material or product that can be bought and sold",example:"Oil is one of the most traded commodities in the world.",translation:"ചരക്ക്, വസ്തു",ipa:"/kəˈmɒdɪti/"},
-  {word:"dividend",pos:"n.",meaning:"a portion of a company's profits paid to shareholders",example:"Investors received a generous dividend at the end of the financial year.",translation:"ഓഹരി ലാഭം",ipa:"/ˈdɪvɪdend/"},
-  {word:"franchise",pos:"n.",meaning:"a license to operate a business using another company's brand",example:"She bought a franchise and opened a well-known fast food restaurant.",translation:"ഫ്രാഞ്ചൈസ്",ipa:"/ˈfræntʃaɪz/"},
-  {word:"liability",pos:"n.",meaning:"a legal or financial responsibility or debt",example:"The company's liabilities exceeded its assets last quarter.",translation:"ബാധ്യത",ipa:"/ˌlaɪəˈbɪlɪti/"},
-  {word:"procurement",pos:"n.",meaning:"the process of obtaining goods or services for a business",example:"The procurement team negotiated better prices with new vendors.",translation:"സംഭരണം",ipa:"/prəˈkjʊərmənt/"},
-  {word:"outsource",pos:"v.",meaning:"to hire an external company to do work instead of doing it internally",example:"Many firms outsource their customer service operations to reduce costs.",translation:"പുറത്തുനിന്ന് ജോലി ഏൽപ്പിക്കുക",ipa:"/ˈaʊtsɔːs/"},
-  {word:"merger",pos:"n.",meaning:"the combining of two companies into one organization",example:"The merger of the two banks created the largest financial institution in the country.",translation:"ലയനം",ipa:"/ˈmɜːdʒər/"},
-  {word:"audit",pos:"n.",meaning:"an official examination of a company's financial records",example:"The external audit revealed no major problems in the company's accounts.",translation:"ഓഡിറ്റ്, കണക്ക് പരിശോധന",ipa:"/ˈɔːdɪt/"},
-  {word:"collateral",pos:"n.",meaning:"an asset pledged as security when borrowing money",example:"The bank required property as collateral before approving the business loan.",translation:"ജാമ്യം, പണയം",ipa:"/kəˈlætərəl/"},
-  {word:"depreciation",pos:"n.",meaning:"the reduction in value of an asset over time",example:"The accountant calculated the depreciation of the company's machinery annually.",translation:"മൂല്യത്തകർച്ച",ipa:"/dɪˌpriːʃiˈeɪʃən/"},
-  {word:"equity",pos:"n.",meaning:"the value of shares owned in a company or property",example:"She sold part of her equity in the startup to raise funds for expansion.",translation:"ഇക്വിറ്റി, ഓഹരി മൂലധനം",ipa:"/ˈekwɪti/"},
-  {word:"tariff",pos:"n.",meaning:"a tax charged on imported or exported goods",example:"The government raised tariffs on imported steel to protect domestic producers.",translation:"താരിഫ്, ചുങ്കം",ipa:"/ˈtærɪf/"},
-  {word:"liquidate",pos:"v.",meaning:"to close a business and sell its assets to pay debts",example:"The company was forced to liquidate after failing to secure new investment.",translation:"ബിസിനസ് പിരിച്ചുവിടുക",ipa:"/ˈlɪkwɪdeɪt/"},
-  {word:"revenue",pos:"n.",meaning:"the total income earned by a business from its activities",example:"The company's annual revenue increased by fifteen percent this year.",translation:"വരുമാനം",ipa:"/ˈrevənjuː/"},
-  {word:"incentive",pos:"n.",meaning:"something that motivates people to work harder or buy more",example:"The sales team was offered financial incentives to meet their monthly targets.",translation:"പ്രോത്സാഹനം",ipa:"/ɪnˈsentɪv/"},
-  {word:"consortium",pos:"n.",meaning:"a group of businesses working together on a shared project",example:"A consortium of technology firms jointly developed the new software platform.",translation:"കൺസോർഷ്യം, സംഘം",ipa:"/kənˈsɔːtiəm/"},
-  {word:"markup",pos:"n.",meaning:"the amount added to a cost price to determine the selling price",example:"The retailer applied a forty percent markup on all imported clothing items.",translation:"വില വർദ്ധന",ipa:"/ˈmɑːkʌp/"},
-  {word:"venture",pos:"n.",meaning:"a new business activity that involves risk",example:"They launched a joint venture to explore new markets in Southeast Asia.",translation:"സംരംഭം, ബിസിനസ് ശ്രമം",ipa:"/ˈventʃər/"},
-  {word:"overhead",pos:"n.",meaning:"the regular fixed costs of running a business",example:"Renting a smaller office helped the company reduce its monthly overhead.",translation:"ഓവർഹെഡ് ചെലവ്",ipa:"/ˈəʊvəhed/"},
-  {word:"benchmark",pos:"n.",meaning:"a standard used to measure or compare business performance",example:"The firm used industry benchmarks to evaluate its financial performance.",translation:"മാനദണ്ഡം, ബെഞ്ച്മാർക്ക്",ipa:"/ˈbentʃmɑːk/"},
-  {word:"deficit",pos:"n.",meaning:"the amount by which spending exceeds income or revenue",example:"The company reported a significant budget deficit in its quarterly report.",translation:"കമ്മി, ഘാടം",ipa:"/ˈdefɪsɪt/"},
-  {word:"subsidize",pos:"v.",meaning:"to support a business or activity financially with public or private funds",example:"The government agreed to subsidize local farmers to keep food prices stable.",translation:"സബ്‌സിഡി നൽകുക",ipa:"/ˈsʌbsɪdaɪz/"},
-  {word:"portfolio",pos:"n.",meaning:"a collection of investments or products owned by a person or company",example:"She managed a diverse investment portfolio for her high-value clients.",translation:"പോർട്ട്ഫോളിയോ, നിക്ഷേപ ശേഖരം",ipa:"/pɔːtˈfəʊliəʊ/"},
-  {word:"trademark",pos:"n.",meaning:"a legally registered symbol or name identifying a company's products",example:"The company registered its logo as a trademark to protect its brand identity.",translation:"ട്രേഡ്മാർക്ക്, വ്യാപാര ചിഹ്നം",ipa:"/ˈtreɪdmɑːk/"},
-  {word:"insolvency",pos:"n.",meaning:"the state of being unable to pay debts when they are due",example:"The firm filed for insolvency after losing its largest client contract.",translation:"പാപ്പരത്തം, കടം വീട്ടാൻ കഴിയാത്ത അവസ്ഥ",ipa:"/ɪnˈsɒlvənsi/"},
-  {word:"delegate",pos:"v.",meaning:"to give tasks or responsibilities to someone else",example:"A good manager knows how to delegate work effectively to team members.",translation:"ചുമതല ഏൽപ്പിക്കുക",ipa:"/ˈdelɪɡeɪt/"},
-  {word:"quota",pos:"n.",meaning:"a fixed limit on the amount of something allowed",example:"Each salesperson was given a monthly quota of fifty units to sell.",translation:"ക്വോട്ട, നിശ്ചിത പരിധി",ipa:"/ˈkwəʊtə/"},
-  {word:"arbitration",pos:"n.",meaning:"a process of resolving business disputes outside of court",example:"Both companies agreed to settle their contract disagreement through arbitration.",translation:"മദ്ധ്യസ്ഥത, ആർബിട്രേഷൻ",ipa:"/ˌɑːbɪˈtreɪʃən/"},
-  {word:"yield",pos:"n.",meaning:"the profit or return produced by an investment",example:"The bond offered a higher yield than most standard savings accounts.",translation:"ആദായം, നേട്ടം",ipa:"/jiːld/"},
-  {word:"sovereignty",pos:"n.",meaning:"the supreme power and authority of a country to govern itself",example:"The small nation fought hard to protect its sovereignty from foreign interference.",translation:"പരമാധികാരം",ipa:"/ˈsɒv.rɪn.ti/"},
-  {word:"referendum",pos:"n.",meaning:"a public vote in which all citizens decide on a particular political issue",example:"The government held a referendum to decide whether to change the constitution.",translation:"ഹിതപരിശോധന",ipa:"/ˌref.əˈren.dəm/"},
-  {word:"incumbent",pos:"n.",meaning:"a person who currently holds an official political position",example:"The incumbent president is seeking re-election for a second term.",translation:"നിലവിലെ അധികാരി",ipa:"/ɪnˈkʌm.bənt/"},
-  {word:"coalition",pos:"n.",meaning:"a temporary alliance of different political parties or groups to form a government",example:"Three smaller parties formed a coalition to gain a majority in parliament.",translation:"സഖ്യം",ipa:"/ˌkəʊ.əˈlɪʃ.ən/"},
-  {word:"propaganda",pos:"n.",meaning:"information, often biased or misleading, used to promote a political cause",example:"The regime used propaganda to make citizens believe the war was necessary.",translation:"പ്രചാരണം",ipa:"/ˌprɒp.əˈɡæn.də/"},
-  {word:"lobbying",pos:"n.",meaning:"the activity of trying to influence politicians or government decisions on behalf of a group",example:"The oil company spent millions on lobbying to block new environmental laws.",translation:"സ്വാധീനശ്രമം",ipa:"/ˈlɒb.i.ɪŋ/"},
-  {word:"constituents",pos:"n.",meaning:"the people who live in a particular area and are represented by an elected official",example:"The senator held a meeting to hear the concerns of her constituents.",translation:"വോട്ടർമാർ",ipa:"/kənˈstɪtʃ.u.ənts/"},
-  {word:"ratify",pos:"v.",meaning:"to formally approve and sign a treaty or agreement to make it official",example:"All member states must ratify the climate agreement before it takes effect.",translation:"അംഗീകരിക്കുക",ipa:"/ˈræt.ɪ.faɪ/"},
-  {word:"autocracy",pos:"n.",meaning:"a system of government in which one person has total and unlimited power",example:"Critics warned that the new laws were pushing the country toward autocracy.",translation:"സ്വേച്ഛാധിപത്യം",ipa:"/ɔːˈtɒk.rə.si/"},
-  {word:"partisan",pos:"adj.",meaning:"strongly supporting one particular political party or side, often unfairly",example:"The news coverage was criticized for being too partisan during the election campaign.",translation:"പക്ഷപാതപരമായ",ipa:"/ˈpɑː.tɪ.zæn/"},
-  {word:"impeach",pos:"v.",meaning:"to formally charge a public official with serious misconduct while in office",example:"Congress voted to impeach the president following the financial scandal.",translation:"ഇംപീച്ച് ചെയ്യുക",ipa:"/ɪmˈpiːtʃ/"},
-  {word:"bureaucracy",pos:"n.",meaning:"a system of government with many complicated rules and processes managed by officials",example:"Starting a business was difficult because of the heavy bureaucracy involved.",translation:"ഉദ്യോഗസ്ഥ മേധാവിത്വം",ipa:"/bjʊəˈrɒk.rə.si/"},
-  {word:"veto",pos:"n.",meaning:"the official power to reject or block a decision or law",example:"The president used his veto to prevent the bill from becoming law.",translation:"വിലക്കധികാരം",ipa:"/ˈviː.təʊ/"},
-  {word:"jurisdiction",pos:"n.",meaning:"the official power or authority of a legal or government body over an area or matter",example:"This crime falls under the jurisdiction of the federal court, not the local one.",translation:"അധികാരപരിധി",ipa:"/ˌdʒʊə.rɪsˈdɪk.ʃən/"},
-  {word:"repeal",pos:"v.",meaning:"to officially cancel or remove a law that was previously in force",example:"The new government promised to repeal the controversial tax law.",translation:"റദ്ദ് ചെയ്യുക",ipa:"/rɪˈpiːl/"},
-  {word:"amnesty",pos:"n.",meaning:"an official pardon given by a government to a group of people for political offences",example:"The government offered amnesty to political prisoners as part of the peace deal.",translation:"പൊതുമാപ്പ്",ipa:"/ˈæm.nɪ.sti/"},
-  {word:"geopolitical",pos:"adj.",meaning:"relating to how geography and politics influence the relationships between countries",example:"The location of oil reserves has huge geopolitical significance for the region.",translation:"ഭൗമരാഷ്ട്രീയ",ipa:"/ˌdʒiː.əʊ.pəˈlɪt.ɪ.kəl/"},
-  {word:"mandate",pos:"n.",meaning:"the authority given to a leader or government by voters to carry out certain policies",example:"The party claimed a mandate to reform healthcare after winning the election.",translation:"ജനവിധി",ipa:"/ˈmæn.deɪt/"},
-  {word:"electoral",pos:"adj.",meaning:"relating to elections or the process of voting for political representatives",example:"Several changes to the electoral system were proposed before the next vote.",translation:"തിരഞ്ഞെടുപ്പ് സംബന്ധമായ",ipa:"/ɪˈlek.tər.əl/"},
-  {word:"sanction",pos:"n.",meaning:"an official penalty or restriction imposed on a country for breaking international rules",example:"The UN imposed economic sanctions on the country after human rights violations were confirmed.",translation:"ഉപരോധം",ipa:"/ˈsæŋk.ʃən/"},
-  {word:"diplomacy",pos:"n.",meaning:"the management of relationships and negotiations between countries",example:"The crisis was resolved through careful diplomacy rather than military action.",translation:"നയതന്ത്രം",ipa:"/dɪˈpləʊ.mə.si/"},
-  {word:"disenfranchise",pos:"v.",meaning:"to take away someone's right to vote or participate in political processes",example:"Critics argued that the new voter ID law would disenfranchise poorer citizens.",translation:"വോട്ടവകാശം നഷ്ടപ്പെടുത്തുക",ipa:"/ˌdɪs.ɪnˈfræn.tʃaɪz/"},
-  {word:"oligarchy",pos:"n.",meaning:"a system in which a small group of powerful people control a country or organization",example:"Many citizens felt they were living under an oligarchy controlled by wealthy businesspeople.",translation:"ഒലിഗാർക്കി",ipa:"/ˈɒl.ɪ.ɡɑː.ki/"},
-  {word:"accountability",pos:"n.",meaning:"the obligation of officials to explain their decisions and accept responsibility for them",example:"Citizens demanded greater accountability from their elected representatives.",translation:"ഉത്തരവാദിത്തം",ipa:"/əˌkaʊn.təˈbɪl.ɪ.ti/"},
-  {word:"bilateral",pos:"adj.",meaning:"involving or agreed between two countries or groups",example:"The two nations signed a bilateral trade agreement to reduce import taxes.",translation:"ദ്വിപക്ഷ",ipa:"/ˌbaɪˈlæt.ər.əl/"},
-  {word:"governance",pos:"n.",meaning:"the way in which a country, organization, or area is managed and controlled",example:"Good governance is essential for attracting foreign investment to the country.",translation:"ഭരണസംവിധാനം",ipa:"/ˈɡʌv.ən.əns/"},
-  {word:"totalitarian",pos:"adj.",meaning:"relating to a government that controls every aspect of public and private life",example:"Life under the totalitarian regime meant that citizens had no freedom of expression.",translation:"സർവ്വാധിപത്യ",ipa:"/təʊˌtæl.ɪˈteə.ri.ən/"},
-  {word:"suffrage",pos:"n.",meaning:"the legal right to vote in political elections",example:"Women fought for decades to gain equal suffrage in many countries.",translation:"വോട്ടവകാശം",ipa:"/ˈsʌf.rɪdʒ/"},
-  {word:"polarization",pos:"n.",meaning:"a situation in which society divides into two strongly opposing political groups",example:"Growing political polarization made it almost impossible for parties to reach agreement.",translation:"ധ്രുവീകരണം",ipa:"/ˌpəʊ.lə.raɪˈzeɪ.ʃən/"},
-  {word:"demagogue",pos:"n.",meaning:"a political leader who gains support by making emotional speeches rather than rational arguments",example:"The opposition accused him of being a demagogue who exploited public fears.",translation:"ജനോദ്ദീപകൻ",ipa:"/ˈdem.ə.ɡɒɡ/"},
-  {word:"hypothesis",pos:"n.",meaning:"a proposed explanation for something that can be tested through research",example:"The scientist developed a hypothesis about how the virus spreads between animals.",translation:"സിദ്ധാന്തം",ipa:"/haɪˈpɒθɪsɪs/"},
-  {word:"methodology",pos:"n.",meaning:"a system of methods used in a particular area of study or activity",example:"The research team explained their methodology clearly in the published paper.",translation:"ഗവേഷണ രീതിശാസ്ത്രം",ipa:"/ˌmeθəˈdɒlədʒi/"},
-  {word:"replicate",pos:"v.",meaning:"to repeat an experiment or study to confirm its results",example:"Other scientists tried to replicate the experiment but got different results.",translation:"പുനരാവർത്തിക്കുക",ipa:"/ˈreplɪkeɪt/"},
-  {word:"variable",pos:"n.",meaning:"a factor or element that can change or be changed in an experiment",example:"Temperature was the key variable they controlled during the experiment.",translation:"വേരിയബിൾ",ipa:"/ˈveəriəbl/"},
-  {word:"empirical",pos:"adj.",meaning:"based on observation and evidence rather than theory alone",example:"The team needed empirical data before drawing any firm conclusions.",translation:"അനുഭവസിദ്ധമായ",ipa:"/ɪmˈpɪrɪkl/"},
-  {word:"specimen",pos:"n.",meaning:"a sample of something collected for scientific examination",example:"The biologist preserved several specimens from the rainforest for further study.",translation:"സാമ്പിൾ",ipa:"/ˈspesɪmən/"},
-  {word:"catalyst",pos:"n.",meaning:"a substance that speeds up a chemical reaction without being used up itself",example:"The enzyme acts as a catalyst to break down sugar molecules quickly.",translation:"ഉത്പ്രേരകം",ipa:"/ˈkætəlɪst/"},
-  {word:"phenomenon",pos:"n.",meaning:"a fact or event in nature or society that can be observed and studied",example:"Scientists studied the weather phenomenon that caused unusual snowfall in summer.",translation:"പ്രതിഭാസം",ipa:"/fɪˈnɒmɪnən/"},
-  {word:"theorem",pos:"n.",meaning:"a general statement in mathematics or science that has been proven to be true",example:"Students must understand Pythagoras's theorem before moving to advanced geometry.",translation:"സിദ്ധാന്തം",ipa:"/ˈθɪərəm/"},
-  {word:"contaminate",pos:"v.",meaning:"to make something impure or harmful by introducing unwanted substances",example:"The chemical spill contaminated the nearby water supply used by the lab.",translation:"മലിനമാക്കുക",ipa:"/kənˈtæmɪneɪt/"},
-  {word:"synthesis",pos:"n.",meaning:"the process of combining elements or substances to form a new compound or idea",example:"The synthesis of the new drug required several complex chemical reactions.",translation:"സംശ്ലേഷണം",ipa:"/ˈsɪnθɪsɪs/"},
-  {word:"accelerate",pos:"v.",meaning:"to increase the speed or rate of a process",example:"New technology has helped accelerate the pace of genetic research significantly.",translation:"ത്വരിതപ്പെടുത്തുക",ipa:"/əkˈseləreɪt/"},
-  {word:"particle",pos:"n.",meaning:"an extremely small piece of matter, such as an atom or molecule",example:"Physicists use large machines to study how particles behave at high speeds.",translation:"കണിക",ipa:"/ˈpɑːtɪkl/"},
-  {word:"prototype",pos:"n.",meaning:"the first model of something new, built to test and develop the design",example:"Engineers built a prototype of the robot before beginning mass production.",translation:"പ്രോട്ടോടൈപ്പ്",ipa:"/ˈprəʊtətaɪp/"},
-  {word:"molecular",pos:"adj.",meaning:"relating to or involving molecules",example:"Molecular biology has helped scientists understand how diseases develop at the cell level.",translation:"തന്മാത്രാ",ipa:"/məˈlekjʊlə/"},
-  {word:"apparatus",pos:"n.",meaning:"the equipment or tools needed for a particular scientific activity",example:"The laboratory was filled with complex apparatus for measuring chemical reactions.",translation:"ഉപകരണ സംവിധാനം",ipa:"/ˌæpəˈreɪtəs/"},
-  {word:"quantify",pos:"v.",meaning:"to measure or express something as a number or amount",example:"It is difficult to quantify the long-term impact of pollution on human health.",translation:"അളന്ന് കണക്കാക്കുക",ipa:"/ˈkwɒntɪfaɪ/"},
-  {word:"radioactive",pos:"adj.",meaning:"describing a substance that releases harmful energy by breaking down its atoms",example:"Workers handling radioactive materials must wear protective clothing at all times.",translation:"റേഡിയോആക്ടീവ്",ipa:"/ˌreɪdiəʊˈæktɪv/"},
-  {word:"inference",pos:"n.",meaning:"a conclusion reached using evidence and reasoning rather than direct observation",example:"Based on the data collected, the researcher made an inference about the cause of the disease.",translation:"അനുമാനം",ipa:"/ˈɪnfərəns/"},
-  {word:"decompose",pos:"v.",meaning:"to break down into smaller parts or simpler substances through natural processes",example:"Organic matter decomposes over time and returns nutrients to the soil.",translation:"വിഘടിക്കുക",ipa:"/ˌdiːkəmˈpəʊz/"},
-  {word:"simulate",pos:"v.",meaning:"to create a model or situation that imitates a real process for study",example:"Researchers used computers to simulate the spread of the virus across the population.",translation:"അനുകരിക്കുക",ipa:"/ˈsɪmjʊleɪt/"},
-  {word:"genome",pos:"n.",meaning:"the complete set of genetic information found in a living organism",example:"Scientists mapped the human genome to better understand inherited diseases.",translation:"ജനിതകഘടന",ipa:"/ˈdʒiːnəʊm/"},
-  {word:"iterate",pos:"v.",meaning:"to repeat a process, each time applying improvements based on previous results",example:"The design team continued to iterate on the product until it met safety standards.",translation:"ആവർത്തിക്കുക",ipa:"/ˈɪtəreɪt/"},
-  {word:"correlation",pos:"n.",meaning:"a relationship or connection between two things where one may affect the other",example:"The study found a strong correlation between sleep quality and academic performance.",translation:"പരസ്പര ബന്ധം",ipa:"/ˌkɒrəˈleɪʃn/"},
-  {word:"microscopic",pos:"adj.",meaning:"so small it can only be seen with a microscope",example:"Microscopic organisms play an important role in breaking down waste in the environment.",translation:"സൂക്ഷ്മദർശിനി ആവശ്യമുള്ള",ipa:"/ˌmaɪkrəˈskɒpɪk/"},
-  {word:"formulate",pos:"v.",meaning:"to create or develop something carefully using a systematic approach",example:"The chemist worked for months to formulate a new compound with healing properties.",translation:"രൂപപ്പെടുത്തുക",ipa:"/ˈfɔːmjʊleɪt/"},
-  {word:"magnitude",pos:"n.",meaning:"the great size, extent, or importance of something",example:"Scientists were surprised by the magnitude of the earthquake recorded in the data.",translation:"വ്യാപ്തി",ipa:"/ˈmæɡnɪtjuːd/"},
-  {word:"anomaly",pos:"n.",meaning:"something that is different from what is normal or expected",example:"The unusual reading in the data was identified as an anomaly caused by a faulty sensor.",translation:"അപാകത",ipa:"/əˈnɒməli/"},
-  {word:"biodiversity",pos:"n.",meaning:"the variety of plant and animal life in a particular habitat or on Earth",example:"Protecting biodiversity is essential for maintaining healthy and stable ecosystems.",translation:"ജൈവവൈവിധ്യം",ipa:"/ˌbaɪəʊdaɪˈvɜːsɪti/"},
-  {word:"calibrate",pos:"v.",meaning:"to adjust or check a measuring instrument to make it accurate",example:"Technicians must calibrate the equipment before beginning any scientific measurements.",translation:"ക്രമീകരിക്കുക",ipa:"/ˈkælɪbreɪt/"},
-  {word:"byline",pos:"n.",meaning:"a line in a newspaper or article that gives the writer's name",example:"The journalist was proud to see her byline on the front page of the newspaper.",translation:"ലേഖകന്റെ പേര് രേഖപ്പെടുത്തുന്ന വരി",ipa:"/ˈbaɪlaɪn/"},
-  {word:"masthead",pos:"n.",meaning:"the title of a newspaper or magazine printed at the top of the front page",example:"The masthead of the newspaper had been unchanged for over a hundred years.",translation:"പത്രത്തിന്റെ ശീർഷകം",ipa:"/ˈmæsthed/"},
-  {word:"retract",pos:"v.",meaning:"to officially withdraw a statement or claim that was previously made",example:"The newspaper had to retract the false story it published about the politician.",translation:"പിൻവലിക്കുക",ipa:"/rɪˈtrækt/"},
-  {word:"broadsheet",pos:"n.",meaning:"a large-format, serious newspaper, often associated with quality journalism",example:"She prefers reading the broadsheet for in-depth political analysis rather than tabloids.",translation:"ഗൗരവമുള്ള വലിയ പത്രം",ipa:"/ˈbrɔːdʃiːt/"},
-  {word:"tabloid",pos:"n.",meaning:"a small-format newspaper that focuses on sensational or celebrity news",example:"The tabloid ran a shocking headline about the famous actor's private life.",translation:"സെൻസേഷണൽ വാർത്ത നൽകുന്ന ചെറുതാൾ പത്രം",ipa:"/ˈtæblɔɪd/"},
-  {word:"censorship",pos:"n.",meaning:"the suppression or control of information or expression by authorities",example:"Journalists in the region faced heavy censorship and could not report freely.",translation:"സെൻസർഷിപ്പ്",ipa:"/ˈsensəʃɪp/"},
-  {word:"editorial",pos:"n.",meaning:"an article in a newspaper that expresses the editor's or publication's opinion",example:"The editorial criticized the government's new policy on press freedom.",translation:"എഡിറ്റോറിയൽ, അഭിപ്രായ ലേഖനം",ipa:"/ˌedɪˈtɔːriəl/"},
-  {word:"scoop",pos:"n.",meaning:"an exclusive piece of news published before other media outlets",example:"The young reporter landed a major scoop by interviewing the whistleblower first.",translation:"മറ്റുള്ളവർക്ക് മുമ്പ് ലഭിക്കുന്ന വിശേഷ വാർത്ത",ipa:"/skuːp/"},
-  {word:"leak",pos:"v.",meaning:"to secretly give confidential information to the media",example:"Someone leaked the classified government documents to the investigative journalist.",translation:"രഹസ്യ വിവരം ചോർത്തുക",ipa:"/liːk/"},
-  {word:"circulation",pos:"n.",meaning:"the number of copies of a newspaper or magazine that are sold or distributed",example:"The magazine's circulation dropped significantly after it moved to an online-only format.",translation:"വിതരണ സംഖ്യ, പ്രചാരം",ipa:"/ˌsɜːkjʊˈleɪʃən/"},
-  {word:"correspondent",pos:"n.",meaning:"a journalist who reports from a specific location or on a particular subject",example:"The foreign correspondent sent live reports from the conflict zone every evening.",translation:"ലേഖകൻ, സംവാദകൻ",ipa:"/ˌkɒrɪˈspɒndənt/"},
-  {word:"press release",pos:"phrase",meaning:"an official statement given to journalists by an organization or government",example:"The company issued a press release announcing the appointment of its new director.",translation:"പ്രസ് റിലീസ്, ഔദ്യോഗിക പത്രക്കുറിപ്പ്",ipa:"/ˈpres rɪˌliːs/"},
-  {word:"paparazzi",pos:"n.",meaning:"photographers who follow celebrities to take pictures for the media",example:"The celebrity was surrounded by paparazzi as she left the award ceremony.",translation:"സെലിബ്രിറ്റി ഫോട്ടോ എടുക്കുന്ന ഫോട്ടോഗ്രാഫർമാർ",ipa:"/ˌpæpəˈrætsi/"},
-  {word:"newsfeed",pos:"n.",meaning:"a continuous stream of news updates delivered online or through an app",example:"She scrolled through her newsfeed every morning to stay updated on current events.",translation:"ഓൺലൈൻ വാർത്താ പ്രവാഹം",ipa:"/ˈnjuːzfiːd/"},
-  {word:"embed",pos:"v.",meaning:"to place a journalist within a military unit or organization to report from inside",example:"The reporter was embedded with the troops and sent daily dispatches from the front line.",translation:"ഉൾച്ചേർക്കുക, അകത്ത് നിന്ന് റിപ്പോർട്ട് ചെയ്യാൻ നിയോഗിക്കുക",ipa:"/ɪmˈbed/"},
-  {word:"misinformation",pos:"n.",meaning:"false or inaccurate information that is spread, often unintentionally",example:"The health crisis was made worse by the spread of misinformation on social media.",translation:"തെറ്റായ വിവരം, അപ്രമാണിക വാർത്ത",ipa:"/ˌmɪsɪnfəˈmeɪʃən/"},
-  {word:"disinformation",pos:"n.",meaning:"deliberately false information spread to deceive people",example:"The government accused foreign actors of spreading disinformation to influence the election.",translation:"മനഃപൂർവ്വം പ്രചരിപ്പിക്കുന്ന തെറ്റായ വിവരം",ipa:"/ˌdɪsɪnfəˈmeɪʃən/"},
-  {word:"allegation",pos:"n.",meaning:"a claim that someone has done something wrong, made without proof",example:"The newspaper printed serious allegations against the minister, who denied everything.",translation:"ആരോപണം",ipa:"/ˌælɪˈɡeɪʃən/"},
-  {word:"whistleblower",pos:"n.",meaning:"a person who reports illegal or unethical activity within an organization",example:"The whistleblower risked her career to reveal corruption inside the corporation.",translation:"അഴിമതി തുറന്നുകാട്ടുന്ന വ്യക്തി",ipa:"/ˈwɪsəlˌbləʊə/"},
-  {word:"op-ed",pos:"n.",meaning:"a newspaper article that expresses an individual writer's opinion, opposite the editorial page",example:"The professor wrote an op-ed arguing against the new education reforms.",translation:"അഭിപ്രായ ലേഖനം",ipa:"/ˌɒp ˈed/"},
-  {word:"freelance",pos:"adj.",meaning:"working independently for different organizations rather than being permanently employed",example:"She works as a freelance journalist, writing articles for several different magazines.",translation:"സ്വതന്ത്ര ജോലിക്കാരൻ, ഫ്രീലാൻസ്",ipa:"/ˈfriːlɑːns/"},
-  {word:"bulletin",pos:"n.",meaning:"a short official news report or announcement",example:"The radio station interrupted its programming to broadcast an urgent news bulletin.",translation:"ഹ്രസ്വ വാർത്താ അറിയിപ്പ്",ipa:"/ˈbʊlɪtɪn/"},
-  {word:"embargo",pos:"n.",meaning:"an official instruction not to publish certain information until a specific time",example:"The journalist received the report under an embargo and could not publish it until Friday.",translation:"വിവര പ്രസിദ്ധീകരണ നിരോധനം",ipa:"/ɪmˈbɑːɡəʊ/"},
-  {word:"attribution",pos:"n.",meaning:"the act of crediting the source of information in a news report",example:"Proper attribution is essential in journalism to maintain trust and accuracy.",translation:"ഉറവിട ക്രെഡിറ്റ്, ആധാരം നൽകൽ",ipa:"/ˌætrɪˈbjuːʃən/"},
-  {word:"headline",pos:"n.",meaning:"the title of a news story printed in large letters at the top of an article",example:"The shocking headline attracted thousands of readers to the online article.",translation:"തലക്കെട്ട്, ഹെഡ്‌ലൈൻ",ipa:"/ˈhedlaɪn/"},
-  {word:"syndicate",pos:"v.",meaning:"to sell content to multiple media outlets for simultaneous publication",example:"Her column is syndicated in newspapers across the country every week.",translation:"ഒന്നിലധികം മാധ്യമങ്ങൾക്ക് വിൽക്കുക",ipa:"/ˈsɪndɪkeɪt/"},
-  {word:"spin",pos:"n.",meaning:"a biased way of presenting information to influence public opinion",example:"Critics accused the politician's team of putting a positive spin on the damaging report.",translation:"വാർത്ത വളച്ചൊടിക്കൽ, സ്പിൻ",ipa:"/spɪn/"},
-  {word:"pundit",pos:"n.",meaning:"an expert who gives opinions on media or public affairs",example:"Several political pundits appeared on television to analyze the election results.",translation:"വിദഗ്ദ്ധ അഭിപ്രായക്കാരൻ, പണ്ഡിതൻ",ipa:"/ˈpʌndɪt/"},
-  {word:"column",pos:"n.",meaning:"a regular article written by the same person in a newspaper or magazine",example:"She writes a weekly column on social issues for a leading national newspaper.",translation:"കോളം, പംക്തി",ipa:"/ˈkɒləm/"},
-  {word:"vlog",pos:"n.",meaning:"a video blog where a person records and shares their experiences or opinions online",example:"The journalist started a vlog to share behind-the-scenes stories from his reporting trips.",translation:"വീഡിയോ ബ്ലോഗ്, വ്ലോഗ്",ipa:"/vlɒɡ/"},
-  {word:"acquittal",pos:"n.",meaning:"an official judgment that someone is not guilty of a crime",example:"The jury's acquittal of the defendant surprised many people who had followed the case.",translation:"കുറ്റവിമുക്തി",ipa:"/əˈkwɪt.əl/"},
-  {word:"testimony",pos:"n.",meaning:"a formal statement made by a witness in a court of law",example:"The eyewitness gave detailed testimony about what she had seen on the night of the crime.",translation:"സാക്ഷ്യം",ipa:"/ˈtes.tɪ.mə.ni/"},
-  {word:"indict",pos:"v.",meaning:"to formally accuse someone of a serious crime",example:"The grand jury voted to indict the politician on charges of corruption.",translation:"കുറ്റം ചുമത്തുക",ipa:"/ɪnˈdaɪt/"},
-  {word:"verdict",pos:"n.",meaning:"the official decision made by a jury or judge at the end of a trial",example:"The courtroom fell silent as the judge prepared to announce the final verdict.",translation:"വിധിന്യായം",ipa:"/ˈvɜː.dɪkt/"},
-  {word:"subpoena",pos:"n.",meaning:"a legal document ordering someone to appear in court or provide evidence",example:"The lawyer issued a subpoena requiring the company to hand over its financial records.",translation:"ഹാജർ സമൻസ്",ipa:"/səˈpiː.nə/"},
-  {word:"plaintiff",pos:"n.",meaning:"the person who brings a legal case against someone in a court",example:"The plaintiff claimed that the company had violated her employment rights.",translation:"വാദി",ipa:"/ˈpleɪn.tɪf/"},
-  {word:"defendant",pos:"n.",meaning:"the person accused of a crime or sued in a court of law",example:"The defendant pleaded not guilty and requested a full jury trial.",translation:"പ്രതി",ipa:"/dɪˈfen.dənt/"},
-  {word:"prosecution",pos:"n.",meaning:"the legal process of charging and trying someone for a crime",example:"The prosecution presented strong evidence linking the suspect to the scene of the crime.",translation:"പ്രോസിക്യൂഷൻ",ipa:"/ˌprɒs.ɪˈkjuː.ʃən/"},
-  {word:"statutory",pos:"adj.",meaning:"required, permitted, or created by law or statute",example:"Workers are entitled to a statutory minimum wage under current employment law.",translation:"നിയമപരമായ",ipa:"/ˈstætʃ.ʊ.tər.i/"},
-  {word:"parole",pos:"n.",meaning:"the early release of a prisoner on condition of good behaviour",example:"After serving five years, he was released on parole and assigned a supervision officer.",translation:"ഇടക്കാല മോചനം",ipa:"/pəˈrəʊl/"},
-  {word:"affidavit",pos:"n.",meaning:"a written statement made under oath and used as evidence in court",example:"She signed an affidavit confirming that she had witnessed the agreement being signed.",translation:"സത്യപ്രസ്താവന",ipa:"/ˌæf.ɪˈdeɪ.vɪt/"},
-  {word:"extradite",pos:"v.",meaning:"to send a person accused of a crime back to the country where the crime occurred",example:"The government agreed to extradite the fugitive to face trial in his home country.",translation:"കൈമാറ്റം ചെയ്യുക",ipa:"/ˈek.strə.daɪt/"},
-  {word:"perjury",pos:"n.",meaning:"the crime of telling a lie in court after promising to tell the truth",example:"The witness was charged with perjury after it was proven that she had lied under oath.",translation:"കള്ളസാക്ഷ്യം",ipa:"/ˈpɜː.dʒər.i/"},
-  {word:"injunction",pos:"n.",meaning:"a court order that requires someone to stop doing something",example:"The court issued an injunction preventing the factory from releasing chemicals into the river.",translation:"നിരോധനാജ്ഞ",ipa:"/ɪnˈdʒʌŋk.ʃən/"},
-  {word:"appeal",pos:"v.",meaning:"to ask a higher court to review and change a lower court's decision",example:"The convicted man decided to appeal his sentence, claiming the trial was unfair.",translation:"അപ്പീൽ നൽകുക",ipa:"/əˈpiːl/"},
-  {word:"culpable",pos:"adj.",meaning:"deserving blame or considered responsible for doing something wrong",example:"The investigation found the manager culpable for the unsafe conditions in the workplace.",translation:"കുറ്റക്കാരനായ",ipa:"/ˈkʌl.pə.bəl/"},
-  {word:"precedent",pos:"n.",meaning:"a previous court decision used as a guide for future similar cases",example:"The landmark ruling set a legal precedent that protected citizens' privacy rights.",translation:"മുൻവിധി",ipa:"/ˈpres.ɪ.dənt/"},
-  {word:"contempt",pos:"n.",meaning:"the crime of disobeying or showing disrespect for a court of law",example:"The journalist was held in contempt of court for refusing to reveal her source.",translation:"കോടതി അവഹേളനം",ipa:"/kənˈtempt/"},
-  {word:"fraud",pos:"n.",meaning:"the crime of deceiving someone to gain money or other benefits illegally",example:"The accountant was arrested and charged with fraud after stealing from company funds.",translation:"തട്ടിപ്പ്",ipa:"/frɔːd/"},
-  {word:"leniency",pos:"n.",meaning:"the quality of being less strict or giving a lighter punishment than expected",example:"The judge showed leniency toward the young offender because it was his first crime.",translation:"ഉദാരത",ipa:"/ˈliː.ni.ən.si/"},
-  {word:"warrant",pos:"n.",meaning:"an official document allowing police to search, arrest, or seize something",example:"Police obtained a search warrant before entering the suspect's home to look for evidence.",translation:"വാറണ്ട്",ipa:"/ˈwɒr.ənt/"},
-  {word:"conviction",pos:"n.",meaning:"an official declaration in court that someone is guilty of a crime",example:"His conviction for theft meant he would serve at least two years in prison.",translation:"ശിക്ഷാവിധി",ipa:"/kənˈvɪk.ʃən/"},
-  {word:"clemency",pos:"n.",meaning:"mercy shown toward someone who could be punished more severely",example:"The prisoner wrote to the governor asking for clemency based on his improved behaviour.",translation:"ദയാദാക്ഷിണ്യം",ipa:"/ˈklem.ən.si/"},
-  {word:"embezzle",pos:"v.",meaning:"to secretly steal money that you are trusted to look after for someone else",example:"The treasurer was caught trying to embezzle funds from the charity's bank account.",translation:"ഗ横領 ചെയ്യുക",ipa:"/ɪmˈbez.əl/"},
-  {word:"due process",pos:"phrase",meaning:"the legal requirement that laws must be fairly and properly applied to everyone",example:"Every citizen has the right to due process before any punishment can be imposed.",translation:"നിയമ പ്രക്രിയ",ipa:"/ˌdjuː ˈprəʊ.ses/"},
-  {word:"bail",pos:"n.",meaning:"money paid to a court to allow an accused person to stay free until trial",example:"The judge set bail at ten thousand dollars, which the family struggled to afford.",translation:"ജാമ്യം",ipa:"/beɪl/"},
-  {word:"litigation",pos:"n.",meaning:"the process of taking legal action through the court system",example:"The two companies entered into costly litigation over the disputed contract.",translation:"വ്യവഹാരം",ipa:"/ˌlɪt.ɪˈɡeɪ.ʃən/"},
-  {word:"deposition",pos:"n.",meaning:"formal questioning of a witness outside of court, recorded for legal use",example:"The lawyer took a deposition from the key witness before the trial began.",translation:"മൊഴി നൽകൽ",ipa:"/ˌdep.əˈzɪʃ.ən/"},
-  {word:"exonerate",pos:"v.",meaning:"to officially state that someone is not guilty or not responsible for something",example:"New DNA evidence helped to exonerate the man who had spent years in prison for a crime he did not commit.",translation:"കുറ്റവിമുക്തനാക്കുക",ipa:"/ɪɡˈzɒn.ər.eɪt/"},
-  {word:"austerity",pos:"n.",meaning:"strict government policies to reduce spending and debt",example:"The government introduced austerity measures to reduce the national deficit.",translation:"മിതവ്യയ നയം",ipa:"/ɒˈsterɪti/"},
-  {word:"inflation",pos:"n.",meaning:"the rate at which prices rise over time, reducing purchasing power",example:"High inflation made it difficult for families to afford basic goods.",translation:"വിലക്കയറ്റം",ipa:"/ɪnˈfleɪʃən/"},
-  {word:"recession",pos:"n.",meaning:"a period of economic decline lasting at least two quarters",example:"Many businesses closed during the recession of the early 2000s.",translation:"സാമ്പത്തിക മാന്ദ്യം",ipa:"/rɪˈseʃən/"},
-  {word:"fiscal",pos:"adj.",meaning:"relating to government revenue, taxes, and public spending",example:"The finance minister announced a new fiscal policy to boost growth.",translation:"ധനകാര്യ സംബന്ധമായ",ipa:"/ˈfɪskəl/"},
-  {word:"liquidity",pos:"n.",meaning:"how easily an asset can be converted into cash",example:"The bank maintained high liquidity to meet customer withdrawals.",translation:"പണലഭ്യത",ipa:"/lɪˈkwɪdɪti/"},
-  {word:"monetary",pos:"adj.",meaning:"relating to money or the supply of money in an economy",example:"The central bank adjusted its monetary policy to control inflation.",translation:"നാണയ സംബന്ധമായ",ipa:"/ˈmɒnɪtri/"},
-  {word:"hedge",pos:"v.",meaning:"to reduce financial risk by making balancing investments",example:"Investors hedge their portfolios by buying stocks in different sectors.",translation:"സാമ്പത്തിക അപകടം കുറയ്ക്കുക",ipa:"/hedʒ/"},
-  {word:"speculate",pos:"v.",meaning:"to buy or sell assets hoping to profit from price changes",example:"Many investors speculate on foreign currency markets every day.",translation:"ഊഹക്കച്ചവടം നടത്തുക",ipa:"/ˈspekjʊleɪt/"},
-  {word:"solvency",pos:"n.",meaning:"the ability of a company to meet its long-term financial obligations",example:"The firm's solvency was questioned after it missed several loan payments.",translation:"കടം വീട്ടാനുള്ള ശേഷി",ipa:"/ˈsɒlvənsi/"},
-  {word:"amortize",pos:"v.",meaning:"to gradually pay off a debt through regular payments over time",example:"The company decided to amortize the loan over a period of ten years.",translation:"ക്രമേണ കടം വീട്ടുക",ipa:"/ˈæmətaɪz/"},
-  {word:"deflation",pos:"n.",meaning:"a decrease in general price levels in an economy",example:"Deflation caused consumers to delay purchases, slowing economic growth.",translation:"വില ഇടിവ്",ipa:"/dɪˈfleɪʃən/"},
-  {word:"leverage",pos:"n.",meaning:"the use of borrowed money to increase potential returns on investment",example:"The startup used leverage to expand its operations quickly.",translation:"കടം ഉപയോഗിച്ചുള്ള നിക്ഷേപ ശക്തി",ipa:"/ˈliːvərɪdʒ/"},
-  {word:"deregulate",pos:"v.",meaning:"to remove government rules controlling an industry or market",example:"The government decided to deregulate the energy sector to encourage competition.",translation:"നിയന്ത്രണങ്ങൾ നീക്കം ചെയ്യുക",ipa:"/diːˈreɡjʊleɪt/"},
-  {word:"arbitrage",pos:"n.",meaning:"the practice of buying and selling the same asset in different markets to profit from price differences",example:"Currency arbitrage allowed the trader to earn profits with minimal risk.",translation:"വിലവ്യത്യാസ ലാഭം",ipa:"/ˈɑːbɪtrɑːʒ/"},
-  {word:"stakeholder",pos:"n.",meaning:"a person or group with an interest in a company or project",example:"All stakeholders were invited to the meeting to discuss the company's future plans.",translation:"പങ്കാളിത്ത ഉദ്യോഗസ്ഥൻ",ipa:"/ˈsteɪkhəʊldə/"},
-  {word:"collusion",pos:"n.",meaning:"secret cooperation between businesses to deceive or harm others",example:"The companies were fined for collusion after fixing prices together.",translation:"രഹസ്യ ഒത്തുകളി",ipa:"/kəˈluːʒən/"},
-  {word:"volatility",pos:"n.",meaning:"the tendency of prices or markets to change rapidly and unpredictably",example:"Stock market volatility increased significantly during the global crisis.",translation:"വിലച്ചാഞ്ചാട്ടം",ipa:"/ˌvɒləˈtɪlɪti/"},
-  {word:"microfinance",pos:"n.",meaning:"financial services such as small loans provided to low-income individuals",example:"Microfinance programs helped rural women start their own small businesses.",translation:"ക്ഷുദ്ര ധനകാര്യ സേവനം",ipa:"/ˈmaɪkrəʊfaɪnæns/"},
-  {word:"asset",pos:"n.",meaning:"anything of value owned by a person or company",example:"Real estate is considered a stable and reliable asset class.",translation:"ആസ്തി",ipa:"/ˈæset/"},
-  {word:"depreciate",pos:"v.",meaning:"to decrease in value over time",example:"New cars tend to depreciate rapidly within the first year of purchase.",translation:"മൂല്യം കുറയുക",ipa:"/dɪˈpriːʃieɪt/"},
-  {word:"GDP",pos:"n.",meaning:"Gross Domestic Product; the total value of goods and services produced in a country",example:"The country's GDP grew by three percent last year due to strong exports.",translation:"മൊത്ത ആഭ്യന്തര ഉൽപ്പാദനം",ipa:"/ˌdʒiːdiːˈpiː/"},
-  {word:"expenditure",pos:"n.",meaning:"the total amount of money spent by a government, company, or person",example:"The government reduced its expenditure on public services to balance the budget.",translation:"ചെലവ്",ipa:"/ɪkˈspendɪtʃə/"},
-  {word:"surplus",pos:"n.",meaning:"an amount left over when income is greater than spending",example:"The trade surplus indicated that the country exported more than it imported.",translation:"മിച്ചം",ipa:"/ˈsɜːpləs/"},
-  {word:"creditor",pos:"n.",meaning:"a person or institution to whom money is owed",example:"The creditor demanded full repayment of the loan within six months.",translation:"കടക്കാരൻ",ipa:"/ˈkredɪtə/"},
-  {word:"allocation",pos:"n.",meaning:"the process of distributing resources or money for a specific purpose",example:"The budget allocation for healthcare was increased this year.",translation:"വിഹിതം നൽകൽ",ipa:"/ˌæləˈkeɪʃən/"},
-  {word:"intangible",pos:"adj.",meaning:"not physical; describing assets like brand value or intellectual property",example:"The company's brand reputation is one of its most valuable intangible assets.",translation:"അദൃശ്യ ആസ്തി",ipa:"/ɪnˈtændʒɪbəl/"},
-  {word:"tranch",pos:"n.",meaning:"a portion or installment of a loan or financial package released in stages",example:"The IMF released the next tranche of the loan after economic reforms were confirmed.",translation:"ഘട്ടംഘട്ടമായ വായ്പ ഭാഗം",ipa:"/trɑːnʃ/"},
-  {word:"underwrite",pos:"v.",meaning:"to guarantee financial support or accept financial risk on behalf of another",example:"The bank agreed to underwrite the bond issue for the new infrastructure project.",translation:"സാമ്പത്തിക ഉത്തരവാദിത്വം ഏൽക്കുക",ipa:"/ˈʌndəraɪt/"},
-  {word:"glacier",pos:"n.",meaning:"a large, slow-moving mass of ice formed from compressed snow over many years",example:"The glacier has retreated significantly over the past decade due to rising temperatures.",translation:"ഹിമാനി",ipa:"/ˈɡleɪʃər/"},
-  {word:"deforestation",pos:"n.",meaning:"the large-scale removal or destruction of forests",example:"Deforestation in the Amazon threatens countless species and worsens climate change.",translation:"വനനശീകരണം",ipa:"/ˌdiːˌfɒrɪˈsteɪʃən/"},
-  {word:"emissions",pos:"n.",meaning:"gases or other substances released into the atmosphere, especially harmful ones",example:"The new policy aims to cut carbon emissions by 40% within ten years.",translation:"ഉദ്‌വമനം",ipa:"/ɪˈmɪʃənz/"},
-  {word:"drought",pos:"n.",meaning:"a long period of unusually low rainfall causing water shortage",example:"The prolonged drought destroyed crops and forced many farmers to abandon their land.",translation:"വരൾച്ച",ipa:"/draʊt/"},
-  {word:"renewable",pos:"adj.",meaning:"describing energy from sources that are naturally replenished and will not run out",example:"Solar and wind power are renewable energy sources that reduce dependence on fossil fuels.",translation:"പുനരുപയോഗയോഗ്യമായ",ipa:"/rɪˈnjuːəbl/"},
-  {word:"ecosystem",pos:"n.",meaning:"a community of living organisms interacting with each other and their physical environment",example:"Pollution in the river has severely damaged the local aquatic ecosystem.",translation:"ആവാസവ്യൂഹം",ipa:"/ˈiːkəʊˌsɪstəm/"},
-  {word:"habitat",pos:"n.",meaning:"the natural environment in which a particular species lives and grows",example:"Urban expansion is destroying the natural habitat of many woodland animals.",translation:"ആവാസ സ്ഥലം",ipa:"/ˈhæbɪtæt/"},
-  {word:"permafrost",pos:"n.",meaning:"a layer of soil that remains permanently frozen below the Earth's surface",example:"Thawing permafrost releases large amounts of methane, accelerating global warming.",translation:"സ്ഥിരഹിമഭൂമി",ipa:"/ˈpɜːməfrɒst/"},
-  {word:"acidification",pos:"n.",meaning:"the process by which something becomes more acidic, especially oceans absorbing CO₂",example:"Ocean acidification is threatening coral reefs and the creatures that depend on them.",translation:"അമ്ലീകരണം",ipa:"/əˌsɪdɪfɪˈkeɪʃən/"},
-  {word:"carbon footprint",pos:"n.",meaning:"the total amount of greenhouse gases produced by a person, organization, or activity",example:"Switching to public transport is one way to reduce your carbon footprint.",translation:"കാർബൺ കാലടി",ipa:"/ˈkɑːbən ˈfʊtprɪnt/"},
-  {word:"fossil fuel",pos:"n.",meaning:"a natural fuel such as coal or oil formed from ancient organisms over millions of years",example:"Burning fossil fuels is the primary driver of human-caused climate change.",translation:"ഫോസിൽ ഇന്ധനം",ipa:"/ˈfɒsəl fjuːəl/"},
-  {word:"reforestation",pos:"n.",meaning:"the process of replanting trees in areas where forests have been cut down or destroyed",example:"The government launched a reforestation program to restore damaged hillside areas.",translation:"പുനർവനവൽക്കരണം",ipa:"/ˌriːˌfɒrɪˈsteɪʃən/"},
-  {word:"floodplain",pos:"n.",meaning:"flat land next to a river that is likely to flood when the river overflows",example:"Building homes on the floodplain increases the risk of serious damage during heavy rains.",translation:"വെള്ളപ്പൊക്ക സമതലം",ipa:"/ˈflʌdpleɪn/"},
-  {word:"ozone layer",pos:"n.",meaning:"a layer of ozone in the Earth's atmosphere that absorbs harmful ultraviolet radiation",example:"Scientists continue to monitor the slow recovery of the ozone layer over Antarctica.",translation:"ഓസോൺ പാളി",ipa:"/ˈəʊzəʊn ˌleɪər/"},
-  {word:"methane",pos:"n.",meaning:"a colorless, odorless greenhouse gas produced by livestock, landfills, and natural sources",example:"Methane is a far more potent greenhouse gas than carbon dioxide over a short time frame.",translation:"മീഥേൻ",ipa:"/ˈmiːθeɪn/"},
-  {word:"sewage",pos:"n.",meaning:"waste water and human waste carried away through drains and sewers",example:"Untreated sewage flowing into the bay caused a severe decline in fish populations.",translation:"മലിനജലം",ipa:"/ˈsuːɪdʒ/"},
-  {word:"arid",pos:"adj.",meaning:"describing land or climate that receives very little rainfall and is very dry",example:"As temperatures rise, previously fertile regions are becoming increasingly arid.",translation:"വരണ്ട",ipa:"/ˈærɪd/"},
-  {word:"wetland",pos:"n.",meaning:"land that is regularly saturated with water, such as marshes, swamps, or bogs",example:"Protecting wetland areas is essential because they filter water and store carbon naturally.",translation:"ആർദ്രഭൂമി",ipa:"/ˈwetlænd/"},
-  {word:"runoff",pos:"n.",meaning:"water from rain or melting snow that flows over the land surface into rivers or streams",example:"Agricultural runoff carrying fertilizers is polluting nearby rivers and lakes.",translation:"ഒഴുക്കുജലം",ipa:"/ˈrʌnɒf/"},
-  {word:"desertification",pos:"n.",meaning:"the process by which fertile land gradually becomes desert due to drought or poor farming",example:"Desertification is spreading across parts of Africa, threatening food security for millions.",translation:"മരുഭൂമീകരണം",ipa:"/dɪˌzɜːtɪfɪˈkeɪʃən/"},
-  {word:"tipping point",pos:"n.",meaning:"the critical threshold at which a small change causes a larger, often irreversible shift in a system",example:"Many climate scientists warn we are approaching a tipping point beyond which damage cannot be reversed.",translation:"നിർണ്ണായക പരിധി",ipa:"/ˈtɪpɪŋ pɔɪnt/"},
-  {word:"erosion",pos:"n.",meaning:"the gradual wearing away of rock, soil, or land by wind, water, or other natural forces",example:"Coastal erosion is causing cliffs to collapse, threatening homes and roads nearby.",translation:"മണ്ണൊലിപ്പ്",ipa:"/ɪˈrəʊʒən/"},
-  {word:"heatwave",pos:"n.",meaning:"a prolonged period of abnormally hot weather",example:"The deadly heatwave last summer set new temperature records across southern Europe.",translation:"ചൂടലമ്പ്",ipa:"/ˈhiːtweɪv/"},
-  {word:"reusable",pos:"adj.",meaning:"able to be used again rather than thrown away after a single use",example:"Bringing reusable bags to the supermarket helps cut down on plastic waste.",translation:"പുനരുപയോഗിക്കാവുന്ന",ipa:"/ˌriːˈjuːzəbl/"},
-  {word:"particulate",pos:"n.",meaning:"a tiny solid or liquid particle suspended in the air, often from burning fuel",example:"High levels of particulate pollution in the city were linked to increased respiratory illness.",translation:"കണിക മലിനീകരണം",ipa:"/pɑːˈtɪkjʊlɪt/"},
-  {word:"algae bloom",pos:"n.",meaning:"a rapid increase in the population of algae in water, often caused by excess nutrients",example:"The toxic algae bloom closed the lake to swimmers for the entire summer.",translation:"ആൽഗ വളർച്ച",ipa:"/ˈælɡiː bluːm/"},
-  {word:"biodegradable",pos:"adj.",meaning:"able to be broken down naturally by bacteria or other living organisms without harming the environment",example:"The company switched to biodegradable packaging to reduce its environmental impact.",translation:"ജൈവ വിഘടനീയമായ",ipa:"/ˌbaɪəʊdɪˈɡreɪdəbl/"},
-  {word:"carbon neutral",pos:"adj.",meaning:"achieving a balance between the amount of carbon released and the amount removed from the atmosphere",example:"The airline pledged to become carbon neutral by investing in tree-planting projects worldwide.",translation:"കാർബൺ നിരപേക്ഷ",ipa:"/ˈkɑːbən ˈnjuːtrəl/"},
-  {word:"geothermal",pos:"adj.",meaning:"relating to heat energy generated and stored within the Earth",example:"Iceland relies heavily on geothermal energy because of its volcanic landscape.",translation:"ഭൗമതാപ",ipa:"/ˌdʒiːəʊˈθɜːməl/"},
-  {word:"smog",pos:"n.",meaning:"a thick haze of polluted air combining smoke and fog, common in industrial or urban areas",example:"Heavy smog settled over the city, prompting health warnings for vulnerable residents.",translation:"പുകമഞ്ഞ്",ipa:"/smɒɡ/"},
-  {word:"autonomy",pos:"n.",meaning:"the right or ability to make your own decisions and act independently",example:"Respecting a person's autonomy means allowing them to choose their own path in life.",translation:"സ്വയംഭരണം",ipa:"/ɔːˈtɒn.ə.mi/"},
-  {word:"virtue",pos:"n.",meaning:"a good moral quality or standard of behaviour",example:"Honesty is considered a fundamental virtue in most ethical traditions.",translation:"സദ്ഗുണം",ipa:"/ˈvɜː.tʃuː/"},
-  {word:"moral",pos:"adj.",meaning:"relating to principles of right and wrong behaviour",example:"She faced a difficult moral dilemma when she discovered her colleague's mistake.",translation:"നൈതിക",ipa:"/ˈmɒr.əl/"},
-  {word:"doctrine",pos:"n.",meaning:"a set of beliefs or principles held by a group or system of thought",example:"The philosophical doctrine challenged traditional views about human nature.",translation:"സിദ്ധാന്തം",ipa:"/ˈdɒk.trɪn/"},
-  {word:"altruism",pos:"n.",meaning:"the practice of caring about the needs of others before your own",example:"His decision to donate all his savings was a clear act of altruism.",translation:"പരോപകാരം",ipa:"/ˈæl.tru.ɪ.z əm/"},
-  {word:"dilemma",pos:"n.",meaning:"a situation in which you must choose between two equally difficult options",example:"The philosopher presented a classic ethical dilemma involving truth and loyalty.",translation:"ദ്വന്ദ്വസ്ഥിതി",ipa:"/dɪˈlem.ə/"},
-  {word:"relativism",pos:"n.",meaning:"the belief that truth and morality are not absolute but depend on context or culture",example:"Critics of relativism argue that some actions are universally wrong regardless of culture.",translation:"ആപേക്ഷികവാദം",ipa:"/ˈrel.ə.tɪ.vɪ.z əm/"},
-  {word:"integrity",pos:"n.",meaning:"the quality of being honest and having strong moral principles",example:"A leader with integrity will admit mistakes rather than hide them.",translation:"സത്യസന്ധത",ipa:"/ɪnˈteɡ.rɪ.ti/"},
-  {word:"conscientious",pos:"adj.",meaning:"taking care to do what is right and working hard to do things well",example:"A conscientious person considers the impact of their actions on others.",translation:"മനഃസാക്ഷിയുള്ള",ipa:"/ˌkɒn.ʃiˈen.ʃəs/"},
-  {word:"nihilism",pos:"n.",meaning:"the belief that life has no meaning, purpose, or value",example:"The novel explored nihilism through a character who rejected all social values.",translation:"നിഹിലിസം",ipa:"/ˈnaɪ.ɪ.lɪ.z əm/"},
-  {word:"consequentialism",pos:"n.",meaning:"the ethical theory that the morality of an action depends on its outcomes",example:"Consequentialism suggests that lying may be acceptable if it prevents serious harm.",translation:"പരിണാമവാദം",ipa:"/ˌkɒn.sɪˈkwen.ʃəl.ɪ.z əm/"},
-  {word:"prejudice",pos:"n.",meaning:"an unfair opinion about someone not based on reason or experience",example:"Philosophers argue that prejudice prevents us from thinking clearly about justice.",translation:"മുൻവിധി",ipa:"/ˈpredʒ.ʊ.dɪs/"},
-  {word:"rationalism",pos:"n.",meaning:"the belief that reason and logic, not emotions or religion, are the basis of knowledge",example:"Rationalism emphasizes using logical thinking to understand the world.",translation:"യുക്തിവാദം",ipa:"/ˈræʃ.ən.əl.ɪ.z əm/"},
-  {word:"compassion",pos:"n.",meaning:"a feeling of sympathy and care for people who are suffering",example:"Many ethical frameworks place compassion at the centre of moral behaviour.",translation:"അനുകമ്പ",ipa:"/kəmˈpæʃ.ən/"},
-  {word:"deontology",pos:"n.",meaning:"an ethical theory that judges actions based on rules and duties rather than results",example:"Deontology holds that some actions are inherently right or wrong, regardless of consequences.",translation:"കർത്തവ്യശാസ്ത്രം",ipa:"/ˌdiː.ɒnˈtɒl.ə.dʒi/"},
-  {word:"bias",pos:"n.",meaning:"an unfair preference for or against something that affects your judgement",example:"The philosopher warned that personal bias can distort our ethical reasoning.",translation:"പക്ഷപാതം",ipa:"/ˈbaɪ.əs/"},
-  {word:"hedonism",pos:"n.",meaning:"the belief that pleasure is the most important goal in life",example:"Hedonism argues that maximising personal pleasure is the key to a good life.",translation:"സുഖവാദം",ipa:"/ˈhiː.dən.ɪ.z əm/"},
-  {word:"subjective",pos:"adj.",meaning:"based on personal opinions and feelings rather than facts",example:"Ethical judgements can be highly subjective and vary from person to person.",translation:"ആത്മനിഷ്ഠ",ipa:"/səbˈdʒek.tɪv/"},
-  {word:"empathy",pos:"n.",meaning:"the ability to understand and share the feelings of another person",example:"Empathy is considered essential to making fair and kind ethical decisions.",translation:"സഹാനുഭൂതി",ipa:"/ˈem.pə.θi/"},
-  {word:"utilitarianism",pos:"n.",meaning:"the belief that the best action is the one that produces the greatest good for the greatest number",example:"Utilitarianism is often used to evaluate public health policies and their social impact.",translation:"ഉപയോഗിതാവാദം",ipa:"/juːˌtɪl.ɪˈteər.i.ə.nɪ.z əm/"},
-  {word:"stoicism",pos:"n.",meaning:"a philosophy that teaches self-control and accepting things you cannot change",example:"She practised stoicism by remaining calm during the most difficult periods of her life.",translation:"സ്ഥിതപ്രജ്ഞത",ipa:"/ˈstəʊ.ɪ.sɪ.z əm/"},
-  {word:"normative",pos:"adj.",meaning:"relating to a standard or rule that tells people how they should behave",example:"Normative ethics tries to determine what makes an action morally right or wrong.",translation:"മാനകപരമായ",ipa:"/ˈnɔː.mə.tɪv/"},
-  {word:"epistemology",pos:"n.",meaning:"the branch of philosophy concerned with the nature and limits of knowledge",example:"Epistemology asks fundamental questions such as how do we know what we know.",translation:"ജ്ഞാനശാസ്ത്രം",ipa:"/ɪˌpɪs.tɪˈmɒl.ə.dʒi/"},
-  {word:"impartial",pos:"adj.",meaning:"treating all people and groups equally without favouritism",example:"An impartial judge considers all evidence fairly before reaching a decision.",translation:"നിഷ്പക്ഷ",ipa:"/ɪmˈpɑː.ʃəl/"},
-  {word:"metaphysics",pos:"n.",meaning:"the branch of philosophy dealing with the fundamental nature of reality and existence",example:"Metaphysics explores questions like whether the mind and body are separate entities.",translation:"അതീന്ദ്രിയശാസ്ത്രം",ipa:"/ˌmet.əˈfɪz.ɪks/"},
-  {word:"skepticism",pos:"n.",meaning:"a questioning attitude towards claims that are accepted as true without sufficient evidence",example:"Philosophical skepticism encourages us to question assumptions we take for granted.",translation:"സന്ദേഹവാദം",ipa:"/ˈskep.tɪ.sɪ.z əm/"},
-  {word:"determinism",pos:"n.",meaning:"the belief that all events are caused by earlier events and that people have no free will",example:"Determinism raises the question of whether humans can be held responsible for their actions.",translation:"നിർണ്ണായകവാദം",ipa:"/dɪˈtɜː.mɪ.nɪ.z əm/"},
-  {word:"benevolent",pos:"adj.",meaning:"kind, generous, and wishing good things for others",example:"A benevolent leader makes decisions that prioritise the welfare of all citizens.",translation:"ഉദാരമതിയായ",ipa:"/bɪˈnev.əl.ənt/"},
-  {word:"allegiance",pos:"n.",meaning:"loyalty and commitment to a person, group, or principle",example:"The soldier's allegiance to his ethical principles prevented him from following unjust orders.",translation:"വിശ്വസ്തത",ipa:"/əˈliː.dʒəns/"},
-  {word:"dialectic",pos:"n.",meaning:"a method of reasoning that examines opposing ideas to find the truth",example:"Hegel used dialectic to explain how history progresses through conflict and resolution.",translation:"വാദപ്രതിവാദം",ipa:"/ˌdaɪ.əˈlek.tɪk/"},
-  {word:"cognitive",pos:"adj.",meaning:"related to mental processes such as thinking, learning, and memory",example:"The cognitive development of children is influenced by their early experiences.",translation:"ചിന്താപരമായ",ipa:"/ˈkɒɡ.nɪ.tɪv/"},
-  {word:"inhibition",pos:"n.",meaning:"a feeling that stops you from behaving naturally or expressing your true thoughts",example:"Her social inhibition made it difficult for her to speak in large groups.",translation:"തടഞ്ഞുനിർത്തൽ",ipa:"/ˌɪn.ɪˈbɪʃ.ən/"},
-  {word:"reinforce",pos:"v.",meaning:"to strengthen a behavior or belief by rewarding it or repeating it",example:"Praise can reinforce positive behavior in children effectively.",translation:"ശക്തിപ്പെടുത്തുക",ipa:"/ˌriː.ɪnˈfɔːs/"},
-  {word:"subconscious",pos:"adj.",meaning:"relating to thoughts or feelings you are not fully aware of",example:"Her subconscious fear of failure affected her performance at work.",translation:"അർദ്ധബോധാവസ്ഥയിലുള്ള",ipa:"/ˌsʌbˈkɒn.ʃəs/"},
-  {word:"disposition",pos:"n.",meaning:"a person's natural tendency to behave or feel in a certain way",example:"He has a cheerful disposition that makes him popular with colleagues.",translation:"സ്വഭാവപ്രവണത",ipa:"/ˌdɪs.pəˈzɪʃ.ən/"},
-  {word:"compulsion",pos:"n.",meaning:"a strong urge to do something that is difficult to control",example:"She felt a compulsion to check her phone every few minutes.",translation:"നിർബന്ധബോധം",ipa:"/kəmˈpʌl.ʃən/"},
-  {word:"stimulus",pos:"n.",meaning:"something that causes a reaction or response in a person or animal",example:"The loud noise served as a stimulus that triggered an immediate fear response.",translation:"ഉദ്ദീപനം",ipa:"/ˈstɪm.jʊ.ləs/"},
-  {word:"attachment",pos:"n.",meaning:"a strong emotional bond formed between a person and someone or something",example:"Secure attachment between a child and parent promotes healthy emotional development.",translation:"അനുബന്ധബന്ധം",ipa:"/əˈtætʃ.mənt/"},
-  {word:"repression",pos:"n.",meaning:"the unconscious blocking of painful thoughts or memories from the conscious mind",example:"Repression of traumatic memories can sometimes lead to anxiety later in life.",translation:"അടിച്ചമർത്തൽ",ipa:"/rɪˈpreʃ.ən/"},
-  {word:"gratification",pos:"n.",meaning:"a feeling of pleasure or satisfaction from getting what you want",example:"Delaying gratification is often linked to greater success in later life.",translation:"തൃപ്തിപ്പെടൽ",ipa:"/ˌɡræt.ɪ.fɪˈkeɪ.ʃən/"},
-  {word:"rationalize",pos:"v.",meaning:"to explain or justify behavior with logical-sounding reasons that may not be true",example:"He tried to rationalize his anger by blaming external circumstances.",translation:"യുക്തിസഹമാക്കുക",ipa:"/ˈræʃ.ən.əl.aɪz/"},
-  {word:"introvert",pos:"n.",meaning:"a person who prefers spending time alone and feels drained by social interaction",example:"As an introvert, she preferred reading at home to attending large parties.",translation:"അന്തർമുഖൻ",ipa:"/ˈɪn.trə.vɜːt/"},
-  {word:"extrovert",pos:"n.",meaning:"a person who is outgoing, sociable, and energized by being around other people",example:"The extrovert thrived in team environments where constant communication was required.",translation:"ബഹിർമുഖൻ",ipa:"/ˈeks.trə.vɜːt/"},
-  {word:"projection",pos:"n.",meaning:"attributing your own unacceptable feelings or thoughts to someone else",example:"His constant accusation that others were dishonest was considered a form of projection.",translation:"ആരോപണം",ipa:"/prəˈdʒek.ʃən/"},
-  {word:"resilience",pos:"n.",meaning:"the ability to recover quickly from difficulties or emotional stress",example:"Her resilience after the loss of her job was admired by everyone around her.",translation:"മനോദാർഢ്യം",ipa:"/rɪˈzɪl.i.əns/"},
-  {word:"aversion",pos:"n.",meaning:"a strong feeling of dislike or opposition toward something",example:"He developed an aversion to crowded places after a panic attack.",translation:"വെറുപ്പ്",ipa:"/əˈvɜː.ʃən/"},
-  {word:"conform",pos:"v.",meaning:"to behave in a way that matches what is expected or accepted by a group",example:"Many teenagers feel pressured to conform to the norms of their social group.",translation:"അനുരൂപപ്പെടുക",ipa:"/kənˈfɔːm/"},
-  {word:"neuroticism",pos:"n.",meaning:"a personality trait involving emotional instability, anxiety, and moodiness",example:"High levels of neuroticism can make a person more vulnerable to stress.",translation:"നാഡീരോഗസ്വഭാവം",ipa:"/njʊˈrɒt.ɪ.sɪ.z əm/"},
-  {word:"desensitization",pos:"n.",meaning:"the process of making someone less sensitive to something through repeated exposure",example:"Desensitization therapy helped him overcome his phobia of spiders gradually.",translation:"സംവേദനക്ഷമത കുറയ്ക്കൽ",ipa:"/ˌdiː.sen.sɪ.taɪˈzeɪ.ʃən/"},
-  {word:"manipulation",pos:"n.",meaning:"controlling or influencing someone unfairly or dishonestly for personal benefit",example:"She recognized the manipulation in his behavior and decided to distance herself.",translation:"കൗശലപൂർവ്വമായ നിയന്ത്രണം",ipa:"/məˌnɪp.jʊˈleɪ.ʃən/"},
-  {word:"behavioral",pos:"adj.",meaning:"relating to the way a person or animal acts or responds",example:"The therapist used behavioral techniques to help the patient manage anxiety.",translation:"പ്രവർത്തനപരമായ",ipa:"/bɪˈheɪ.vjər.əl/"},
-  {word:"perception",pos:"n.",meaning:"the way in which something is understood, interpreted, or experienced",example:"Our perception of a situation can be strongly influenced by past experiences.",translation:"ധാരണ",ipa:"/pəˈsep.ʃən/"},
-  {word:"narcissism",pos:"n.",meaning:"excessive self-admiration and lack of regard for other people's feelings",example:"His narcissism made it impossible for him to maintain long-term relationships.",translation:"സ്വയംപ്രേമം",ipa:"/ˈnɑː.sɪ.sɪ.z əm/"},
-  {word:"avoidance",pos:"n.",meaning:"the practice of keeping away from something unpleasant or feared",example:"Avoidance of social situations is a common symptom of social anxiety disorder.",translation:"ഒഴിവാക്കൽ",ipa:"/əˈvɔɪ.dəns/"},
-  {word:"intrinsic",pos:"adj.",meaning:"coming from within a person naturally, not because of external rewards",example:"Intrinsic motivation drives people to pursue activities simply because they enjoy them.",translation:"ആന്തരിക",ipa:"/ɪnˈtrɪn.zɪk/"},
-  {word:"habituation",pos:"n.",meaning:"the process of becoming used to something so that it no longer causes a strong reaction",example:"Habituation to city noise allows residents to sleep peacefully over time.",translation:"ശീലവൽക്കരണം",ipa:"/həˌbɪtʃ.uˈeɪ.ʃən/"},
-  {word:"assertiveness",pos:"n.",meaning:"the quality of expressing opinions and needs confidently without being aggressive",example:"Assertiveness training helped her communicate her boundaries more clearly at work.",translation:"ആത്മവിശ്വാസപൂർവ്വമായ ആവിഷ്കാരം",ipa:"/əˈsɜː.tɪv.nəs/"},
-  {word:"dysfunctional",pos:"adj.",meaning:"not working normally or in a healthy way, especially within a family or group",example:"Growing up in a dysfunctional household affected his ability to trust others.",translation:"തകരാറുള്ള",ipa:"/dɪsˈfʌŋk.ʃən.əl/"},
-  {word:"rumination",pos:"n.",meaning:"the habit of thinking deeply and repeatedly about problems or negative experiences",example:"Constant rumination about past mistakes was worsening her depression significantly.",translation:"ആഴത്തിലുള്ള ചിന്ത",ipa:"/ˌruː.mɪˈneɪ.ʃən/"},
-  {word:"catharsis",pos:"n.",meaning:"the release of strong emotions, especially through art, talking, or other activities",example:"Writing in her journal provided a sense of catharsis after the difficult breakup.",translation:"വൈകാരിക ശുദ്ധീകരണം",ipa:"/kəˈθɑː.sɪs/"},
-  {word:"algorithm",pos:"n.",meaning:"a set of rules or instructions that a computer follows to solve a problem",example:"The search engine uses a complex algorithm to rank websites by relevance.",translation:"അൽഗോരിതം",ipa:"/ˈælɡərɪðəm/"},
-  {word:"bandwidth",pos:"n.",meaning:"the amount of data that can be transmitted over an internet connection in a given time",example:"Streaming high-quality video requires a lot of bandwidth.",translation:"ബാൻഡ്‌വിഡ്ത്ത്",ipa:"/ˈbændwɪdθ/"},
-  {word:"cybersecurity",pos:"n.",meaning:"the practice of protecting computers, networks, and data from digital attacks",example:"Companies invest heavily in cybersecurity to protect customer information.",translation:"സൈബർ സുരക്ഷ",ipa:"/ˌsaɪbəsɪˈkjʊərɪti/"},
-  {word:"disruptive",pos:"adj.",meaning:"describing technology or ideas that completely change an existing industry or system",example:"Smartphones were disruptive technology that changed how people communicate.",translation:"തകരാറുണ്ടാക്കുന്ന",ipa:"/dɪsˈrʌptɪv/"},
-  {word:"encryption",pos:"n.",meaning:"the process of converting data into a coded format to prevent unauthorized access",example:"End-to-end encryption ensures that only the sender and receiver can read messages.",translation:"എൻക്രിപ്ഷൻ",ipa:"/ɪnˈkrɪpʃən/"},
-  {word:"firmware",pos:"n.",meaning:"permanent software programmed into a device's hardware to control its basic functions",example:"Updating the firmware on your router can improve its performance and security.",translation:"ഫേംവെയർ",ipa:"/ˈfɜːmweər/"},
-  {word:"gigabyte",pos:"n.",meaning:"a unit of digital information equal to approximately one billion bytes",example:"My new laptop has 512 gigabytes of storage space.",translation:"ഗിഗാബൈറ്റ്",ipa:"/ˈɡɪɡəbaɪt/"},
-  {word:"interface",pos:"n.",meaning:"a system or screen through which a user interacts with a computer or device",example:"The new software has a clean interface that is easy for beginners to use.",translation:"ഇന്റർഫേസ്",ipa:"/ˈɪntəfeɪs/"},
-  {word:"innovation",pos:"n.",meaning:"the introduction of new ideas, methods, or technologies",example:"Silicon Valley is famous for its culture of innovation and entrepreneurship.",translation:"നൂതനാശയം",ipa:"/ˌɪnəˈveɪʃən/"},
-  {word:"malware",pos:"n.",meaning:"software that is designed to damage or gain unauthorized access to a computer system",example:"He accidentally downloaded malware by clicking on a suspicious email link.",translation:"മാൽവെയർ",ipa:"/ˈmælweər/"},
-  {word:"nanotechnology",pos:"n.",meaning:"science and technology that works at an extremely small, atomic scale",example:"Nanotechnology is being used to develop more effective cancer treatments.",translation:"നാനോ സാങ്കേതിക വിദ്യ",ipa:"/ˌnænəʊtekˈnɒlədʒi/"},
-  {word:"obsolete",pos:"adj.",meaning:"no longer used or needed because something newer has replaced it",example:"Floppy disks became obsolete when USB drives were introduced.",translation:"കാലഹരണപ്പെട്ട",ipa:"/ˌɒbsəˈliːt/"},
-  {word:"patent",pos:"n.",meaning:"an official right granted to an inventor to be the only one to make or sell their invention",example:"The company filed a patent for its new battery technology.",translation:"പേറ്റന്റ്",ipa:"/ˈpeɪtənt/"},
-  {word:"quantum",pos:"adj.",meaning:"relating to an advanced form of computing that uses principles of quantum physics",example:"Quantum computing could solve problems that are impossible for regular computers.",translation:"ക്വാണ്ടം",ipa:"/ˈkwɒntəm/"},
-  {word:"scalable",pos:"adj.",meaning:"able to be expanded or adapted easily to handle more work or users",example:"The startup built a scalable platform that could support millions of users.",translation:"വിപുലമാക്കാവുന്ന",ipa:"/ˈskeɪləbəl/"},
-  {word:"semiconductor",pos:"n.",meaning:"a material that conducts electricity partially, used in making electronic components",example:"The global shortage of semiconductors disrupted car manufacturing worldwide.",translation:"അർദ്ധചാലകം",ipa:"/ˌsemikənˈdʌktər/"},
-  {word:"automation",pos:"n.",meaning:"the use of technology to perform tasks with minimal human involvement",example:"Automation in factories has increased production speed but reduced some jobs.",translation:"യന്ത്രവൽക്കരണം",ipa:"/ˌɔːtəˈmeɪʃən/"},
-  {word:"broadband",pos:"n.",meaning:"a high-speed internet connection that allows large amounts of data to be transmitted",example:"Rural areas often struggle to access reliable broadband internet.",translation:"ബ്രോഡ്ബാൻഡ്",ipa:"/ˈbrɔːdbænd/"},
-  {word:"cloud computing",pos:"phrase",meaning:"the delivery of computing services like storage and software over the internet",example:"Many businesses now rely on cloud computing instead of local servers.",translation:"ക്ലൗഡ് കമ്പ്യൂട്ടിംഗ്",ipa:"/klaʊd kəmˈpjuːtɪŋ/"},
-  {word:"deploy",pos:"v.",meaning:"to make software or a system available and ready for use",example:"The development team will deploy the new app update next Friday.",translation:"വിന്യസിക്കുക",ipa:"/dɪˈplɔɪ/"},
-  {word:"virtual reality",pos:"phrase",meaning:"a computer-generated simulation of a three-dimensional environment that users can interact with",example:"Virtual reality headsets are increasingly being used for medical training.",translation:"വർച്വൽ റിയാലിറ്റി",ipa:"/ˈvɜːtʃuəl riˈæləti/"},
-  {word:"obsolescence",pos:"n.",meaning:"the process of becoming outdated or no longer useful",example:"Planned obsolescence encourages consumers to replace their devices frequently.",translation:"കാലഹരണം",ipa:"/ˌɒbsəˈlesəns/"},
-  {word:"connectivity",pos:"n.",meaning:"the state of being connected, especially through the internet or a network",example:"The new 5G network promises faster connectivity across urban areas.",translation:"കണക്റ്റിവിറ്റി",ipa:"/kəˌnektɪˈvɪti/"},
-  {word:"diagnostic",pos:"adj.",meaning:"relating to identifying problems or faults in a system or device",example:"The technician ran a diagnostic test to find out why the computer kept crashing.",translation:"രോഗനിർണ്ണായക",ipa:"/ˌdaɪəɡˈnɒstɪk/"},
-  {word:"open-source",pos:"adj.",meaning:"describing software whose original code is freely available for anyone to use or modify",example:"Linux is a popular open-source operating system used by developers worldwide.",translation:"ഓപ്പൺ സോഴ്സ്",ipa:"/ˈəʊpən sɔːs/"},
-  {word:"pixel",pos:"n.",meaning:"the smallest unit of a digital image or display screen",example:"A higher pixel count results in a sharper and clearer screen image.",translation:"പിക്സൽ",ipa:"/ˈpɪksəl/"},
-  {word:"server",pos:"n.",meaning:"a computer or system that provides data and services to other computers on a network",example:"The website crashed because too many users overloaded the server at once.",translation:"സെർവർ",ipa:"/ˈsɜːvər/"},
-  {word:"wearable",pos:"adj.",meaning:"describing technology designed to be worn on the body, such as smartwatches",example:"Wearable fitness trackers help people monitor their daily exercise and heart rate.",translation:"ധരിക്കാവുന്ന",ipa:"/ˈweərəbəl/"},
-  {word:"augmented reality",pos:"phrase",meaning:"technology that overlays digital information onto a person's view of the real world",example:"Augmented reality apps allow shoppers to see how furniture looks in their home before buying.",translation:"ഓഗ്മെന്റഡ് റിയാലിറ്റി",ipa:"/ɔːɡˌmentɪd riˈæləti/"},
-  {word:"troubleshoot",pos:"v.",meaning:"to identify and fix problems in a system or device",example:"The IT support team was called in to troubleshoot the network connection issues.",translation:"പ്രശ്നം പരിഹരിക്കുക",ipa:"/ˈtrʌbəlʃuːt/"},
-  {word:"curriculum",pos:"n.",meaning:"the subjects and courses taught at a school or university",example:"The school updated its curriculum to include more science and technology subjects.",translation:"പാഠ്യപദ്ധതി",ipa:"/kəˈrɪk.jʊ.ləm/"},
-  {word:"plagiarism",pos:"n.",meaning:"copying someone else's work or ideas and presenting them as your own",example:"The student was expelled for plagiarism after copying an entire essay from the internet.",translation:"മറ്റൊരാളുടെ രചന മോഷ്ടിക്കൽ",ipa:"/ˈpleɪ.dʒə.rɪ.z əm/"},
-  {word:"dissertation",pos:"n.",meaning:"a long written study on a particular subject, especially for a university degree",example:"She spent two years writing her dissertation on medieval European history.",translation:"ഗവേഷണ പ്രബന്ധം",ipa:"/ˌdɪs.əˈteɪ.ʃən/"},
-  {word:"semester",pos:"n.",meaning:"one of two periods that a school or university year is divided into",example:"Students must register for their courses before the new semester begins.",translation:"അർദ്ധവർഷം",ipa:"/sɪˈmes.tər/"},
-  {word:"accreditation",pos:"n.",meaning:"official recognition that a school or course meets required standards",example:"The university received full accreditation from the national education board.",translation:"അംഗീകാരം",ipa:"/əˌkred.ɪˈteɪ.ʃən/"},
-  {word:"scholarship",pos:"n.",meaning:"money given to a student to help pay for their education, based on achievement or need",example:"She was awarded a full scholarship to study engineering at the university.",translation:"സ്കോളർഷിപ്പ്",ipa:"/ˈskɒl.ə.ʃɪp/"},
-  {word:"enrollment",pos:"n.",meaning:"the act of officially registering to join a school, course, or program",example:"Enrollment for the autumn term closes at the end of August.",translation:"പ്രവേശനം",ipa:"/ɪnˈrəʊl.mənt/"},
-  {word:"faculty",pos:"n.",meaning:"the teaching staff of a university or college department",example:"The faculty of the science department held a meeting to discuss new research projects.",translation:"അദ്ധ്യാപക വൃന്ദം",ipa:"/ˈfæk.əl.ti/"},
-  {word:"prerequisite",pos:"n.",meaning:"something required before you can do or study something else",example:"Passing the introductory course is a prerequisite for enrolling in advanced mathematics.",translation:"മുൻ‌ആവശ്യകത",ipa:"/ˌpriːˈrek.wɪ.zɪt/"},
-  {word:"thesis",pos:"n.",meaning:"a long piece of written work based on original research, submitted for a university degree",example:"He defended his thesis on climate policy before a panel of professors.",translation:"പ്രബന്ധം",ipa:"/ˈθiː.sɪs/"},
-  {word:"syllabus",pos:"n.",meaning:"an outline of the topics covered in a particular course or subject",example:"The professor handed out the syllabus on the first day of class.",translation:"പാഠ്യ രൂപരേഖ",ipa:"/ˈsɪl.ə.bəs/"},
-  {word:"tuition",pos:"n.",meaning:"the money paid for teaching or instruction, especially at a college or university",example:"Tuition fees at private universities have increased significantly over the past decade.",translation:"പഠന ഫീസ്",ipa:"/tjuːˈɪʃ.ən/"},
-  {word:"academic",pos:"adj.",meaning:"relating to education, schools, or scholarly study",example:"Her academic record was excellent, so she was accepted into the top university.",translation:"അക്കാദമിക",ipa:"/ˌæk.əˈdem.ɪk/"},
-  {word:"literacy",pos:"n.",meaning:"the ability to read and write; knowledge or skill in a particular area",example:"Improving literacy rates in rural areas remains a key goal for the government.",translation:"സാക്ഷരത",ipa:"/ˈlɪt.ər.ə.si/"},
-  {word:"mentorship",pos:"n.",meaning:"the guidance and support given by an experienced person to a less experienced one",example:"The mentorship program helped new students adapt to university life quickly.",translation:"മാർഗദർശനം",ipa:"/ˈmen.tɔː.ʃɪp/"},
-  {word:"pedagogy",pos:"n.",meaning:"the method and practice of teaching, especially as a subject of study",example:"The conference focused on modern pedagogy and how technology is changing classrooms.",translation:"അദ്ധ്യാപന ശാസ്ത്രം",ipa:"/ˈped.ə.ɡɒ.dʒi/"},
-  {word:"transcript",pos:"n.",meaning:"an official written record of a student's courses and grades",example:"She requested an official transcript to apply for a postgraduate program abroad.",translation:"ഔദ്യോഗിക മാർക്ക് രേഖ",ipa:"/ˈtræn.skrɪpt/"},
-  {word:"extracurricular",pos:"adj.",meaning:"relating to activities done outside of regular school lessons",example:"Participating in extracurricular activities helps students develop social and leadership skills.",translation:"പാഠ്യേതര",ipa:"/ˌek.strə.kəˈrɪk.jʊ.lər/"},
-  {word:"postgraduate",pos:"adj.",meaning:"relating to study done after completing a first university degree",example:"She enrolled in a postgraduate program to specialize in environmental law.",translation:"ബിരുദാനന്തര",ipa:"/ˌpəʊstˈɡræd.ju.ɪt/"},
-  {word:"internship",pos:"n.",meaning:"a temporary work placement, often unpaid, to gain experience in a professional field",example:"He completed a summer internship at a marketing firm before finishing his degree.",translation:"ഇന്റേൺഷിപ്പ്",ipa:"/ˈɪn.tɜːn.ʃɪp/"},
-  {word:"peer review",pos:"n.",meaning:"evaluation of academic work by other experts in the same field",example:"The research paper was accepted after passing a rigorous peer review process.",translation:"സഹ വിദഗ്ധ മൂല്യനിർണ്ണയം",ipa:"/ˈpɪər rɪˌvjuː/"},
-  {word:"undergraduate",pos:"n.",meaning:"a student who is studying for their first university degree",example:"Most undergraduates are required to take a foreign language course in their first year.",translation:"ബിരുദ വിദ്യാർഥി",ipa:"/ˌʌn.dəˈɡræd.ju.ɪt/"},
-  {word:"seminar",pos:"n.",meaning:"a small group class at university where students discuss a topic with a teacher",example:"The weekly seminar gave students the opportunity to debate philosophical ideas openly.",translation:"സെമിനാർ",ipa:"/ˈsem.ɪ.nɑːr/"},
-  {word:"citation",pos:"n.",meaning:"a reference to a published work used as evidence or source in academic writing",example:"Every citation in the essay must follow the university's referencing guidelines.",translation:"ഉദ്ധരണം",ipa:"/saɪˈteɪ.ʃən/"},
-  {word:"aptitude",pos:"n.",meaning:"a natural ability or skill for learning something quickly",example:"The test was designed to measure students' aptitude for logical and numerical reasoning.",translation:"സ്വാഭാവിക കഴിവ്",ipa:"/ˈæp.tɪ.tjuːd/"},
-  {word:"commencement",pos:"n.",meaning:"a graduation ceremony at a university or college",example:"Her parents flew in from abroad to attend her commencement ceremony.",translation:"ബിരുദദാന ചടങ്ങ്",ipa:"/kəˈmen.smənt/"},
-  {word:"lecture",pos:"n.",meaning:"a formal talk given to a group of students at a university on a specific subject",example:"The professor's lecture on quantum physics attracted students from different departments.",translation:"പ്രഭാഷണം",ipa:"/ˈlek.tʃər/"},
-  {word:"elective",pos:"n.",meaning:"an optional course that students can choose to take, in addition to required subjects",example:"She chose a psychology elective to broaden her understanding of human behavior.",translation:"ഐച്ഛിക വിഷയം",ipa:"/ɪˈlek.tɪv/"},
-  {word:"tenure",pos:"n.",meaning:"a permanent position given to a professor after a period of successful teaching and research",example:"After years of dedicated research, she was finally granted tenure at the university.",translation:"സ്ഥിര നിയമനം",ipa:"/ˈten.jər/"},
-  {word:"assessment",pos:"n.",meaning:"a test or evaluation used to measure a student's knowledge or performance",example:"The final assessment accounted for sixty percent of the student's overall grade.",translation:"മൂല്യനിർണ്ണയം",ipa:"/əˈses.mənt/"},
-  {word:"prognosis",pos:"n.",meaning:"a doctor's prediction about how a disease or illness will develop",example:"The doctor gave a positive prognosis, saying the patient would likely recover within two weeks.",translation:"രോഗനിർണ്ണയ പ്രവചനം",ipa:"/prɒɡˈnoʊsɪs/"},
-  {word:"palliative",pos:"adj.",meaning:"relating to treatment that reduces pain or symptoms without curing the disease",example:"The hospital offered palliative care to patients with terminal illnesses to improve their comfort.",translation:"ശമനകരമായ",ipa:"/ˈpæliətɪv/"},
-  {word:"chronic",pos:"adj.",meaning:"describing an illness or condition that lasts for a long time or keeps returning",example:"She has been managing chronic back pain for several years through physiotherapy.",translation:"ദീർഘകാലീനമായ",ipa:"/ˈkrɒnɪk/"},
-  {word:"remission",pos:"n.",meaning:"a period when the symptoms of a serious illness, especially cancer, decrease or disappear",example:"After months of chemotherapy, the patient's cancer went into full remission.",translation:"രോഗശമനം",ipa:"/rɪˈmɪʃən/"},
-  {word:"immunity",pos:"n.",meaning:"the ability of the body to resist or fight off infections and diseases",example:"Vaccination helps build immunity against dangerous infectious diseases.",translation:"പ്രതിരോധശക്തി",ipa:"/ɪˈmjuːnɪti/"},
-  {word:"inflammation",pos:"n.",meaning:"a condition where part of the body becomes red, swollen, and painful as a reaction to infection or injury",example:"The doctor explained that inflammation in the joints was causing the patient's severe discomfort.",translation:"വീക്കം",ipa:"/ɪnˌflæməˈeɪʃən/"},
-  {word:"hemorrhage",pos:"n.",meaning:"heavy or uncontrolled bleeding inside the body or from a wound",example:"The surgeon acted quickly to stop the internal hemorrhage during the emergency operation.",translation:"രക്തസ്രാവം",ipa:"/ˈhemərɪdʒ/"},
-  {word:"pathogen",pos:"n.",meaning:"a microorganism such as a virus or bacterium that causes disease",example:"Researchers identified the pathogen responsible for the recent outbreak of respiratory illness.",translation:"രോഗകാരി",ipa:"/ˈpæθədʒən/"},
-  {word:"sedative",pos:"n.",meaning:"a drug or medicine that calms a person and makes them feel sleepy or relaxed",example:"The patient was given a mild sedative before the surgical procedure to reduce anxiety.",translation:"ഉറക്കമരുന്ന്",ipa:"/ˈsedətɪv/"},
-  {word:"biopsy",pos:"n.",meaning:"a medical test where a small sample of tissue is removed from the body to be examined",example:"The doctor ordered a biopsy to determine whether the growth was cancerous or benign.",translation:"ബയോപ്സി",ipa:"/ˈbaɪɒpsi/"},
-  {word:"susceptible",pos:"adj.",meaning:"likely to be affected by a disease or health problem; having low resistance",example:"Elderly people are more susceptible to serious complications from influenza than younger adults.",translation:"ബാധിക്കപ്പെടാൻ സാധ്യതയുള്ള",ipa:"/səˈseptɪbəl/"},
-  {word:"congenital",pos:"adj.",meaning:"describing a disease or condition that a person is born with",example:"The infant was diagnosed with a congenital heart defect that required surgery in early childhood.",translation:"ജന്മനാ ഉള്ള",ipa:"/kənˈdʒenɪtəl/"},
-  {word:"lethal",pos:"adj.",meaning:"capable of causing death; extremely dangerous to health",example:"The toxicologist warned that even a small dose of the substance could be lethal.",translation:"മാരകമായ",ipa:"/ˈliːθəl/"},
-  {word:"antibody",pos:"n.",meaning:"a protein produced by the immune system to fight a specific infection or disease",example:"Blood tests showed that she had developed antibodies against the virus after her recovery.",translation:"പ്രതിരോധ പ്രോട്ടീൻ",ipa:"/ˈæntɪbɒdi/"},
-  {word:"malignant",pos:"adj.",meaning:"describing a tumor or disease that is cancerous and likely to spread to other parts of the body",example:"The biopsy confirmed that the tumor was malignant and required immediate treatment.",translation:"മാരകമായ (കാൻസർ)",ipa:"/məˈlɪɡnənt/"},
-  {word:"anesthesia",pos:"n.",meaning:"the use of drugs to prevent a patient from feeling pain during a medical procedure",example:"The patient was placed under general anesthesia before the six-hour operation began.",translation:"അനസ്തേഷ്യ",ipa:"/ˌænɪsˈθiːziə/"},
-  {word:"rehabilitation",pos:"n.",meaning:"a program of treatment and exercise that helps a person recover their health or abilities",example:"After the stroke, he underwent months of rehabilitation to regain his ability to speak and walk.",translation:"പുനരധിവാസം",ipa:"/ˌriːhəˌbɪlɪˈteɪʃən/"},
-  {word:"autoimmune",pos:"adj.",meaning:"relating to a condition where the body's immune system attacks its own healthy cells",example:"Rheumatoid arthritis is an autoimmune disease in which the immune system damages the joints.",translation:"സ്വയം പ്രതിരോധ സംബന്ധമായ",ipa:"/ˌɔːtəʊɪˈmjuːn/"},
-  {word:"metabolism",pos:"n.",meaning:"the chemical processes in the body that convert food into energy and support vital functions",example:"A slow metabolism can make it more difficult for a person to maintain a healthy body weight.",translation:"ഉപാപചയം",ipa:"/məˈtæbəlɪzəm/"},
-  {word:"contraindication",pos:"n.",meaning:"a medical reason why a particular treatment or drug should not be used for a patient",example:"A known allergy to penicillin is a contraindication for prescribing that antibiotic.",translation:"വിപരീതസൂചന",ipa:"/ˌkɒntrəˌɪndɪˈkeɪʃən/"},
-  {word:"proclivity",pos:"n.",meaning:"a natural tendency to develop a particular health condition or behavior",example:"Some individuals have a genetic proclivity toward developing type 2 diabetes later in life.",translation:"സ്വാഭാവിക പ്രവണത",ipa:"/prəˈklɪvɪti/"},
-  {word:"defibrillator",pos:"n.",meaning:"a medical device that delivers an electric shock to restart a heart beating abnormally",example:"The nurse used a defibrillator to restore a normal heart rhythm in the cardiac arrest patient.",translation:"ഹൃദയ ഷോക്ക് ഉപകരണം",ipa:"/dɪˈfɪbrɪleɪtər/"},
-  {word:"quarantine",pos:"n.",meaning:"a period of isolation imposed on people who may have been exposed to a contagious disease",example:"Travelers arriving from affected regions were placed in quarantine to prevent the spread of infection.",translation:"ക്വാറന്റൈൻ",ipa:"/ˈkwɒrəntiːn/"},
-  {word:"placebo",pos:"n.",meaning:"a harmless substance given to a patient as if it were real medicine, often used in clinical trials",example:"Half of the participants in the drug trial were unknowingly given a placebo instead of the actual medication.",translation:"പ്ലാസിബോ",ipa:"/pləˈsiːboʊ/"},
-  {word:"dormant",pos:"adj.",meaning:"describing a virus or disease that is present in the body but not currently active or causing symptoms",example:"The herpes virus can remain dormant in the nervous system for years before an outbreak occurs.",translation:"നിദ്രാവസ്ഥയിലുള്ള",ipa:"/ˈdɔːmənt/"},
-  {word:"suture",pos:"n.",meaning:"a stitch or thread used by a surgeon to close a wound or incision after surgery",example:"The surgeon used dissolving sutures to close the wound so there would be no need to remove them later.",translation:"തുന്നൽ (ശസ്ത്രക്രിയ)",ipa:"/ˈsuːtʃər/"},
-  {word:"benign",pos:"adj.",meaning:"describing a tumor or growth that is not cancerous and does not spread to other parts of the body",example:"The patient was greatly relieved when the doctor confirmed that the lump was benign and harmless.",translation:"അർബുദരഹിതമായ",ipa:"/bɪˈnaɪn/"},
-  {word:"epidemiology",pos:"n.",meaning:"the study of how diseases spread and are distributed within populations",example:"Epidemiology played a key role in tracking the origin and spread of the new infectious disease.",translation:"മഹാമാരി ശാസ്ത്രം",ipa:"/ˌepɪˌdiːmiˈɒlədʒi/"},
-  {word:"triage",pos:"n.",meaning:"the process of sorting patients according to the urgency of their medical needs in an emergency",example:"Nurses performed triage at the entrance of the emergency room to identify the most critical cases.",translation:"രോഗി വർഗ്ഗീകരണം",ipa:"/ˈtriːɑːʒ/"},
-  {word:"lesion",pos:"n.",meaning:"an area of tissue in the body that has been damaged or injured by disease or trauma",example:"The MRI scan revealed a small lesion on the patient's brain that required further investigation.",translation:"ക്ഷതം",ipa:"/ˈliːʒən/"},
-  {word:"mosaic",pos:"n.",meaning:"a picture or pattern made by arranging small colored pieces of stone, glass, or tile",example:"The artist created a stunning mosaic on the wall of the city library.",translation:"മൊസൈക്ക്",ipa:"/moʊˈzeɪ.ɪk/"},
-  {word:"mural",pos:"n.",meaning:"a large painting made directly on a wall or ceiling",example:"The mural depicting local history stretched across the entire side of the building.",translation:"ചുവർചിത്രം",ipa:"/ˈmjʊər.əl/"},
-  {word:"sculpture",pos:"n.",meaning:"a three-dimensional work of art made by shaping materials such as stone, wood, or metal",example:"The sculpture in the town square was carved from a single block of marble.",translation:"ശില്പം",ipa:"/ˈskʌlp.tʃər/"},
-  {word:"repertoire",pos:"n.",meaning:"the collection of works that a performer or group is able to perform",example:"The orchestra expanded its repertoire to include more contemporary compositions.",translation:"പ്രദർശന ശേഖരം",ipa:"/ˈrep.ər.twɑːr/"},
-  {word:"curator",pos:"n.",meaning:"a person responsible for managing and organizing a museum or art collection",example:"The curator arranged the paintings in a way that told a clear historical story.",translation:"ക്യൂറേറ്റർ",ipa:"/kjʊˈreɪ.tər/"},
-  {word:"aesthetics",pos:"n.",meaning:"the study or appreciation of beauty, especially in art and design",example:"She studied aesthetics at university and later became an art critic.",translation:"സൗന്ദര്യശാസ്ത്രം",ipa:"/esˈθet.ɪks/"},
-  {word:"narrative",pos:"n.",meaning:"a spoken or written story or account of connected events",example:"The film's powerful narrative kept the audience engaged from beginning to end.",translation:"ആഖ്യാനം",ipa:"/ˈnær.ə.tɪv/"},
-  {word:"genre",pos:"n.",meaning:"a particular style or category of art, music, literature, or film",example:"Her novels belong to the literary fiction genre rather than popular romance.",translation:"ഗണം",ipa:"/ˈʒɒn.rə/"},
-  {word:"improvisation",pos:"n.",meaning:"the act of creating or performing something without preparation or a script",example:"Jazz music often involves a great deal of improvisation from the musicians.",translation:"സ്വതഃസ്ഫൂർത്തിയായ പ്രകടനം",ipa:"/ɪmˌprɒv.ɪˈzeɪ.ʃən/"},
-  {word:"choreography",pos:"n.",meaning:"the art or practice of designing and arranging sequences of movements in dance",example:"The choreography of the ballet was praised for its creativity and precision.",translation:"നൃത്തരചന",ipa:"/ˌkɒr.iˈɒɡ.rə.fi/"},
-  {word:"patron",pos:"n.",meaning:"a person who gives financial support to an artist, organization, or cause",example:"The wealthy patron donated funds to help the struggling theatre company survive.",translation:"പ്രായോജകൻ",ipa:"/ˈpeɪ.trən/"},
-  {word:"motif",pos:"n.",meaning:"a repeated decorative design, symbol, or theme in art or literature",example:"The lotus motif appeared throughout the ancient paintings in the temple.",translation:"രൂപകം",ipa:"/moʊˈtiːf/"},
-  {word:"avant-garde",pos:"adj.",meaning:"new, original, and experimental, especially in art or culture",example:"The gallery specialized in avant-garde works that challenged traditional ideas of beauty.",translation:"മുൻഗാമി",ipa:"/ˌæv.ɒ̃ˈɡɑːrd/"},
-  {word:"accolade",pos:"n.",meaning:"an award, honor, or strong praise given in recognition of achievement",example:"The director received several accolades for her groundbreaking documentary film.",translation:"പ്രശംസ",ipa:"/ˈæk.ə.leɪd/"},
-  {word:"vernacular",pos:"n.",meaning:"the language or dialect spoken by ordinary people in a region; also refers to local artistic styles",example:"The novelist wrote in the vernacular of rural communities, making the story feel authentic.",translation:"പ്രാദേശിക ഭാഷ",ipa:"/vəˈnæk.jʊ.lər/"},
-  {word:"opus",pos:"n.",meaning:"a major artistic work, often numbered in a composer's or artist's output",example:"Many consider Beethoven's ninth symphony to be his greatest opus.",translation:"കലാസൃഷ്ടി",ipa:"/ˈoʊ.pəs/"},
-  {word:"prose",pos:"n.",meaning:"ordinary written language, without the structured rhythm or rhyme of poetry",example:"She preferred writing prose to poetry because she enjoyed developing long narratives.",translation:"ഗദ്യം",ipa:"/proʊz/"},
-  {word:"allegory",pos:"n.",meaning:"a story or artwork with a hidden meaning, often representing moral or political ideas",example:"The novel is an allegory about the dangers of unchecked political power.",translation:"ഉപമാഖ്യാനം",ipa:"/ˈæl.ɪ.ɡɔːr.i/"},
-  {word:"heritage",pos:"n.",meaning:"traditions, values, and cultural practices passed down through generations",example:"The government invested in preserving the country's musical heritage for future generations.",translation:"പൈതൃകം",ipa:"/ˈher.ɪ.tɪdʒ/"},
-  {word:"revive",pos:"v.",meaning:"to bring something back into use, existence, or popularity after a period of decline",example:"Local artists worked together to revive traditional weaving techniques nearly lost to time.",translation:"പുനരുജ്ജീവിപ്പിക്കുക",ipa:"/rɪˈvaɪv/"},
-  {word:"tableau",pos:"n.",meaning:"a vivid or striking group scene, often arranged like a still image or painting",example:"The final scene of the play ended with a dramatic tableau of the entire cast frozen in place.",translation:"ചിത്രദൃശ്യം",ipa:"/ˈtæb.loʊ/"},
-  {word:"satirical",pos:"adj.",meaning:"using humor, irony, or exaggeration to criticize or mock people or society",example:"The satirical cartoon poked fun at corrupt politicians in a way that resonated with the public.",translation:"പരിഹാസാത്മകമായ",ipa:"/səˈtɪr.ɪ.kəl/"},
-  {word:"pastel",pos:"n.",meaning:"a soft, pale color; also a type of chalk-like crayon used in art",example:"The artist used pastels to create soft, dreamlike portraits of children.",translation:"പേസ്റ്റൽ നിറം",ipa:"/ˈpæs.təl/"},
-  {word:"ensemble",pos:"n.",meaning:"a group of musicians, actors, or dancers who perform together",example:"The chamber ensemble performed a series of pieces by Baroque composers.",translation:"കലാകൂട്ടം",ipa:"/ɒnˈsɒm.bəl/"},
-  {word:"depict",pos:"v.",meaning:"to show or represent something in a picture, story, or other artistic work",example:"The painting depicts a busy market scene from eighteenth-century Paris.",translation:"ചിത്രീകരിക്കുക",ipa:"/dɪˈpɪkt/"},
-  {word:"fresco",pos:"n.",meaning:"a type of painting done on wet plaster on a wall or ceiling",example:"The Renaissance fresco covering the chapel ceiling took over four years to complete.",translation:"ഫ്രെസ്കോ ചിത്രം",ipa:"/ˈfres.koʊ/"},
-  {word:"lyrical",pos:"adj.",meaning:"expressing deep personal feelings in a beautiful or musical way",example:"Her lyrical prose style made even simple everyday scenes feel poetic and moving.",translation:"ഗേയാത്മകമായ",ipa:"/ˈlɪr.ɪ.kəl/"},
-  {word:"exhibition",pos:"n.",meaning:"a public display of works of art, products, or other items of interest",example:"The photography exhibition attracted thousands of visitors over its two-week run.",translation:"പ്രദർശനം",ipa:"/ˌek.sɪˈbɪʃ.ən/"},
-  {word:"commemorate",pos:"v.",meaning:"to honor the memory of a person or event, especially through a ceremony or work of art",example:"The monument was built to commemorate the lives lost during the civil war.",translation:"അനുസ്മരിക്കുക",ipa:"/kəˈmem.ə.reɪt/"},
-  {word:"etching",pos:"n.",meaning:"a print made from a metal plate on which a design has been drawn with acid",example:"The museum acquired a rare etching by Rembrandt as part of its print collection.",translation:"ആൻഡ് കൊത്തുചിത്രം",ipa:"/ˈetʃ.ɪŋ/"},
-  {word:"marginalize",pos:"v.",meaning:"to treat a person or group as unimportant or exclude them from power and society",example:"Certain policies tend to marginalize low-income communities by denying them access to quality education.",translation:"അരികുവൽക്കരിക്കുക",ipa:"/ˈmɑːrdʒɪnəlaɪz/"},
-  {word:"disparity",pos:"n.",meaning:"a great difference, especially one that is unfair, between two or more things",example:"There is a growing disparity in wages between the richest and poorest workers in the country.",translation:"അസമത്വം",ipa:"/dɪˈspærɪti/"},
-  {word:"oppression",pos:"n.",meaning:"cruel, unjust treatment or control of a group of people by those with power",example:"Generations of oppression made it difficult for the community to achieve social and economic progress.",translation:"അടിച്ചമർത്തൽ",ipa:"/əˈprɛʃən/"},
-  {word:"stigma",pos:"n.",meaning:"a strong feeling of disapproval that society has toward something, often unfairly",example:"There is still a significant stigma attached to mental illness in many cultures.",translation:"കളങ്കം",ipa:"/ˈstɪɡmə/"},
-  {word:"segregation",pos:"n.",meaning:"the practice of separating people of different races, religions, or genders in society",example:"Racial segregation in schools was legally ended decades ago, but its effects are still felt today.",translation:"വിഭജനം",ipa:"/ˌsɛɡrɪˈɡeɪʃən/"},
-  {word:"exploitation",pos:"n.",meaning:"the act of treating someone unfairly in order to benefit from their work or situation",example:"Many activists campaign against the exploitation of migrant workers in the agricultural sector.",translation:"ചൂഷണം",ipa:"/ˌɛksplɔɪˈteɪʃən/"},
-  {word:"disproportionate",pos:"adj.",meaning:"too large or too small compared to something else, in a way that seems unfair",example:"Minority groups face a disproportionate number of arrests compared to their share of the population.",translation:"അനുപാതരഹിതമായ",ipa:"/ˌdɪsprəˈpɔːrʃənɪt/"},
-  {word:"advocacy",pos:"n.",meaning:"public support for a particular cause, policy, or group of people",example:"Her lifelong advocacy for women's rights helped change several important laws.",translation:"വക്കാലത്ത്",ipa:"/ˈædvəkəsi/"},
-  {word:"systemic",pos:"adj.",meaning:"relating to a problem that exists throughout an entire system or society, not just in one part",example:"Experts argue that systemic racism must be addressed through structural policy changes.",translation:"വ്യവസ്ഥാപരമായ",ipa:"/sɪˈstɛmɪk/"},
-  {word:"solidarity",pos:"n.",meaning:"unity and agreement among a group of people who share the same goals or concerns",example:"Workers showed solidarity by going on strike together to demand fairer wages.",translation:"ഐക്യദാർഢ്യം",ipa:"/ˌsɒlɪˈdærɪti/"},
-  {word:"empower",pos:"v.",meaning:"to give someone the confidence, authority, or means to do something or take control of their life",example:"The program aims to empower young women from disadvantaged backgrounds to start their own businesses.",translation:"ശക്തിപ്പെടുത്തുക",ipa:"/ɪmˈpaʊər/"},
-  {word:"philanthropy",pos:"n.",meaning:"the practice of giving money or time to help people who are poor or in need",example:"His philanthropy funded new schools and hospitals in some of the poorest regions of the country.",translation:"പരോപകാരം",ipa:"/fɪˈlænθrəpi/"},
-  {word:"xenophobia",pos:"n.",meaning:"extreme dislike or fear of people from other countries or cultures",example:"The rise in xenophobia has made it harder for immigrants to feel safe and welcome.",translation:"അന്യദേശഭയം",ipa:"/ˌzɛnəˈfoʊbiə/"},
-  {word:"homelessness",pos:"n.",meaning:"the state of having no permanent home or place to live",example:"The city launched a new initiative to tackle homelessness by providing affordable housing.",translation:"ഭവനരഹിതത്വം",ipa:"/ˈhoʊmlɪsnɪs/"},
-  {word:"intersectionality",pos:"n.",meaning:"the way in which different forms of discrimination, such as racism and sexism, combine and overlap",example:"Understanding intersectionality helps explain why some women face greater workplace challenges than others.",translation:"ഛേദബിന്ദുത്വം",ipa:"/ˌɪntərsɛkʃəˈnælɪti/"},
-  {word:"redress",pos:"n.",meaning:"compensation or remedy for a wrong or grievance that has been suffered",example:"Victims of discrimination sought legal redress for the harm caused by their employer.",translation:"പ്രതിവിധി",ipa:"/rɪˈdrɛs/"},
-  {word:"paternalism",pos:"n.",meaning:"the practice of controlling people in a way that limits their freedom, supposedly for their own good",example:"Critics accused the government of paternalism when it introduced laws restricting personal lifestyle choices.",translation:"പിതൃത്വവാദം",ipa:"/pəˈtɜːrnəlɪzəm/"},
-  {word:"gentrification",pos:"n.",meaning:"the process by which a poor urban area is changed by wealthier people moving in, often displacing original residents",example:"Rapid gentrification in the neighborhood has forced many long-term residents to move elsewhere.",translation:"സമ്പന്നവൽക്കരണം",ipa:"/ˌdʒɛntrɪfɪˈkeɪʃən/"},
-  {word:"privilege",pos:"n.",meaning:"a special advantage or benefit enjoyed by a particular group that others do not have",example:"Many sociologists argue that recognizing one's own privilege is the first step toward achieving equality.",translation:"പ്രത്യേകാവകാശം",ipa:"/ˈprɪvɪlɪdʒ/"},
-  {word:"impoverished",pos:"adj.",meaning:"made very poor; lacking the basic things needed for a decent standard of living",example:"The NGO works in impoverished rural areas to provide clean water and nutritious food.",translation:"ദരിദ്രമാക്കപ്പെട്ട",ipa:"/ɪmˈpɒvərɪʃt/"},
-  {word:"disengage",pos:"v.",meaning:"to stop being involved or interested in something, especially a social or political issue",example:"Young people tend to disengage from politics when they feel their voices are not being heard.",translation:"വിട്ടുമാറുക",ipa:"/ˌdɪsɪnˈɡeɪdʒ/"},
-  {word:"affirmative action",pos:"phrase",meaning:"a policy that favors groups who have previously suffered from discrimination to promote equality",example:"The university's affirmative action policy helped increase diversity among its student population.",translation:"ക്രിയാത്മക നടപടി",ipa:"/əˈfɜːrmətɪv ˈækʃən/"},
-  {word:"discrimination",pos:"n.",meaning:"unfair treatment of a person or group based on characteristics such as race, gender, or age",example:"The new law prohibits discrimination in the workplace based on religion or ethnicity.",translation:"വിവേചനം",ipa:"/dɪˌskrɪmɪˈneɪʃən/"},
-  {word:"subjugation",pos:"n.",meaning:"the act of bringing someone or a group under control through the use of force or power",example:"Historical subjugation of indigenous peoples has had lasting consequences on their social standing.",translation:"അടിമത്തം",ipa:"/ˌsʌbdʒʊˈɡeɪʃən/"},
-  {word:"grassroots",pos:"adj.",meaning:"relating to ordinary people in society, rather than leaders or people in power",example:"The grassroots campaign gained enormous public support by addressing the real concerns of local communities.",translation:"ജനകീയ",ipa:"/ˈɡrɑːsruːts/"},
-  {word:"underrepresented",pos:"adj.",meaning:"not having enough members of a particular group in a position or organization",example:"Women remain underrepresented in senior leadership roles across most industries.",translation:"കുറഞ്ഞ പ്രാതിനിധ്യമുള്ള",ipa:"/ˌʌndəˌrɛprɪˈzɛntɪd/"},
-  {word:"classism",pos:"n.",meaning:"prejudice or discrimination against people based on their social or economic class",example:"Classism in the hiring process often prevents talented candidates from lower-income backgrounds from getting jobs.",translation:"വർഗ്ഗഭേദം",ipa:"/ˈklɑːsɪzəm/"},
-  {word:"destitution",pos:"n.",meaning:"the state of being extremely poor and having no resources or means of support",example:"After losing their jobs and homes, the family fell into complete destitution.",translation:"ദാരിദ്ര്യം",ipa:"/ˌdɛstɪˈtjuːʃən/"},
-  {word:"inclusivity",pos:"n.",meaning:"the practice of including all types of people and making everyone feel welcome and valued",example:"The school's commitment to inclusivity ensured that students of all abilities could participate fully.",translation:"ഉൾക്കൊള്ളൽ",ipa:"/ɪnˌkluːsɪˈvɪti/"},
-  {word:"envoy",pos:"n.",meaning:"a person sent by a government to represent it in another country",example:"The president dispatched a special envoy to resolve the border dispute.",translation:"ദൂതൻ",ipa:"/ˈɛnvɔɪ/"},
-  {word:"accord",pos:"n.",meaning:"a formal agreement between countries or groups",example:"The two nations signed a peace accord after months of tension.",translation:"ഉടമ്പടി",ipa:"/əˈkɔːrd/"},
-  {word:"annexation",pos:"n.",meaning:"the act of taking control of another country's territory",example:"The annexation of the region caused widespread international criticism.",translation:"പ്രദേശം കൂട്ടിച്ചേർക്കൽ",ipa:"/ˌænɪkˈseɪʃən/"},
-  {word:"multilateral",pos:"adj.",meaning:"involving three or more countries or parties",example:"A multilateral agreement was reached at the summit to reduce trade barriers.",translation:"ബഹുപക്ഷ",ipa:"/ˌmʌltiˈlætərəl/"},
-  {word:"détente",pos:"n.",meaning:"a period of improved relations between countries that were previously hostile",example:"The Cold War era saw brief moments of détente between the superpowers.",translation:"ബന്ധ ലഘൂകരണം",ipa:"/deɪˈtɑːnt/"},
-  {word:"consulate",pos:"n.",meaning:"the official building where a consul works to assist citizens abroad",example:"She visited the consulate to renew her passport while living overseas.",translation:"കോൺസുലേറ്റ്",ipa:"/ˈkɒnsjʊlɪt/"},
-  {word:"proxy",pos:"n.",meaning:"a person or group acting on behalf of another, often in a conflict",example:"The two superpowers fought a proxy war through smaller allied nations.",translation:"പ്രതിനിധി",ipa:"/ˈprɒksi/"},
-  {word:"hegemony",pos:"n.",meaning:"leadership or dominance of one country over others",example:"Many smaller nations resisted the cultural hegemony of larger powers.",translation:"ആധിപത്യം",ipa:"/hɪˈɡɛməni/"},
-  {word:"protocol",pos:"n.",meaning:"the official rules of behaviour in diplomatic situations",example:"The visiting dignitary was welcomed according to strict diplomatic protocol.",translation:"നയതന്ത്ര ചട്ടം",ipa:"/ˈprəʊtəkɒl/"},
-  {word:"insurgency",pos:"n.",meaning:"an organized rebellion against a government or occupying force",example:"The government struggled to contain the growing insurgency in the northern region.",translation:"കലാപം",ipa:"/ɪnˈsɜːdʒənsi/"},
-  {word:"nonalignment",pos:"n.",meaning:"the policy of not supporting either side in a conflict between major powers",example:"Many developing nations adopted nonalignment during the Cold War.",translation:"നിരപേക്ഷത",ipa:"/ˌnɒnəˈlaɪnmənt/"},
-  {word:"ceasefire",pos:"n.",meaning:"an agreement to stop fighting temporarily",example:"Both sides agreed to a ceasefire to allow humanitarian aid into the region.",translation:"വെടിനിർത്തൽ",ipa:"/ˈsiːsfaɪər/"},
-  {word:"reparations",pos:"n.",meaning:"money paid by a country as punishment for damage caused during a war",example:"The defeated nation was required to pay reparations to its former enemies.",translation:"നഷ്ടപരിഹാരം",ipa:"/ˌrɛpəˈreɪʃənz/"},
-  {word:"coup",pos:"n.",meaning:"a sudden seizure of power from a government, often by military force",example:"The military staged a coup overnight, taking control of the capital.",translation:"അട്ടിമറി",ipa:"/kuː/"},
-  {word:"asylum",pos:"n.",meaning:"protection given by a country to someone who has left their home country as a refugee",example:"The journalist was granted political asylum after fleeing persecution.",translation:"അഭയം",ipa:"/əˈsaɪləm/"},
-  {word:"mediator",pos:"n.",meaning:"a neutral person or country that helps two sides reach an agreement",example:"The UN appointed a mediator to facilitate peace talks between the warring factions.",translation:"മധ്യസ്ഥൻ",ipa:"/ˈmiːdieɪtər/"},
-  {word:"espionage",pos:"n.",meaning:"the practice of spying to obtain secret information from another country",example:"The diplomat was expelled following accusations of espionage.",translation:"ചാരപ്രവൃത്തി",ipa:"/ˈɛspiənɑːʒ/"},
-  {word:"humanitarian",pos:"adj.",meaning:"concerned with improving people's lives and reducing suffering",example:"Several countries sent humanitarian aid to the disaster-stricken nation.",translation:"മാനവികത",ipa:"/hjuːˌmænɪˈteəriən/"},
-  {word:"proliferation",pos:"n.",meaning:"a rapid increase or spread, especially of nuclear weapons",example:"World leaders gathered to discuss the prevention of nuclear proliferation.",translation:"വ്യാപനം",ipa:"/prəˌlɪfəˈreɪʃən/"},
-  {word:"pact",pos:"n.",meaning:"a formal agreement between two or more countries",example:"The two neighbouring countries formed a security pact to protect their shared border.",translation:"ഉടമ്പടി",ipa:"/pækt/"},
-  {word:"statecraft",pos:"n.",meaning:"the skill of managing government and state affairs, especially in foreign policy",example:"The foreign minister was admired for her exceptional statecraft during the crisis.",translation:"രാജ്യതന്ത്രം",ipa:"/ˈsteɪtkrɑːft/"},
-  {word:"concession",pos:"n.",meaning:"something given up or agreed to during negotiations",example:"Each side made concessions to reach a workable trade agreement.",translation:"ഇളവ്",ipa:"/kənˈsɛʃən/"},
-  {word:"communiqué",pos:"n.",meaning:"an official announcement or statement, especially after a diplomatic meeting",example:"A joint communiqué was issued at the end of the G7 summit.",translation:"ഔദ്യോഗിക പ്രസ്താവന",ipa:"/kəˈmjuːnɪkeɪ/"},
-  {word:"belligerent",pos:"adj.",meaning:"hostile and aggressive, especially in international disputes",example:"The belligerent tone of the ambassador's speech alarmed other member states.",translation:"യുദ്ധോൽസുകമായ",ipa:"/bɪˈlɪdʒərənt/"},
-  {word:"rapprochement",pos:"n.",meaning:"the re-establishment of friendly relations between two countries",example:"The rapprochement between the two rivals surprised the international community.",translation:"സൗഹൃദ പുനഃസ്ഥാപനം",ipa:"/ræˈprɒʃmɒ̃/"},
-  {word:"extraterritorial",pos:"adj.",meaning:"existing or taking place outside a country's borders but still under its legal jurisdiction",example:"The treaty granted extraterritorial rights to foreign military personnel.",translation:"അതിർത്തിക്കു പുറത്തുള്ള",ipa:"/ˌɛkstrəˌtɛrɪˈtɔːriəl/"},
-  {word:"bloc",pos:"n.",meaning:"a group of countries united by a common interest or political purpose",example:"The trading bloc agreed to remove customs duties between member states.",translation:"രാജ്യസഖ്യം",ipa:"/blɒk/"},
-  {word:"legitimacy",pos:"n.",meaning:"the quality of being accepted as lawful, valid, or justified",example:"The new government struggled to gain international legitimacy after the contested election.",translation:"നിയമസാധുത",ipa:"/lɪˈdʒɪtɪməsi/"},
-  {word:"neutrality",pos:"n.",meaning:"the state of not supporting either side in a conflict or dispute",example:"Switzerland is historically known for its strict policy of neutrality in wartime.",translation:"നിഷ്പക്ഷത",ipa:"/njuːˈtræləti/"},
-  {word:"articulate",pos:"v.",meaning:"to express thoughts or feelings clearly and effectively in words",example:"She was able to articulate her concerns about the project in a way everyone understood.",translation:"വ്യക്തമായി പ്രകടിപ്പിക്കുക",ipa:"/ɑːrˈtɪk.jʊ.leɪt/"},
-  {word:"eloquent",pos:"adj.",meaning:"able to express ideas fluently and persuasively in speech or writing",example:"The ambassador gave an eloquent speech that moved the entire audience.",translation:"വാഗ്മിത്വമുള്ള",ipa:"/ˈel.ə.kwənt/"},
-  {word:"paraphrase",pos:"v.",meaning:"to restate something in different words while keeping the same meaning",example:"The teacher asked students to paraphrase the main argument of the article.",translation:"മറ്റൊരു രീതിയിൽ പറയുക",ipa:"/ˈpær.ə.freɪz/"},
-  {word:"rhetoric",pos:"n.",meaning:"the art of using language persuasively and effectively in speech or writing",example:"Politicians often rely on powerful rhetoric to win the support of voters.",translation:"വാഗ്വൈഭവം",ipa:"/ˈret.ər.ɪk/"},
-  {word:"fluency",pos:"n.",meaning:"the ability to speak or write a language smoothly and naturally",example:"After living abroad for two years, her fluency in French improved dramatically.",translation:"ഭാഷാ പ്രാവീണ്യം",ipa:"/ˈfluː.ən.si/"},
-  {word:"concise",pos:"adj.",meaning:"expressing information clearly using few words without unnecessary detail",example:"His concise explanation helped everyone understand the complex idea quickly.",translation:"സംക്ഷിപ്തമായ",ipa:"/kənˈsaɪs/"},
-  {word:"discourse",pos:"n.",meaning:"written or spoken communication or debate on a particular subject",example:"The academic discourse around climate change has shifted significantly in recent years.",translation:"സംവാദം",ipa:"/ˈdɪs.kɔːrs/"},
-  {word:"intonation",pos:"n.",meaning:"the rise and fall of the voice when speaking, which affects meaning",example:"Her intonation made it clear she was asking a question rather than making a statement.",translation:"സ്വരഭേദം",ipa:"/ˌɪn.təˈneɪ.ʃən/"},
-  {word:"lexicon",pos:"n.",meaning:"the complete set of words in a language or the vocabulary of a particular person or subject",example:"Medical professionals use a specialized lexicon that can be difficult for patients to understand.",translation:"പദശേഖരം",ipa:"/ˈlek.sɪ.kɒn/"},
-  {word:"connotation",pos:"n.",meaning:"an idea or feeling that a word suggests beyond its literal meaning",example:"The word 'cheap' has a negative connotation, implying poor quality rather than just low cost.",translation:"ധ്വനിത അർഥം",ipa:"/ˌkɒn.əˈteɪ.ʃən/"},
-  {word:"syntax",pos:"n.",meaning:"the rules that govern how words are arranged to form sentences in a language",example:"Understanding syntax is essential for writing grammatically correct sentences.",translation:"വാക്യഘടന",ipa:"/ˈsɪn.tæks/"},
-  {word:"colloquial",pos:"adj.",meaning:"used in informal everyday conversation rather than formal speech or writing",example:"The essay was rejected because it contained too many colloquial expressions.",translation:"ഭാഷ്യശൈലിയിലുള്ള",ipa:"/kəˈloʊ.kwi.əl/"},
-  {word:"annotation",pos:"n.",meaning:"a note added to a text to explain or comment on its meaning",example:"The professor's annotations in the margins helped students understand the difficult poem.",translation:"വ്യാഖ്യാനക്കുറിപ്പ്",ipa:"/ˌæn.əˈteɪ.ʃən/"},
-  {word:"enunciate",pos:"v.",meaning:"to pronounce words clearly and distinctly",example:"The public speaker was trained to enunciate every syllable so the audience could follow easily.",translation:"വ്യക്തമായി ഉച്ചരിക്കുക",ipa:"/ɪˈnʌn.si.eɪt/"},
-  {word:"innuendo",pos:"n.",meaning:"an indirect or subtle reference to something, often negative or suggestive",example:"His speech was full of innuendo, hinting at corruption without directly naming anyone.",translation:"പരോക്ഷ സൂചന",ipa:"/ˌɪn.juˈen.doʊ/"},
-  {word:"diction",pos:"n.",meaning:"the choice and use of words in speech or writing",example:"The poet's precise diction gave each word a sense of weight and significance.",translation:"പദപ്രയോഗ ശൈലി",ipa:"/ˈdɪk.ʃən/"},
-  {word:"redundant",pos:"adj.",meaning:"using more words than necessary; saying the same thing more than once",example:"The phrase 'free gift' is redundant because all gifts are free by definition.",translation:"ആവർത്തനഭരിതമായ",ipa:"/rɪˈdʌn.dənt/"},
-  {word:"coherent",pos:"adj.",meaning:"logical, consistent, and easy to understand as a whole",example:"Her argument was coherent and well-structured, making it easy to follow.",translation:"യുക്തിഭദ്രമായ",ipa:"/koʊˈhɪr.ənt/"},
-  {word:"verbatim",pos:"adv.",meaning:"using exactly the same words as were originally used",example:"The journalist quoted the politician verbatim to avoid any misrepresentation.",translation:"വാക്കാൽ അതേ പടി",ipa:"/vɜːrˈbeɪ.tɪm/"},
-  {word:"monologue",pos:"n.",meaning:"a long speech by one person in a conversation or performance",example:"The actor delivered a powerful monologue about loss and identity.",translation:"ഏകഭാഷണം",ipa:"/ˈmɒn.ə.lɒɡ/"},
-  {word:"euphemism",pos:"n.",meaning:"a mild or indirect expression used instead of a harsh or blunt one",example:"Saying someone has 'passed away' is a common euphemism for dying.",translation:"മൃദുഭാഷണം",ipa:"/ˈjuː.fə.mɪ.zəm/"},
-  {word:"jargon",pos:"n.",meaning:"specialized words used by a particular profession or group, often difficult for outsiders to understand",example:"The legal jargon in the contract made it almost impossible for ordinary people to read.",translation:"സാങ്കേതിക പദാവലി",ipa:"/ˈdʒɑːr.ɡən/"},
-  {word:"succinct",pos:"adj.",meaning:"briefly and clearly expressed without unnecessary words",example:"Her succinct summary captured the main points of the report in just two sentences.",translation:"ചുരുക്കിപ്പറഞ്ഞ",ipa:"/səkˈsɪŋkt/"},
-  {word:"bilingual",pos:"adj.",meaning:"able to speak two languages fluently",example:"Growing up in a bilingual household gave her a natural advantage in language learning.",translation:"ദ്വിഭാഷിക",ipa:"/baɪˈlɪŋ.ɡwəl/"},
-  {word:"dialect",pos:"n.",meaning:"a form of a language spoken in a particular region or by a particular group",example:"The novel was written in a local dialect that some readers found difficult to understand.",translation:"പ്രാദേശിക ഭാഷാരൂപം",ipa:"/ˈdaɪ.ə.lekt/"},
-  {word:"decipher",pos:"v.",meaning:"to succeed in understanding something that is difficult or unclear",example:"It was almost impossible to decipher her handwriting on the old letter.",translation:"അർഥം കണ്ടുപിടിക്കുക",ipa:"/dɪˈsaɪ.fər/"},
-  {word:"implicit",pos:"adj.",meaning:"suggested or understood without being directly stated",example:"There was an implicit understanding between the two colleagues that they would support each other.",translation:"പ്രത്യക്ഷമല്ലാത്ത",ipa:"/ɪmˈplɪs.ɪt/"},
-  {word:"phrasing",pos:"n.",meaning:"the way in which something is expressed in words",example:"The careful phrasing of the announcement avoided causing unnecessary alarm.",translation:"വാക്കുകൾ ക്രമീകരിക്കൽ",ipa:"/ˈfreɪ.zɪŋ/"},
-  {word:"semiotics",pos:"n.",meaning:"the study of signs and symbols and how they communicate meaning",example:"Semiotics helps us understand how logos and images convey powerful cultural messages.",translation:"ചിഹ്നശാസ്ത്രം",ipa:"/ˌsiː.miˈɒt.ɪks/"},
-  {word:"interlocutor",pos:"n.",meaning:"a person who takes part in a dialogue or conversation",example:"In the interview, the journalist served as a skilled interlocutor, drawing out thoughtful responses.",translation:"സംഭാഷണ പങ്കാളി",ipa:"/ˌɪn.təˈlɒk.jʊ.tər/"},
-  {word:"antiquity",pos:"n.",meaning:"the ancient past, especially before the Middle Ages",example:"Scholars study antiquity to understand how early civilizations developed their laws and customs.",translation:"പുരാതനകാലം",ipa:"/ænˈtɪk.wɪ.ti/"},
-  {word:"chronicle",pos:"n.",meaning:"a written record of historical events in the order they occurred",example:"The monk spent decades writing a chronicle of his kingdom's most important battles.",translation:"ചരിത്രരേഖ",ipa:"/ˈkrɒn.ɪ.kəl/"},
-  {word:"feudalism",pos:"n.",meaning:"a medieval social system where land was given in exchange for loyalty and military service",example:"Under feudalism, peasants worked the land owned by powerful lords in return for protection.",translation:"ഫ്യൂഡൽ വ്യവസ്ഥ",ipa:"/ˈfjuː.dəl.ɪ.zəm/"},
-  {word:"archaeologist",pos:"n.",meaning:"a scientist who studies human history by excavating ancient sites and examining artifacts",example:"The archaeologist carefully uncovered pottery fragments that were over three thousand years old.",translation:"പുരാവസ്തു ഗവേഷകൻ",ipa:"/ˌɑː.ki.ˈɒl.ə.dʒɪst/"},
-  {word:"relic",pos:"n.",meaning:"an object or tradition surviving from an earlier time",example:"The golden coin found in the ruins was a fascinating relic of the Roman Empire.",translation:"പൗരാണിക അവശിഷ്ടം",ipa:"/ˈrel.ɪk/"},
-  {word:"dynasty",pos:"n.",meaning:"a series of rulers from the same family who govern over a long period",example:"The Ming dynasty of China produced some of the most remarkable architecture in world history.",translation:"രാജവംശം",ipa:"/ˈdɪn.ə.sti/"},
-  {word:"imperialism",pos:"n.",meaning:"a policy where one country extends its power and influence over other nations, often by force",example:"European imperialism in the nineteenth century dramatically reshaped the political map of Africa.",translation:"സാമ്രാജ്യത്വം",ipa:"/ɪmˈpɪə.ri.ə.lɪ.zəm/"},
-  {word:"excavation",pos:"n.",meaning:"the process of carefully digging up an area to discover historical remains",example:"The excavation of the ancient city revealed foundations of buildings dating back centuries.",translation:"ഖനനം",ipa:"/ˌek.skəˈveɪ.ʃən/"},
-  {word:"monarch",pos:"n.",meaning:"a king, queen, or emperor who rules a country",example:"The monarch signed a royal decree that changed the nation's tax laws forever.",translation:"രാജാധിരാജൻ",ipa:"/ˈmɒn.ək/"},
-  {word:"colonization",pos:"n.",meaning:"the act of taking control of another land and settling people there to establish authority",example:"The colonization of the Americas led to the displacement of millions of indigenous people.",translation:"കോളനിവൽക്കരണം",ipa:"/ˌkɒl.ə.naɪˈzeɪ.ʃən/"},
-  {word:"artifact",pos:"n.",meaning:"an object made by humans, especially one of historical or cultural interest",example:"Each artifact discovered at the dig site helped researchers understand daily life in ancient Egypt.",translation:"പൗരാണിക വസ്തു",ipa:"/ˈɑː.tɪ.fækt/"},
-  {word:"renaissance",pos:"n.",meaning:"a revival or renewed interest in art, culture, and learning, especially in 14th–17th century Europe",example:"The Renaissance marked a shift from medieval thinking toward humanism and scientific inquiry.",translation:"നവോത്ഥാനം",ipa:"/rɪˈneɪ.sɑːns/"},
-  {word:"revolt",pos:"n.",meaning:"a rebellion against a government or authority by a group of people",example:"The peasant revolt of the fourteenth century challenged the power of the ruling noble class.",translation:"കലാപം",ipa:"/rɪˈvəʊlt/"},
-  {word:"inscription",pos:"n.",meaning:"words carved or written on a surface, often on monuments or ancient objects",example:"The inscription on the temple wall described the victories of an ancient king in great detail.",translation:"ലിഖിതം",ipa:"/ɪnˈskrɪp.ʃən/"},
-  {word:"nomadic",pos:"adj.",meaning:"relating to people who move from place to place rather than living in one permanent location",example:"Nomadic tribes of the Central Asian steppes were highly skilled horsemen and traders.",translation:"യാযാവര",ipa:"/nəʊˈmæd.ɪk/"},
-  {word:"plunder",pos:"v.",meaning:"to steal goods from a place, especially during a war or conflict",example:"Invading armies would often plunder conquered cities, taking gold and destroying temples.",translation:"കൊള്ളയടിക്കുക",ipa:"/ˈplʌn.dər/"},
-  {word:"theocracy",pos:"n.",meaning:"a system of government where religious leaders rule in the name of a god or gods",example:"Ancient Egypt functioned partly as a theocracy, with the pharaoh considered a divine ruler.",translation:"ദൈവഭരണം",ipa:"/θiˈɒk.rə.si/"},
-  {word:"siege",pos:"n.",meaning:"a military operation where forces surround a place to cut off supplies and force surrender",example:"The siege of the city lasted six months before the defenders finally ran out of food.",translation:"ഉപരോധം",ipa:"/siːdʒ/"},
-  {word:"tribunal",pos:"n.",meaning:"a court or official body formed to deal with specific legal or historical matters",example:"A special tribunal was established to investigate crimes committed during the wartime occupation.",translation:"ട്രൈബ്യൂണൽ",ipa:"/traɪˈbjuː.nəl/"},
-  {word:"citadel",pos:"n.",meaning:"a fortress or stronghold that protects a city, typically built on high ground",example:"The ancient citadel overlooking the valley served as the last line of defense for the city.",translation:"കോട്ട",ipa:"/ˈsɪt.ə.dəl/"},
-  {word:"reformation",pos:"n.",meaning:"a major change in a social, political, or religious institution to improve it",example:"The Protestant Reformation of the sixteenth century permanently divided the Christian church in Europe.",translation:"പരിഷ്കരണം",ipa:"/ˌref.əˈmeɪ.ʃən/"},
-  {word:"emissary",pos:"n.",meaning:"a person sent on a special mission to represent a ruler or government",example:"The king sent a trusted emissary to the neighboring kingdom to discuss a possible alliance.",translation:"ദൂതൻ",ipa:"/ˈem.ɪ.sər.i/"},
-  {word:"papyrus",pos:"n.",meaning:"a material made from a water plant, used by ancient Egyptians as paper for writing",example:"Historians learned about Egyptian funeral practices by reading texts written on papyrus scrolls.",translation:"പാപ്പിറസ്",ipa:"/pəˈpaɪ.rəs/"},
-  {word:"patrician",pos:"n.",meaning:"a member of the upper class or nobility, especially in ancient Rome",example:"Only a patrician could hold certain political offices in the early years of the Roman Republic.",translation:"പ്രഭുവർഗ്ഗം",ipa:"/pəˈtrɪʃ.ən/"},
-  {word:"abolition",pos:"n.",meaning:"the formal ending of a law, practice, or institution, especially slavery",example:"The abolition of slavery in the nineteenth century was one of the most significant social reforms in history.",translation:"നിർമൂലനം",ipa:"/ˌæb.əˈlɪʃ.ən/"},
-  {word:"parchment",pos:"n.",meaning:"a writing material made from animal skin, used before paper became common",example:"Medieval monks copied important texts onto parchment to preserve knowledge for future generations.",translation:"ചർമ്മക്കടലാസ്",ipa:"/ˈpɑːtʃ.mənt/"},
-  {word:"conquer",pos:"v.",meaning:"to take control of a place or people by military force",example:"Alexander the Great managed to conquer vast territories stretching from Greece to northwestern India.",translation:"കീഴടക്കുക",ipa:"/ˈkɒŋ.kər/"},
-  {word:"tributary",pos:"n.",meaning:"a smaller state or territory that pays money or goods to a more powerful ruler or nation",example:"Many smaller kingdoms became tributaries of the empire, sending annual payments to avoid invasion.",translation:"കപ്പം നൽകുന്ന രാജ്യം",ipa:"/ˈtrɪb.jʊ.tər.i/"},
-  {word:"decree",pos:"n.",meaning:"an official order issued by a ruler or government that has the force of law",example:"The emperor issued a decree ordering all citizens to register their land with local authorities.",translation:"ഉത്തരവ്",ipa:"/dɪˈkriː/"},
-  {word:"indigenous",pos:"adj.",meaning:"originating or occurring naturally in a particular place; native to a region",example:"Indigenous communities in the Americas maintained rich oral traditions long before European contact.",translation:"തദ്ദേശീയ",ipa:"/ɪnˈdɪdʒ.ɪ.nəs/"},
-  {word:"plausible",pos:"adj.",meaning:"seeming reasonable or probable",example:"The detective found the suspect's explanation barely plausible.",translation:"വിശ്വസനീയമായ",ipa:"/ˈplɔːzɪbəl/"},
-  {word:"counterargument",pos:"n.",meaning:"a reason given against another argument",example:"She prepared a strong counterargument for the debate.",translation:"എതിർവാദം",ipa:"/ˈkaʊntərɑːɡjumənt/"},
-  {word:"credibility",pos:"n.",meaning:"the quality of being trusted and believed",example:"The source's credibility was questioned after the errors were found.",translation:"വിശ്വാസ്യത",ipa:"/ˌkredɪˈbɪlɪti/"},
-  {word:"evaluate",pos:"v.",meaning:"to judge or assess the value or quality of something",example:"Students must evaluate the reliability of their sources carefully.",translation:"വിലയിരുത്തുക",ipa:"/ɪˈvæljueɪt/"},
-  {word:"fallacy",pos:"n.",meaning:"a mistaken belief or faulty reasoning",example:"Blaming the rain for losing the match is a common logical fallacy.",translation:"തെറ്റായ യുക്തി",ipa:"/ˈfæləsi/"},
-  {word:"deduce",pos:"v.",meaning:"to arrive at a conclusion through logical reasoning",example:"From the evidence, she could deduce that he had been lying.",translation:"നിഗമനം ചെയ്യുക",ipa:"/dɪˈdjuːs/"},
-  {word:"substantiate",pos:"v.",meaning:"to provide evidence to support a claim",example:"He could not substantiate his claim with reliable data.",translation:"തെളിവ് നൽകി സ്ഥാപിക്കുക",ipa:"/səbˈstænʃieɪt/"},
-  {word:"refute",pos:"v.",meaning:"to prove that something is wrong or false",example:"The scientist was able to refute the earlier theory with new data.",translation:"ഖണ്ഡിക്കുക",ipa:"/rɪˈfjuːt/"},
-  {word:"rationale",pos:"n.",meaning:"the reasons or logical basis for a course of action",example:"The teacher explained the rationale behind the new grading system.",translation:"യുക്തിസഹ കാരണം",ipa:"/ˌræʃəˈnɑːl/"},
-  {word:"distinguish",pos:"v.",meaning:"to recognize or point out a difference between things",example:"Critical thinkers can distinguish facts from opinions easily.",translation:"വ്യത്യാസം തിരിച്ചറിയുക",ipa:"/dɪˈstɪŋɡwɪʃ/"},
-  {word:"criterion",pos:"n.",meaning:"a standard used for judging or deciding something",example:"The main criterion for success was customer satisfaction.",translation:"മാനദണ്ഡം",ipa:"/kraɪˈtɪəriən/"},
-  {word:"skeptical",pos:"adj.",meaning:"having doubts; not easily convinced",example:"She remained skeptical about the results until more tests were done.",translation:"സംശയദൃഷ്ടിയുള്ള",ipa:"/ˈskeptɪkəl/"},
-  {word:"validity",pos:"n.",meaning:"the quality of being logically sound and well-grounded",example:"The validity of the experiment's results was widely accepted.",translation:"സാധുത",ipa:"/vəˈlɪdɪti/"},
-  {word:"contradict",pos:"v.",meaning:"to say the opposite of what someone else has said",example:"His actions directly contradict what he said in the meeting.",translation:"വിരുദ്ധം പറയുക",ipa:"/ˌkɒntrəˈdɪkt/"},
-  {word:"discern",pos:"v.",meaning:"to recognize or identify something not immediately obvious",example:"It is difficult to discern the truth from so many conflicting reports.",translation:"വ്യതിരിക്തമായി തിരിച്ചറിയുക",ipa:"/dɪˈsɜːn/"},
-  {word:"paradox",pos:"n.",meaning:"a statement that seems contradictory but may be true",example:"It is a paradox that the more choices we have, the less happy we feel.",translation:"വൈരുദ്ധ്യം",ipa:"/ˈpærədɒks/"},
-  {word:"commute",pos:"v.",meaning:"to travel regularly between home and work",example:"Many people commute long distances from rural areas to city jobs every day.",translation:"യാത്ര ചെയ്യുക (ജോലിക്കായി)",ipa:"/kəˈmjuːt/"},
-  {word:"infrastructure",pos:"n.",meaning:"basic systems and services such as roads, water supply, and electricity",example:"Rural villages often lack the infrastructure that city residents take for granted.",translation:"അടിസ്ഥാന സൗകര്യങ്ങൾ",ipa:"/ˈɪnfrəˌstrʌktʃər/"},
-  {word:"migration",pos:"n.",meaning:"the movement of people from one place to another to live or work",example:"Migration from countryside to cities has increased dramatically over the past decade.",translation:"കുടിയേറ്റം",ipa:"/maɪˈɡreɪʃən/"},
-  {word:"suburb",pos:"n.",meaning:"a residential area on the outskirts of a city",example:"Many families prefer to live in a suburb where housing is more affordable than in the city centre.",translation:"നഗരോപകണ്ഠം",ipa:"/ˈsʌbɜːb/"},
-  {word:"urbanization",pos:"n.",meaning:"the process by which more people come to live in cities",example:"Rapid urbanization has put pressure on city services and housing supplies.",translation:"നഗരവൽക്കരണം",ipa:"/ˌɜːbənаɪˈzeɪʃən/"},
-  {word:"congestion",pos:"n.",meaning:"overcrowding, especially of traffic in a city",example:"Traffic congestion in the capital makes daily travel very frustrating for commuters.",translation:"തിരക്ക്",ipa:"/kənˈdʒestʃən/"},
-  {word:"livelihood",pos:"n.",meaning:"the way someone earns money to live",example:"Many rural families depend on farming as their primary livelihood.",translation:"ഉപജീവനം",ipa:"/ˈlaɪvliˌhʊd/"},
-  {word:"amenity",pos:"n.",meaning:"a useful or enjoyable feature of a place",example:"Urban residents enjoy amenities such as hospitals, cinemas, and shopping centres.",translation:"സൗകര്യം",ipa:"/əˈmiːnɪti/"},
-  {word:"deprivation",pos:"n.",meaning:"a lack of basic necessities or comforts",example:"Rural deprivation is a serious issue when communities lack access to healthcare and education.",translation:"ദാരിദ്ര്യം",ipa:"/ˌdeprɪˈveɪʃən/"},
-  {word:"outskirts",pos:"n.",meaning:"the outer areas or edges of a city or town",example:"Affordable housing is often found only on the outskirts of major cities.",translation:"നഗരത്തിന്റെ പ്രാന്തപ്രദേശം",ipa:"/ˈaʊtskɜːts/"},
-  {word:"density",pos:"n.",meaning:"the number of people or things in a given area",example:"High population density in cities can lead to social and environmental problems.",translation:"സാന്ദ്രത",ipa:"/ˈdensɪti/"},
-  {word:"agricultural",pos:"adj.",meaning:"related to farming and the cultivation of land",example:"The agricultural economy of rural regions differs greatly from the service economy of cities.",translation:"കൃഷിസംബന്ധമായ",ipa:"/ˌæɡrɪˈkʌltʃərəl/"},
-  {word:"sanitation",pos:"n.",meaning:"systems for managing sewage and keeping environments clean",example:"Improved sanitation in rural areas has reduced the spread of waterborne diseases.",translation:"ശുചിത്വ സംവിധാനം",ipa:"/ˌsænɪˈteɪʃən/"},
-  {word:"affordable",pos:"adj.",meaning:"cheap enough for most people to pay for",example:"Finding affordable housing remains a major challenge for young people moving to cities.",translation:"താങ്ങാനാകുന്ന",ipa:"/əˈfɔːdəbəl/"},
-  {word:"remote",pos:"adj.",meaning:"far away from towns and cities",example:"Children in remote villages may have to walk miles to reach the nearest school.",translation:"വിദൂരമായ",ipa:"/rɪˈməʊt/"},
-  {word:"socioeconomic",pos:"adj.",meaning:"relating to both social and economic factors",example:"Socioeconomic differences between urban and rural areas affect access to opportunities.",translation:"സാമൂഹ്യ-സാമ്പത്തിക",ipa:"/ˌsəʊsiəʊˌiːkəˈnɒmɪk/"},
-  {word:"mobility",pos:"n.",meaning:"the ability to move freely or change social status",example:"Urban residents generally enjoy greater mobility thanks to public transport networks.",translation:"ചലനശേഷി",ipa:"/məʊˈbɪlɪti/"},
-  {word:"municipal",pos:"adj.",meaning:"relating to the government of a town or city",example:"The municipal council approved a new plan to expand public transport routes.",translation:"നഗരസഭാ സംബന്ധമായ",ipa:"/mjuːˈnɪsɪpəl/"},
-  {word:"settlement",pos:"n.",meaning:"a place where people have established a community",example:"Small rural settlements often struggle to attract investment from the government.",translation:"ഗ്രാമ/നഗര ആവാസം",ipa:"/ˈsetlmənt/"},
-  {word:"retrofit",pos:"v.",meaning:"to add new technology or features to older buildings or systems",example:"The city plans to retrofit old buildings with energy-efficient heating systems.",translation:"പഴയ കെട്ടിടങ്ങൾ നവീകരിക്കുക",ipa:"/ˈretrəʊˌfɪt/"},
-  {word:"workforce",pos:"n.",meaning:"the people available or employed in a particular area",example:"Rural areas often face a shrinking workforce as young people leave for cities.",translation:"തൊഴിൽ ശക്തി",ipa:"/ˈwɜːkfɔːs/"},
-  {word:"pedestrian",pos:"adj.",meaning:"relating to walking, or designed for people on foot",example:"The city created pedestrian zones to reduce traffic and encourage walking.",translation:"കാൽനട സംബന്ധമായ",ipa:"/pɪˈdestriən/"},
-  {word:"hinterland",pos:"n.",meaning:"the rural area surrounding a city or town",example:"Farmers in the hinterland supply fresh produce to the city markets each morning.",translation:"നഗരത്തിന് ചുറ്റുമുള്ള ഗ്രാമീണ പ്രദേശം",ipa:"/ˈhɪntəlænd/"},
-  {word:"sprawl",pos:"n.",meaning:"the uncontrolled spread of urban development into rural areas",example:"Urban sprawl has consumed farmland and natural habitats around the city.",translation:"നഗര വ്യാപനം",ipa:"/sprɔːl/"},
-  {word:"catchment",pos:"n.",meaning:"the area from which a school, hospital, or service draws its users",example:"The hospital's catchment area includes several remote rural communities.",translation:"സേവന പരിധി",ipa:"/ˈkætʃmənt/"},
-  {word:"neglect",pos:"n.",meaning:"failure to give proper care or attention to something",example:"Years of neglect have left many rural roads in a very poor condition.",translation:"അവഗണന",ipa:"/nɪˈɡlekt/"},
-  {word:"inequality",pos:"n.",meaning:"an unfair situation where some people have more rights or opportunities than others",example:"Growing inequality between rich and poor nations is a serious global concern.",translation:"അസമത്വം",ipa:"ˌɪnɪˈkwɒlɪti"},
-  {word:"displacement",pos:"n.",meaning:"the situation of being forced to leave your home, often due to conflict or disaster",example:"The war caused the displacement of over two million civilians.",translation:"കുടിയൊഴിപ്പിക്കൽ",ipa:"dɪsˈpleɪsmənt"},
-  {word:"pandemic",pos:"n.",meaning:"a disease that spreads across a large region or worldwide affecting many people",example:"The pandemic revealed serious weaknesses in global healthcare systems.",translation:"മഹാമാരി",ipa:"pænˈdemɪk"},
-  {word:"corruption",pos:"n.",meaning:"dishonest or illegal behavior by people in positions of power for personal gain",example:"Corruption in government prevents aid from reaching those who need it most.",translation:"അഴിമതി",ipa:"kəˈrʌpʃən"},
-  {word:"trafficking",pos:"n.",meaning:"the illegal trade or movement of people or goods, often involving exploitation",example:"Human trafficking remains one of the most serious crimes worldwide.",translation:"കടത്തൽ",ipa:"ˈtræfɪkɪŋ"},
-  {word:"famine",pos:"n.",meaning:"an extreme and widespread shortage of food causing starvation and death",example:"International aid organizations responded quickly to the famine in the region.",translation:"ക്ഷാമം",ipa:"ˈfæmɪn"},
-  {word:"refugee",pos:"n.",meaning:"a person who has been forced to leave their country due to war, persecution or disaster",example:"The government agreed to accept ten thousand refugees from the conflict zone.",translation:"അഭയാർഥി",ipa:"ˌrefjʊˈdʒiː"},
-  {word:"malnutrition",pos:"n.",meaning:"poor health caused by not having enough food or not eating the right kinds of food",example:"Malnutrition affects millions of children in developing countries every year.",translation:"പോഷകാഹാരക്കുറവ്",ipa:"ˌmælnjuːˈtrɪʃən"},
-  {word:"overpopulation",pos:"n.",meaning:"a situation in which the number of people in an area is too large for available resources",example:"Overpopulation in urban centers creates enormous pressure on public services.",translation:"അതിജനസംഖ്യ",ipa:"ˌəʊvəˌpɒpjʊˈleɪʃən"},
-  {word:"scarcity",pos:"n.",meaning:"a situation in which something is not available in sufficient amounts",example:"Water scarcity is becoming a critical issue in many parts of the world.",translation:"ദൗർലഭ്യം",ipa:"ˈskeəsɪti"},
-  {word:"activism",pos:"n.",meaning:"the use of strong actions to achieve social or political change",example:"Youth activism has drawn global attention to the climate crisis.",translation:"സക്രിയത",ipa:"ˈæktɪvɪzəm"},
-  {word:"urbanisation",pos:"n.",meaning:"the process by which more people come to live and work in cities",example:"Rapid urbanisation has led to overcrowding and housing shortages in many countries.",translation:"നഗരവൽക്കരണം",ipa:"ˌɜːbənaɪˈzeɪʃən"},
-  {word:"epidemic",pos:"n.",meaning:"a widespread occurrence of a disease in a community at a particular time",example:"The cholera epidemic spread rapidly through areas with poor water supplies.",translation:"പകർച്ചവ്യാധി",ipa:"ˌepɪˈdemɪk"},
-  {word:"polarisation",pos:"n.",meaning:"the division of people into two completely opposing groups or opinions",example:"Political polarisation makes it very difficult to find solutions to global problems.",translation:"ധ്രുവീകരണം",ipa:"ˌpəʊlərаɪˈzeɪʃən"},
-  {word:"subsistence",pos:"n.",meaning:"the state of having only just enough food or money to stay alive",example:"Many rural families depend on subsistence farming to survive.",translation:"ഉപജീവനം",ipa:"səbˈsɪstəns"},
-  {word:"impulse",pos:"n.",meaning:"a sudden desire to buy something without planning",example:"She bought the chocolate bar on impulse while waiting at the checkout.",translation:"പെട്ടെന്നുള്ള ആഗ്രഹം",ipa:"/ˈɪmpʌls/"},
-  {word:"demographic",pos:"n.",meaning:"a specific group of people defined by age, income, or other factors",example:"The brand targets a young demographic aged between 18 and 25.",translation:"ജനവിഭാഗം",ipa:"/ˌdeməˈɡræfɪk/"},
-  {word:"loyalty",pos:"n.",meaning:"the quality of continuing to support a particular brand or product",example:"The coffee shop rewards customer loyalty with a points card system.",translation:"വിശ്വസ്തത",ipa:"/ˈlɔɪəlti/"},
-  {word:"segmentation",pos:"n.",meaning:"dividing a market into distinct groups of buyers",example:"Market segmentation helps companies focus their advertising more effectively.",translation:"വിഭജനം",ipa:"/ˌseɡmənˈteɪʃən/"},
-  {word:"retention",pos:"n.",meaning:"the ability of a business to keep its existing customers",example:"Good customer service is essential for the retention of loyal shoppers.",translation:"നിലനിർത്തൽ",ipa:"/rɪˈtenʃən/"},
-  {word:"endorsement",pos:"n.",meaning:"public support for a product given by a celebrity or expert",example:"The athlete's endorsement significantly boosted sales of the sports drink.",translation:"അംഗീകാരം",ipa:"/ɪnˈdɔːrsmənt/"},
-  {word:"niche",pos:"n.",meaning:"a small, specific segment of the market",example:"The company found a profitable niche selling handmade organic soap.",translation:"പ്രത്യേക വിഭാഗം",ipa:"/niːʃ/"},
-  {word:"persuasion",pos:"n.",meaning:"the act of convincing someone to buy or believe something",example:"Effective persuasion in advertising relies on emotional storytelling.",translation:"പ്രേരണ",ipa:"/pəˈsweɪʒən/"},
-  {word:"saturated",pos:"adj.",meaning:"describing a market that already has too many competing products",example:"The smartphone market is so saturated that new brands struggle to succeed.",translation:"പൂരിതമായ",ipa:"/ˈsætʃəreɪtɪd/"},
-  {word:"aspiration",pos:"n.",meaning:"a strong desire to achieve a lifestyle associated with a product",example:"Luxury car brands often sell aspiration rather than just transportation.",translation:"അഭിലാഷം",ipa:"/ˌæspəˈreɪʃən/"},
-  {word:"conversion",pos:"n.",meaning:"turning a potential customer into an actual buyer",example:"The website redesign improved conversion rates by nearly thirty percent.",translation:"പരിവർത്തനം",ipa:"/kənˈvɜːrʒən/"},
-  {word:"cue",pos:"n.",meaning:"a signal in the environment that influences buying behaviour",example:"The smell of fresh bread is a powerful sensory cue in supermarkets.",translation:"സൂചന",ipa:"/kjuː/"},
-  {word:"prestige",pos:"n.",meaning:"a high status or respect associated with owning a particular product",example:"Some consumers buy designer bags purely for the prestige they bring.",translation:"പ്രതിഷ്ഠ",ipa:"/preˈstiːʒ/"},
-  {word:"substitute",pos:"n.",meaning:"a product that can replace another product in the consumer's choice",example:"When beef prices rose, many shoppers chose chicken as a substitute.",translation:"പകരക്കാരൻ",ipa:"/ˈsʌbstɪtjuːt/"},
-  {word:"positioning",pos:"n.",meaning:"the way a brand is placed in the minds of target consumers",example:"The company's positioning as an eco-friendly brand attracted younger buyers.",translation:"സ്ഥാനനിർണ്ണയം",ipa:"/pəˈzɪʃənɪŋ/"},
-  {word:"recall",pos:"n.",meaning:"the ability of consumers to remember a brand or advertisement",example:"High brand recall means customers think of your product first when shopping.",translation:"ഓർമ്മശക്തി",ipa:"/ˈriːkɔːl/"},
-  {word:"habitual",pos:"adj.",meaning:"describing buying behaviour done regularly without much thought",example:"Habitual purchases like milk and bread require little decision-making effort.",translation:"പതിവായ",ipa:"/həˈbɪtʃuəl/"},
-  {word:"dissonance",pos:"n.",meaning:"discomfort felt by a consumer after making a purchase decision",example:"Buyers sometimes experience dissonance when they regret a large purchase.",translation:"അസ്വസ്ഥത",ipa:"/ˈdɪsənəns/"},
-  {word:"engagement",pos:"n.",meaning:"the level of interaction between a consumer and a brand",example:"High social media engagement often leads to stronger brand awareness.",translation:"ഇടപഴകൽ",ipa:"/ɪnˈɡeɪdʒmənt/"},
-  {word:"preference",pos:"n.",meaning:"a greater liking for one product over another",example:"Consumer preference for organic food has grown steadily over the last decade.",translation:"മുൻഗണന",ipa:"/ˈprefərəns/"},
-  {word:"exposure",pos:"n.",meaning:"the extent to which consumers come into contact with an advertisement",example:"Repeated exposure to a brand logo helps build recognition over time.",translation:"സമ്പർക്കം",ipa:"/ɪkˈspoʊʒər/"},
-  {word:"utilitarian",pos:"adj.",meaning:"describing a product bought for practical use rather than pleasure",example:"A utilitarian purchase like a stapler is chosen mainly for its function.",translation:"പ്രായോഗികമായ",ipa:"/juːˌtɪlɪˈteəriən/"},
-  {word:"assimilation",pos:"n.",meaning:"the process of becoming part of a different culture or group",example:"The assimilation of immigrant communities into the local culture can take several generations.",translation:"സ്വാംശീകരണം",ipa:"/əˌsɪm.ɪˈleɪ.ʃən/"},
-  {word:"diaspora",pos:"n.",meaning:"a group of people who have spread from their original homeland to other places",example:"The Indian diaspora has established vibrant communities across many countries.",translation:"പ്രവാസ സമൂഹം",ipa:"/daɪˈæs.pər.ə/"},
-  {word:"pluralism",pos:"n.",meaning:"the existence of different cultural, ethnic, or religious groups within a society",example:"Canada is often praised for its commitment to cultural pluralism.",translation:"ബഹുസ്വരത",ipa:"/ˈplʊər.ə.lɪ.zəm/"},
-  {word:"ethnicity",pos:"n.",meaning:"the fact of belonging to a particular cultural or national group",example:"People of various ethnicities gathered to celebrate the multicultural festival.",translation:"വംശീയത",ipa:"/eθˈnɪs.ɪ.ti/"},
-  {word:"stereotype",pos:"n.",meaning:"a fixed, oversimplified idea about a particular group of people",example:"It is important to challenge stereotypes rather than accepting them without question.",translation:"ഒരേ അച്ചിൽ വാർത്ത ധാരണ",ipa:"/ˈster.i.ə.taɪp/"},
-  {word:"integration",pos:"n.",meaning:"the mixing of people from different backgrounds into a single community",example:"Successful integration requires respect for both shared values and cultural differences.",translation:"സംയോജനം",ipa:"/ˌɪn.tɪˈɡreɪ.ʃən/"},
-  {word:"multicultural",pos:"adj.",meaning:"relating to or including several different cultural groups",example:"The school has a multicultural environment where students learn about each other's traditions.",translation:"ബഹുസാംസ്കാരിക",ipa:"/ˌmʌl.tiˈkʌl.tʃər.əl/"},
-  {word:"coexistence",pos:"n.",meaning:"the state of living together peacefully despite differences",example:"The city demonstrated that peaceful coexistence among diverse groups is possible.",translation:"സഹസ്ഥിതി",ipa:"/ˌkəʊ.ɪɡˈzɪs.təns/"},
-  {word:"acculturation",pos:"n.",meaning:"the process of adapting to a new culture while retaining one's original culture",example:"Acculturation often involves learning the language and social norms of a new country.",translation:"സാംസ്കാരിക അനുകൂലനം",ipa:"/əˌkʌl.tʃərˈeɪ.ʃən/"},
-  {word:"marginalization",pos:"n.",meaning:"the process of treating a group as unimportant or outside mainstream society",example:"Marginalization of minority groups can lead to social inequality and unrest.",translation:"പാർശ്വവൽക്കരണം",ipa:"/ˌmɑː.dʒɪ.nəl.aɪˈzeɪ.ʃən/"},
-  {word:"tolerance",pos:"n.",meaning:"willingness to accept beliefs or behaviour different from one's own",example:"Cultural tolerance is essential for building a harmonious and diverse society.",translation:"സഹിഷ്ണുത",ipa:"/ˈtɒl.ər.əns/"},
-  {word:"subculture",pos:"n.",meaning:"a cultural group within a larger culture that has distinct beliefs or interests",example:"Urban youth subcultures often develop their own music, fashion, and language.",translation:"ഉപസംസ്കാരം",ipa:"/ˈsʌbˌkʌl.tʃər/"},
-  {word:"intercultural",pos:"adj.",meaning:"involving or relating to communication between different cultures",example:"Intercultural dialogue helps people understand and appreciate each other's perspectives.",translation:"അന്തർസാംസ്കാരിക",ipa:"/ˌɪn.təˈkʌl.tʃər.əl/"},
-  {word:"ancestry",pos:"n.",meaning:"the family or cultural background from which a person descends",example:"Many people explore their ancestry to better understand their cultural identity.",translation:"പൂർവ്വികത",ipa:"/ˈæn.ses.tri/"},
-  {word:"belonging",pos:"n.",meaning:"the feeling of being accepted and part of a group or community",example:"A strong sense of belonging is important for the well-being of minority communities.",translation:"അംഗത്വബോധം",ipa:"/bɪˈlɒŋ.ɪŋ/"},
-  {word:"ritual",pos:"n.",meaning:"a set of actions performed regularly as part of cultural or religious tradition",example:"Participating in cultural rituals strengthens the bond between community members.",translation:"ആചാരം",ipa:"/ˈrɪtʃ.u.əl/"},
-  {word:"hybridization",pos:"n.",meaning:"the blending of two or more cultural elements to create something new",example:"Cultural hybridization is visible in music that combines traditional and modern styles.",translation:"സങ്കരണം",ipa:"/ˌhaɪ.brɪ.daɪˈzeɪ.ʃən/"},
-  {word:"folkore",pos:"n.",meaning:"the traditional stories, customs, and beliefs of a community",example:"Local folklore reflects the values and worldview of the culture that created it.",translation:"നാടോടി സംസ്കാരം",ipa:"/ˈfəʊk.lɔːr/"},
-  {word:"representation",pos:"n.",meaning:"the way a group of people is portrayed or included in media or society",example:"Better representation of minority cultures in media helps fight harmful stereotypes.",translation:"പ്രാതിനിധ്യം",ipa:"/ˌrep.rɪ.zenˈteɪ.ʃən/"},
-  {word:"ceremonial",pos:"adj.",meaning:"relating to or used in a formal event marking an important cultural occasion",example:"The ceremonial dress worn at the festival reflects centuries of cultural tradition.",translation:"ആചാരപരമായ",ipa:"/ˌser.ɪˈməʊ.ni.əl/"},
-  {word:"sociolinguistics",pos:"n.",meaning:"the study of how language reflects and shapes social and cultural identity",example:"Sociolinguistics helps explain why people switch languages depending on their social context.",translation:"സാമൂഹ്യഭാഷാശാസ്ത്രം",ipa:"/ˌsəʊ.si.əʊ.lɪŋˈɡwɪs.tɪks/"},
-  {word:"ethnocentrism",pos:"n.",meaning:"the tendency to judge other cultures by the standards of one's own culture",example:"Ethnocentrism can prevent meaningful understanding between people of different backgrounds.",translation:"സ്വസംസ്കാരകേന്ദ്രിതത്വം",ipa:"/ˌeθ.nəʊˈsen.trɪ.zəm/"},
-  {word:"transnational",pos:"adj.",meaning:"extending across or involving more than one nation or culture",example:"Transnational identities are common among people who have lived in multiple countries.",translation:"ദേശാതീത",ipa:"/trænzˈnæʃ.ən.əl/"},
-  {word:"solar panel",pos:"n.",meaning:"a device that absorbs sunlight and converts it into electricity",example:"The school installed solar panels on its roof to reduce electricity costs.",translation:"സൗരോർജ്ജ പാനൽ",ipa:"/ˈsoʊ.lər ˌpæn.əl/"},
-  {word:"depletion",pos:"n.",meaning:"the reduction of something to a very small amount by using it up",example:"The rapid depletion of oil reserves is a serious global concern.",translation:"ശോഷണം",ipa:"/dɪˈpliː.ʃən/"},
-  {word:"hydropower",pos:"n.",meaning:"electricity generated by the force of flowing or falling water",example:"The dam was built to generate hydropower for the surrounding region.",translation:"ജലവൈദ്യുതി",ipa:"/ˈhaɪ.drəʊˌpaʊ.ər/"},
-  {word:"turbine",pos:"n.",meaning:"a machine that generates power from the movement of gas, water, or steam",example:"Wind turbines were erected along the coastline to harness wind energy.",translation:"ടർബൈൻ",ipa:"/ˈtɜː.baɪn/"},
-  {word:"emission",pos:"n.",meaning:"the production and release of gases or radiation into the atmosphere",example:"The factory was fined for exceeding permitted emission levels.",translation:"പുറന്തള്ളൽ",ipa:"/ɪˈmɪʃ.ən/"},
-  {word:"biomass",pos:"n.",meaning:"organic material from plants or animals used as a fuel or energy source",example:"The power plant burns biomass such as wood chips to generate electricity.",translation:"ജൈവ പിണ്ഡം",ipa:"/ˈbaɪ.oʊ.mæs/"},
-  {word:"extraction",pos:"n.",meaning:"the process of removing natural resources from the earth",example:"Oil extraction in the Arctic poses serious environmental risks.",translation:"ഖനനം",ipa:"/ɪkˈstræk.ʃən/"},
-  {word:"conservation",pos:"n.",meaning:"the protection and careful management of natural resources",example:"Water conservation is essential in regions that experience frequent droughts.",translation:"സംരക്ഷണം",ipa:"/ˌkɒn.səˈveɪ.ʃən/"},
-  {word:"refinery",pos:"n.",meaning:"a factory where crude oil or other raw materials are processed into usable products",example:"The oil refinery processes thousands of barrels of crude oil every day.",translation:"ശുദ്ധീകരണ ശാല",ipa:"/rɪˈfaɪ.nər.i/"},
-  {word:"grid",pos:"n.",meaning:"a network of cables or pipes for distributing electricity or gas across a region",example:"The new solar farms will feed clean energy directly into the national grid.",translation:"വൈദ്യുതി ശൃംഖല",ipa:"/ɡrɪd/"},
-  {word:"sustainability",pos:"n.",meaning:"the ability to use resources without permanently damaging the environment",example:"The government's new policy focuses on the sustainability of energy production.",translation:"സുസ്ഥിരത",ipa:"/səˌsteɪ.nəˈbɪl.ɪ.ti/"},
-  {word:"insulation",pos:"n.",meaning:"material used to prevent heat or electricity from escaping a building or system",example:"Proper insulation in walls can dramatically lower a household's energy consumption.",translation:"ഇൻസുലേഷൻ",ipa:"/ˌɪn.sjʊˈleɪ.ʃən/"},
-  {word:"tidal energy",pos:"n.",meaning:"power generated by harnessing the movement of ocean tides",example:"The coastal city invested in tidal energy as a reliable source of clean power.",translation:"ജ്വാരീയ ഊർജ്ജം",ipa:"/ˈtaɪ.dəl ˌen.ə.dʒi/"},
-  {word:"reservoir",pos:"n.",meaning:"a large natural or artificial lake used for storing water or other liquids",example:"The reservoir behind the dam holds enough water to supply electricity for thousands of homes.",translation:"ജലസംഭരണി",ipa:"/ˈrez.ə.vwɑːr/"},
-  {word:"uranium",pos:"n.",meaning:"a radioactive metal used as fuel in nuclear power plants",example:"Uranium is mined in several countries and used to power nuclear reactors.",translation:"യുറേനിയം",ipa:"/jʊˈreɪ.ni.əm/"},
-  {word:"efficiency",pos:"n.",meaning:"the ability to achieve a result with minimum waste of energy or resources",example:"Improving the energy efficiency of buildings is key to reducing carbon emissions.",translation:"കാര്യക്ഷമത",ipa:"/ɪˈfɪʃ.ən.si/"},
-  {word:"crude oil",pos:"n.",meaning:"petroleum in its natural, unrefined state as it comes out of the ground",example:"Crude oil prices rose sharply after the disruption in supply from the Middle East.",translation:"അസംസ്കൃത എണ്ണ",ipa:"/kruːd ɔɪl/"},
-  {word:"fracking",pos:"n.",meaning:"a method of extracting oil or gas by injecting liquid into rock at high pressure",example:"Fracking has been banned in some countries due to concerns about water contamination.",translation:"ഫ്രാക്കിംഗ്",ipa:"/ˈfræk.ɪŋ/"},
-  {word:"nuclear reactor",pos:"n.",meaning:"a device in which nuclear fission is used to generate heat and electricity",example:"The nuclear reactor provides about a third of the country's electricity supply.",translation:"ആണവ റിയാക്ടർ",ipa:"/ˈnjuː.kli.ər riˌæk.tər/"},
-  {word:"substation",pos:"n.",meaning:"a facility that transforms voltage in an electrical transmission system",example:"Workers repaired the damaged substation to restore power to the affected areas.",translation:"സബ്സ്റ്റേഷൻ",ipa:"/ˈsʌbˌsteɪ.ʃən/"},
-  {word:"natural gas",pos:"n.",meaning:"a combustible gas found underground, used as a fuel for heating and electricity",example:"Many households have switched from oil to natural gas for heating their homes.",translation:"പ്രകൃതി വാതകം",ipa:"/ˈnætʃ.ər.əl ɡæs/"},
-  {word:"photovoltaic",pos:"adj.",meaning:"relating to the conversion of sunlight directly into electricity using semiconductor materials",example:"The photovoltaic cells on the rooftop generate enough power for the entire building.",translation:"ഫോട്ടോവോൾട്ടായിക്",ipa:"/ˌfoʊ.toʊ.vɒlˈteɪ.ɪk/"},
-  {word:"offshore",pos:"adj.",meaning:"located or occurring at sea, away from the coast",example:"The offshore wind farm was built several kilometres from the shore to capture stronger winds.",translation:"കടൽ തീരത്തു നിന്ന് അകലെ",ipa:"/ˌɒfˈʃɔːr/"},
-  {word:"pipeline",pos:"n.",meaning:"a long pipe used to transport oil, gas, or water over a distance",example:"The new pipeline will carry natural gas from the eastern fields to the capital city.",translation:"പൈപ്പ്‌ലൈൻ",ipa:"/ˈpaɪp.laɪn/"},
-  {word:"carbon capture",pos:"n.",meaning:"the process of trapping carbon dioxide before it is released into the atmosphere",example:"Carbon capture technology could help industries reduce their environmental impact significantly.",translation:"കാർബൺ ക്യാപ്ചർ",ipa:"/ˈkɑː.bən ˌkæp.tʃər/"},
-  {word:"coal mine",pos:"n.",meaning:"a place where coal is extracted from underground by workers",example:"The old coal mine was closed after cheaper and cleaner energy sources became available.",translation:"കൽക്കരി ഖനി",ipa:"/koʊl maɪn/"},
-  {word:"desalination",pos:"n.",meaning:"the process of removing salt from seawater to make it suitable for drinking or irrigation",example:"Desalination plants provide fresh water to many communities in dry coastal regions.",translation:"ഡീസലൈനേഷൻ",ipa:"/diːˌsæl.ɪˈneɪ.ʃən/"},
-  {word:"arraignment",pos:"n.",meaning:"a court hearing where charges are formally read to a defendant",example:"His arraignment was scheduled for the following Monday morning.",translation:"കുറ്റാരോപണ വിചാരണ",ipa:"/əˈreɪn.mənt/"},
-  {word:"burglary",pos:"n.",meaning:"the crime of illegally entering a building to steal something",example:"He was convicted of burglary after breaking into three homes.",translation:"കന്നുകട്ടൽ / ഗൃഹഭേദനം",ipa:"/ˈbɜː.ɡlər.i/"},
-  {word:"confession",pos:"n.",meaning:"a formal statement admitting that one is guilty of a crime",example:"The detective obtained a confession from the suspect overnight.",translation:"കുറ്റസമ്മതം",ipa:"/kənˈfeʃ.ən/"},
-  {word:"culprit",pos:"n.",meaning:"a person who is responsible for a crime or wrongdoing",example:"Police identified the culprit through security camera footage.",translation:"കുറ്റവാളി",ipa:"/ˈkʌl.prɪt/"},
-  {word:"custody",pos:"n.",meaning:"the state of being kept in prison or under police control",example:"The suspect was taken into custody after the robbery.",translation:"കസ്റ്റഡി / അറസ്റ്റ്",ipa:"/ˈkʌs.tə.di/"},
-  {word:"deterrence",pos:"n.",meaning:"the prevention of crime through the threat of punishment",example:"Longer sentences are used as a form of deterrence against violent crime.",translation:"തടയൽ നടപടി",ipa:"/dɪˈter.əns/"},
-  {word:"embezzlement",pos:"n.",meaning:"the theft of money by a person trusted to manage it",example:"The accountant was charged with embezzlement of company funds.",translation:"ഒഴിപ്പിക്കൽ / ധനം തിരിമറി",ipa:"/ɪmˈbez.əl.mənt/"},
-  {word:"extortion",pos:"n.",meaning:"the practice of obtaining something through threats or force",example:"The gang leader was arrested for extortion and intimidation.",translation:"ഭീഷണിപ്പണം",ipa:"/ɪkˈstɔː.ʃən/"},
-  {word:"felony",pos:"n.",meaning:"a serious crime that carries severe punishment",example:"Armed robbery is classified as a felony in most countries.",translation:"ഗുരുതരമായ കുറ്റകൃത്യം",ipa:"/ˈfel.ə.ni/"},
-  {word:"forfeiture",pos:"n.",meaning:"the loss of property or rights as a penalty for a crime",example:"The court ordered the forfeiture of his illegally acquired assets.",translation:"കണ്ടുകെട്ടൽ",ipa:"/ˈfɔː.fɪ.tʃər/"},
-  {word:"incarceration",pos:"n.",meaning:"the state of being imprisoned",example:"Long-term incarceration can have serious psychological effects.",translation:"തടവ്",ipa:"/ɪnˌkɑː.sərˈeɪ.ʃən/"},
-  {word:"indictment",pos:"n.",meaning:"a formal charge or accusation of a serious crime",example:"The grand jury issued an indictment against the corrupt official.",translation:"ഔപചാരിക കുറ്റാരോപണം",ipa:"/ɪnˈdaɪt.mənt/"},
-  {word:"infraction",pos:"n.",meaning:"a minor violation of a rule or law",example:"Parking in a no-parking zone is considered a traffic infraction.",translation:"ലഘു നിയമലംഘനം",ipa:"/ɪnˈfræk.ʃən/"},
-  {word:"larceny",pos:"n.",meaning:"the crime of stealing someone's personal property",example:"She was charged with petty larceny for stealing items from the store.",translation:"മോഷണം",ipa:"/ˈlɑː.sə.ni/"},
-  {word:"manslaughter",pos:"n.",meaning:"the unlawful killing of a person without premeditation",example:"He was convicted of manslaughter after the drunk driving accident.",translation:"അനവധാന നരഹത്യ",ipa:"/ˈmæn.slɔː.tər/"},
-  {word:"misdemeanor",pos:"n.",meaning:"a minor crime less serious than a felony",example:"Shoplifting a small item is typically treated as a misdemeanor.",translation:"ലഘു കുറ്റകൃത്യം",ipa:"/ˌmɪs.dɪˈmiː.nər/"},
-  {word:"perpetrator",pos:"n.",meaning:"a person who commits a crime or harmful act",example:"Police are still searching for the perpetrator of the attack.",translation:"കുറ്റകൃത്യം ചെയ്തയാൾ",ipa:"/ˈpɜː.pɪ.treɪ.tər/"},
-  {word:"plea",pos:"n.",meaning:"a formal statement in court of guilty or not guilty",example:"The accused entered a plea of not guilty at the hearing.",translation:"വിചാരണയിലെ മൊഴി",ipa:"/pliː/"},
-  {word:"probation",pos:"n.",meaning:"a period of supervision instead of prison for an offender",example:"The young offender was placed on probation for two years.",translation:"പ്രൊബേഷൻ / നിരീക്ഷണ കാലം",ipa:"/prəˈbeɪ.ʃən/"},
-  {word:"recidivism",pos:"n.",meaning:"the tendency of a criminal to reoffend after punishment",example:"High rates of recidivism suggest that rehabilitation programs are needed.",translation:"ആവർത്തിത കുറ്റകൃത്യം",ipa:"/rɪˈsɪd.ɪ.vɪ.zəm/"},
-  {word:"sentence",pos:"n.",meaning:"the punishment officially given to someone found guilty in court",example:"The judge handed down a ten-year sentence for the crime.",translation:"ശിക്ഷ",ipa:"/ˈsen.təns/"},
-  {word:"diagnosis",pos:"n.",meaning:"the process of identifying a disease or condition from symptoms",example:"The doctor made a diagnosis after reviewing the test results.",translation:"രോഗനിർണ്ണയം",ipa:"/ˌdaɪəɡˈnoʊsɪs/"},
-  {word:"referral",pos:"n.",meaning:"the act of sending a patient to a specialist for further treatment",example:"My GP gave me a referral to see a cardiologist.",translation:"വിദഗ്ദ്ധ ഡോക്ടർ ശുപാർശ",ipa:"/rɪˈfɜːrəl/"},
-  {word:"acute",pos:"adj.",meaning:"describing a condition that comes on suddenly and is severe",example:"He was hospitalized due to an acute infection.",translation:"തീവ്രമായ",ipa:"/əˈkjuːt/"},
-  {word:"prescription",pos:"n.",meaning:"a written order from a doctor for medication",example:"The pharmacist filled the prescription within minutes.",translation:"മരുന്ന് കുറിപ്പ്",ipa:"/prɪˈskrɪpʃən/"},
-  {word:"immunization",pos:"n.",meaning:"the process of making a person immune to disease through vaccination",example:"Childhood immunization programs have reduced many serious diseases.",translation:"പ്രതിരോധ കുത്തിവയ്പ്പ്",ipa:"/ˌɪmjʊnaɪˈzeɪʃən/"},
-  {word:"outpatient",pos:"n.",meaning:"a patient who receives treatment without staying overnight in a hospital",example:"Most routine procedures are now done on an outpatient basis.",translation:"ബാഹ്യ രോഗി",ipa:"/ˈaʊtˌpeɪʃənt/"},
-  {word:"inpatient",pos:"n.",meaning:"a patient who stays in a hospital for treatment",example:"The ward has capacity for forty inpatient beds.",translation:"ആന്തരിക രോഗി",ipa:"/ˈɪnˌpeɪʃənt/"},
-  {word:"symptom",pos:"n.",meaning:"a sign that indicates the presence of a disease or condition",example:"Fatigue is a common symptom of anaemia.",translation:"രോഗലക്ഷണം",ipa:"/ˈsɪmptəm/"},
-  {word:"compliance",pos:"n.",meaning:"following medical advice and taking medication as prescribed",example:"Patient compliance with the treatment plan improved recovery outcomes.",translation:"ചികിത്സാ അനുസരണം",ipa:"/kəmˈplaɪəns/"},
-  {word:"dosage",pos:"n.",meaning:"the amount of medicine to be taken at one time",example:"The doctor adjusted the dosage after monitoring the patient's response.",translation:"മരുന്നിൻ്റെ അളവ്",ipa:"/ˈdoʊsɪdʒ/"},
-  {word:"ailment",pos:"n.",meaning:"a minor illness or health problem",example:"The clinic treats common ailments like colds and minor infections.",translation:"അസുഖം",ipa:"/ˈeɪlmənt/"},
-  {word:"discharge",pos:"n.",meaning:"the official release of a patient from hospital care",example:"She received her discharge papers after a five-day stay.",translation:"ആശുപത്രി വിടൽ",ipa:"/ˈdɪstʃɑːrdʒ/"},
-  {word:"consultation",pos:"n.",meaning:"a meeting with a doctor or specialist to discuss health concerns",example:"He booked a consultation with a dermatologist about his skin condition.",translation:"വൈദ്യ ഉപദേശം",ipa:"/ˌkɒnsəlˈteɪʃən/"},
-  {word:"clinical",pos:"adj.",meaning:"relating to the direct examination and treatment of patients",example:"The drug passed all clinical trials before being approved.",translation:"ക്ലിനിക്കൽ",ipa:"/ˈklɪnɪkəl/"},
-  {word:"consent",pos:"n.",meaning:"a patient's agreement to receive a medical procedure",example:"Informed consent must be obtained before any surgical operation.",translation:"സമ്മതം",ipa:"/kənˈsent/"},
-  {word:"mortality",pos:"n.",meaning:"the number of deaths in a particular population from a specific cause",example:"Improved screening has reduced the mortality rate for certain cancers.",translation:"മരണനിരക്ക്",ipa:"/mɔːrˈtælɪti/"},
-  {word:"morbidity",pos:"n.",meaning:"the rate of disease or illness in a population",example:"Diabetes contributes to high morbidity in many countries.",translation:"രോഗ നിരക്ക്",ipa:"/mɔːrˈbɪdɪti/"},
-  {word:"infirmary",pos:"n.",meaning:"a small hospital or medical facility within an institution",example:"Students can visit the school infirmary if they feel unwell.",translation:"ആശുപത്രി മുറി",ipa:"/ɪnˈfɜːrməri/"},
-  {word:"therapeutic",pos:"adj.",meaning:"having a healing or beneficial effect on the body or mind",example:"Regular exercise has proven therapeutic effects on mental health.",translation:"ചികിത്സാ ഗുണമുള്ള",ipa:"/ˌθerəˈpjuːtɪk/"},
-  {word:"convalescence",pos:"n.",meaning:"the period of recovery following an illness or surgery",example:"She spent her convalescence resting at home after the procedure.",translation:"സുഖപ്പെടൽ കാലഘട്ടം",ipa:"/ˌkɒnvəˈlesəns/"},
-  {word:"encrypt",pos:"v.",meaning:"to convert data into a coded form to prevent unauthorized access",example:"The company decided to encrypt all customer payment information.",translation:"എൻക്രിപ്റ്റ് ചെയ്യുക",ipa:"/ɪnˈkrɪpt/"},
-  {word:"agile",pos:"adj.",meaning:"relating to a flexible and fast approach to managing software projects",example:"The team adopted an agile methodology to deliver updates more quickly.",translation:"അജൈൽ",ipa:"/ˈædʒaɪl/"},
-  {word:"deployment",pos:"n.",meaning:"the process of making software or technology available for use",example:"The deployment of the new system was completed over the weekend.",translation:"വിനിയോഗം",ipa:"/dɪˈplɔɪmənt/"},
-  {word:"migrate",pos:"v.",meaning:"to move data or systems from one platform or environment to another",example:"The business decided to migrate all its files to cloud storage.",translation:"മൈഗ്രേറ്റ് ചെയ്യുക",ipa:"/maɪˈɡreɪt/"},
-  {word:"platform",pos:"n.",meaning:"a digital environment or service on which applications and processes run",example:"Social media platforms have changed how businesses communicate with customers.",translation:"പ്ലാറ്റ്ഫോം",ipa:"/ˈplætfɔːm/"},
-  {word:"streamline",pos:"v.",meaning:"to make a process simpler and more efficient using technology",example:"The company used software to streamline its invoicing and billing processes.",translation:"കാര്യക്ഷമമാക്കുക",ipa:"/ˈstriːmlaɪn/"},
-  {word:"digitize",pos:"v.",meaning:"to convert information or processes into a digital format",example:"The library project aims to digitize thousands of historical documents.",translation:"ഡിജിറ്റൈസ് ചെയ്യുക",ipa:"/ˈdɪdʒɪtaɪz/"},
-  {word:"startup",pos:"n.",meaning:"a newly established business, especially one using technology",example:"The startup attracted investors by demonstrating its innovative mobile application.",translation:"സ്റ്റാർട്ടപ്പ്",ipa:"/ˈstɑːtʌp/"},
-  {word:"pivot",pos:"v.",meaning:"to shift a business strategy or product direction in response to change",example:"When demand dropped, the company had to pivot toward online services.",translation:"ദിശ മാറ്റുക",ipa:"/ˈpɪvət/"},
-  {word:"upskill",pos:"v.",meaning:"to learn new skills needed for modern or digital work environments",example:"Many employees attended workshops to upskill in data analysis tools.",translation:"പുതിയ കഴിവുകൾ നേടുക",ipa:"/ˌʌpˈskɪl/"},
-  {word:"iteration",pos:"n.",meaning:"a repeated cycle of developing and improving a product or process",example:"Each iteration of the software brought new features and bug fixes.",translation:"ആവർത്തന ഘട്ടം",ipa:"/ˌɪtəˈreɪʃən/"},
-  {word:"vendor",pos:"n.",meaning:"a company that supplies technology products or services to businesses",example:"The organization chose a reliable vendor to provide its cloud services.",translation:"വിതരണക്കാരൻ",ipa:"/ˈvendər/"},
-  {word:"repository",pos:"n.",meaning:"a central location where digital data or code is stored and managed",example:"Developers store their code in a shared repository to collaborate easily.",translation:"ശേഖരണ കേന്ദ്രം",ipa:"/rɪˈpɒzɪtri/"},
-  {word:"analytics",pos:"n.",meaning:"the systematic analysis of data to support business decision-making",example:"The marketing team used analytics to understand customer behaviour online.",translation:"അനലിറ്റിക്സ്",ipa:"/ˌænəˈlɪtɪks/"},
-  {word:"adoption",pos:"n.",meaning:"the process of beginning to use a new technology or system",example:"The adoption of cloud computing has grown rapidly across many industries.",translation:"സ്വീകരണം",ipa:"/əˈdɒpʃən/"},
-  {word:"interoperability",pos:"n.",meaning:"the ability of different systems or software to work together effectively",example:"Interoperability between hospital systems improves patient data sharing.",translation:"പരസ്പര പ്രവർത്തനക്ഷമത",ipa:"/ˌɪntərɒpərəˈbɪlɪti/"},
-  {word:"deportation",pos:"n.",meaning:"the act of forcing a foreign national to leave a country",example:"He faced deportation after overstaying his visa for several months.",translation:"നാടുകടത്തൽ",ipa:"/ˌdiːpɔːˈteɪʃən/"},
-  {word:"naturalization",pos:"n.",meaning:"the legal process by which a foreign citizen becomes a citizen of another country",example:"After ten years of residence, she finally completed her naturalization.",translation:"പൗരത്വം നൽകൽ",ipa:"/ˌnætʃrələˈzeɪʃən/"},
-  {word:"detention",pos:"n.",meaning:"the state of being kept in a facility, often while awaiting immigration decisions",example:"Many migrants were held in detention centres near the border.",translation:"തടങ്കൽ",ipa:"/dɪˈtenʃən/"},
-  {word:"resettlement",pos:"n.",meaning:"the process of helping refugees establish a new home in another country",example:"The UN agency coordinated the resettlement of displaced families.",translation:"പുനരധിവാസം",ipa:"/ˌriːˈsetlmənt/"},
-  {word:"undocumented",pos:"adj.",meaning:"describing a person living in a country without legal permission or official papers",example:"Undocumented workers often fear reporting crimes to the police.",translation:"രേഖകളില്ലാത്ത",ipa:"/ˌʌnˈdɒkjʊmentɪd/"},
-  {word:"persecution",pos:"n.",meaning:"cruel and unfair treatment of a person or group, often due to race or religion",example:"He fled religious persecution in his home country.",translation:"പീഡനം",ipa:"/ˌpɜːsɪˈkjuːʃən/"},
-  {word:"emigrant",pos:"n.",meaning:"a person who leaves their own country to settle permanently in another",example:"Many emigrants sent money back to support their families at home.",translation:"കുടിയേറ്റക്കാരൻ",ipa:"/ˈemɪɡrənt/"},
-  {word:"marginalized",pos:"adj.",meaning:"treated as if unimportant or pushed to the edges of society",example:"Marginalized communities often have limited access to healthcare and housing.",translation:"പാർശ്വവൽക്കരിക്കപ്പെട്ട",ipa:"/ˈmɑːrdʒɪnəlaɪzd/"},
-  {word:"redistribution",pos:"n.",meaning:"the process of sharing wealth or resources more equally across society",example:"Some economists argue that redistribution of wealth is necessary to reduce poverty.",translation:"പുനർവിതരണം",ipa:"/ˌriːdɪstrɪˈbjuːʃən/"},
-  {word:"coverage",pos:"n.",meaning:"the reporting of a particular topic or event by newspapers, television, or radio",example:"The media's extensive coverage of the protest brought the issue to public attention worldwide.",translation:"വാർത്താ പരിരക്ഷ",ipa:"/ˈkʌvərɪdʒ/"},
-  {word:"misconduct",pos:"n.",meaning:"unacceptable or improper behaviour by a professional, such as falsifying data or plagiarising in research",example:"The scientist was dismissed from the university after being found guilty of research misconduct.",translation:"ദുർനടപ്പ്, അനുചിത പെരുമാറ്റം",ipa:"/mɪsˈkɒndʌkt/"},
-  {word:"zoning",pos:"n.",meaning:"the system of dividing a city or town into areas designated for specific uses such as housing, business, or industry",example:"The city council changed the zoning laws to allow more residential buildings near the commercial district.",translation:"സോണിംഗ്",ipa:"/ˈzoʊnɪŋ/"},
-  {word:"façade",pos:"n.",meaning:"the front exterior face of a building, especially one that is decorated or designed to look impressive",example:"The architect carefully restored the historic façade of the old town hall to preserve its original appearance.",translation:"കെട്ടിടത്തിന്റെ മുൻഭാഗം",ipa:"/fəˈsɑːd/"}],
+],
 
 // ─────────────────────────────────────────────────────────────
 // C1 - ADVANCED (300 words)
@@ -4477,691 +1672,7 @@ C1: [
   {word:"volatile",pos:"adj.",meaning:"Changeable and unpredictable",example:"Volatile markets.",translation:"ചഞ്ചല"},
   {word:"wane",pos:"v.",meaning:"To decrease gradually",example:"His interest began to wane.",translation:"ക്ഷീണിക്കുക"},
   {word:"zealous",pos:"adj.",meaning:"Having great energy for a cause",example:"A zealous worker.",translation:"ആവേശ"},
-,
-  {word:"hedging",pos:"n.",meaning:"the use of cautious language to soften claims or avoid absolute statements",example:"Hedging is a common feature of academic writing, where authors use phrases like 'it appears that' to avoid overcommitting to a claim.",translation:"സൂക്ഷ്മ ഭാഷാ പ്രയോഗം",ipa:"ˈhɛdʒɪŋ"},
-  {word:"felicitous",pos:"adj.",meaning:"well-chosen and effective; pleasingly apt in expression",example:"The scholar's felicitous phrasing made even the most complex argument easy to follow.",translation:"അനുയോജ്യമായ",ipa:"fɪˈlɪsɪtəs"},
-  {word:"ellipsis",pos:"n.",meaning:"the omission of words whose meaning can be understood from context; also, three dots indicating omitted text",example:"The researcher used ellipsis carefully when quoting long passages to maintain the source's original meaning.",translation:"വാക്ക് ഒഴിവാക്കൽ",ipa:"ɪˈlɪpsɪs"},
-  {word:"anaphora",pos:"n.",meaning:"the repetition of a word or phrase at the beginning of successive clauses for rhetorical effect",example:"The use of anaphora in the essay's conclusion gave it a powerful, rhythmic quality.",translation:"ആനാഫോറ",ipa:"əˈnæfərə"},
-  {word:"aphorism",pos:"n.",meaning:"a short, memorable statement expressing a general truth or principle",example:"The writer opened the essay with a well-known aphorism to immediately engage the reader's attention.",translation:"സൂക്തം",ipa:"ˈæfərɪzəm"},
-  {word:"expository",pos:"adj.",meaning:"intended to explain or describe something clearly and informatively",example:"An expository essay requires the writer to present facts and explain ideas without personal bias.",translation:"വിശദീകരണാത്മക",ipa:"ɪkˈspɒzɪtəri"},
-  {word:"elision",pos:"n.",meaning:"the omission of a sound, syllable, or section of text for brevity or stylistic effect",example:"The editor recommended elision of the redundant paragraph to tighten the argument.",translation:"ലഘൂകരണം",ipa:"ɪˈlɪʒən"},
-  {word:"syllogism",pos:"n.",meaning:"a form of logical reasoning in which a conclusion is drawn from two premises",example:"The philosopher constructed a syllogism to demonstrate that the opposing argument was logically flawed.",translation:"ന്യായവാദം",ipa:"ˈsɪləʤɪzəm"},
-  {word:"deconstruct",pos:"v.",meaning:"to analyze a text by breaking it down to reveal hidden assumptions or contradictions",example:"The seminar asked students to deconstruct the author's argument and identify its underlying ideological assumptions.",translation:"വിഘടിപ്പിക്കുക",ipa:"ˌdiːkənˈstrʌkt"},
-  {word:"annotate",pos:"v.",meaning:"to add explanatory notes or critical commentary to a text",example:"Students were asked to annotate the primary sources before writing their literature reviews.",translation:"കുറിപ്പ് ചേർക്കുക",ipa:"ˈænəteɪt"},
-  {word:"circumlocution",pos:"n.",meaning:"the use of unnecessarily many words to express an idea; indirect expression",example:"Academic reviewers often criticize circumlocution, preferring clear and direct prose instead.",translation:"വളഞ്ഞ വാക്പ്രയോഗം",ipa:"ˌsɜːkəmləˈkjuːʃən"},
-  {word:"tendentious",pos:"adj.",meaning:"promoting a particular viewpoint in a biased or controversial way",example:"The referee warned that the paper's conclusion was tendentious and needed more balanced evidence.",translation:"പക്ഷപാതപരമായ",ipa:"tɛnˈdɛnʃəs"},
-  {word:"logomachy",pos:"n.",meaning:"an argument or dispute about words and their meanings",example:"The debate between the two scholars deteriorated into logomachy, with each side arguing over terminology rather than substance.",translation:"വാക്കു തർക്കം",ipa:"lɒˈɡɒməki"},
-  {word:"refutation",pos:"n.",meaning:"the action of proving a statement or argument to be wrong",example:"A strong refutation of the opposing viewpoint is essential to a persuasive academic essay.",translation:"ഖണ്ഡനം",ipa:"ˌrɛfjʊˈteɪʃən"},
-  {word:"prosody",pos:"n.",meaning:"the patterns of rhythm and sound in writing or speech",example:"An understanding of prosody helps rhetoric students analyze how sentence rhythm influences persuasion.",translation:"പദ്യശാസ്ത്രം",ipa:"ˈprɒsədi"},
-  {word:"interlocutor",pos:"n.",meaning:"a person who takes part in a dialogue or discussion",example:"In Socratic dialogue, the philosopher engages an interlocutor to expose contradictions in their thinking.",translation:"സംഭാഷണ പങ്കാളി",ipa:"ˌɪntəˈlɒkjʊtə"},
-  {word:"tautology",pos:"n.",meaning:"saying the same thing twice in different words; unnecessary repetition of meaning",example:"The reviewer flagged the phrase 'completely unanimous' as a tautology and asked for revision.",translation:"പുനരാവർത്തന ദോഷം",ipa:"tɔːˈtɒləʤi"},
-  {word:"predicate",pos:"v.",meaning:"to base or found an argument or statement on something",example:"The entire thesis is predicated on the assumption that language shapes thought.",translation:"ആധാരപ്പെടുത്തുക",ipa:"ˈprɛdɪkeɪt"},
-  {word:"enthymeme",pos:"n.",meaning:"a rhetorical argument in which one premise is implied rather than stated",example:"The politician's speech relied on an enthymeme, leaving the audience to supply the unstated moral assumption.",translation:"അർദ്ധ ന്യായം",ipa:"ˈɛnθɪmiːm"},
-  {word:"interpolate",pos:"v.",meaning:"to insert additional material into a text or argument",example:"The editor asked the author to interpolate a transitional paragraph between the two conflicting sections.",translation:"ഇടയ്ക്ക് ചേർക്കുക",ipa:"ɪnˈtɜːpəleɪt"},
-  {word:"verisimilitude",pos:"n.",meaning:"the appearance of being true or real; believability",example:"To strengthen its verisimilitude, the case study incorporated direct quotations from participants.",translation:"സത്യസദൃശത",ipa:"ˌvɛrɪsɪˈmɪlɪtjuːd"},
-  {word:"peripatetic",pos:"adj.",meaning:"moving from topic to topic; not staying focused on a single argument",example:"The professor warned that a peripatetic essay structure would confuse readers and weaken the central argument.",translation:"ചിതറിനടക്കുന്ന",ipa:"ˌpɛrɪpəˈtɛtɪk"},
-  {word:"polemic",pos:"n.",meaning:"a strong written or verbal attack on someone's opinions or a controversial argument",example:"The article was criticized as a polemic rather than a balanced scholarly contribution.",translation:"ശക്തമായ വാദം",ipa:"pəˈlɛmɪk"},
-  {word:"synecdoche",pos:"n.",meaning:"a figure of speech in which a part is used to represent the whole, or vice versa",example:"Using 'the pen' to refer to writing itself is a classic example of synecdoche in rhetorical texts.",translation:"സൈനക്‌ഡോക്കി",ipa:"sɪˈnɛkdəki"},
-  {word:"heuristic",pos:"adj.",meaning:"enabling a person to discover or learn something for themselves through exploration",example:"The writing workshop used a heuristic approach, encouraging students to find their own argumentative strategies.",translation:"അന്വേഷണ സഹായകമായ",ipa:"hjʊˈrɪstɪk"},
-  {word:"epistemic",pos:"adj.",meaning:"relating to knowledge or the degree of its validation",example:"The paper raised important epistemic questions about how academic disciplines construct authoritative knowledge.",translation:"ജ്ഞാനശാസ്ത്രപരമായ",ipa:"ˌɛpɪˈstiːmɪk"},
-  {word:"appositive",pos:"n.",meaning:"a noun phrase placed next to another noun to identify or describe it",example:"Using an appositive effectively can add clarity and depth to academic prose without adding a new sentence.",translation:"സമാനോക്തി",ipa:"əˈpɒzɪtɪv"},
-  {word:"discursive",pos:"adj.",meaning:"covering a wide range of topics without strict focus; moving from subject to subject",example:"The committee preferred a structured argument over the author's discursive approach to the subject.",translation:"വിഷയ ചിതറൽ",ipa:"dɪˈskɜːsɪv"},
-  {word:"preamble",pos:"n.",meaning:"an introductory statement providing context before the main argument",example:"The preamble of the research paper outlined the historical background before presenting the central thesis.",translation:"മുഖവുര",ipa:"ˈpriːæmbəl"},
-  {word:"metalanguage",pos:"n.",meaning:"language used to describe or analyze language itself",example:"Linguists rely on metalanguage to discuss grammatical structures without ambiguity in their academic writing.",translation:"ഭാഷാ വിശ്ലേഷണ ഭാഷ",ipa:"ˈmɛtəˌlæŋɡwɪʤ"},
-  {word:"ontology",pos:"n.",meaning:"the branch of philosophy concerned with the nature of existence and being",example:"Her dissertation focused on ontology, questioning whether abstract concepts truly exist independently of the human mind.",translation:"അസ്തിത്വത്തിന്റെ സ്വഭാവത്തെക്കുറിച്ചുള്ള തത്ത്വചിന്താ ശാഖ",ipa:"/ɒnˈtɒlədʒi/"},
-  {word:"teleology",pos:"n.",meaning:"the philosophical study of purpose or design in natural processes or outcomes",example:"Teleology asks whether human history is moving toward some ultimate goal or purpose.",translation:"ഉദ്ദേശ്യത്തിന്റെ തത്ത്വചിന്താപരമായ പഠനം",ipa:"/ˌtiːliˈɒlədʒi/"},
-  {word:"aporia",pos:"n.",meaning:"a state of genuine philosophical puzzlement or irresolvable doubt",example:"The philosopher expressed an aporia about free will, unable to reconcile determinism with moral responsibility.",translation:"തത്ത്വചിന്താപരമായ ആശയക്കുഴപ്പം",ipa:"/əˈpɔːriə/"},
-  {word:"solipsism",pos:"n.",meaning:"the view that only one's own mind is certain to exist and everything else may be unreal",example:"Solipsism, while logically difficult to disprove, is rarely taken seriously as a practical philosophy.",translation:"സ്വന്തം മനസ്സ് മാത്രമാണ് യഥാർഥം എന്ന വിശ്വാസം",ipa:"/ˈsɒlɪpsɪzəm/"},
-  {word:"dialectic",pos:"n.",meaning:"a method of reasoning through opposing ideas to reach a higher truth",example:"Hegel's dialectic involves a thesis being challenged by its antithesis to produce a synthesis.",translation:"വൈരുദ്ധ്യ യുക്തിചിന്തയിലൂടെ സത്യം കണ്ടെത്തൽ",ipa:"/daɪˈælektɪk/"},
-  {word:"phenomenology",pos:"n.",meaning:"the philosophical study of conscious experience from a first-person perspective",example:"Phenomenology encourages us to examine how things appear to our consciousness before making judgments about their reality.",translation:"ബോധപൂർവ അനുഭവത്തെക്കുറിച്ചുള്ള തത്ത്വചിന്ത",ipa:"/fɪˌnɒmɪˈnɒlədʒi/"},
-  {word:"reductionism",pos:"n.",meaning:"the practice of explaining complex phenomena by breaking them down into simpler components",example:"Critics of reductionism argue that human consciousness cannot be fully explained by brain chemistry alone.",translation:"സങ്കീർണ കാര്യങ്ങളെ ലഘൂകരിച്ച് വിശദീകരിക്കൽ",ipa:"/rɪˈdʌkʃənɪzəm/"},
-  {word:"deontology",pos:"n.",meaning:"an ethical theory that bases morality on rules and duties rather than consequences",example:"Deontology holds that certain actions are inherently right or wrong regardless of their outcomes.",translation:"കടമകളെ അടിസ്ഥാനമാക്കിയ ധർമ്മശാസ്ത്രം",ipa:"/ˌdiːɒnˈtɒlədʒi/"},
-  {word:"cogitate",pos:"v.",meaning:"to think deeply and carefully about something",example:"She sat quietly by the window, cogitating on the ethical implications of the new policy.",translation:"ആഴത്തിൽ ചിന്തിക്കുക",ipa:"/ˈkɒdʒɪteɪt/"},
-  {word:"abstraction",pos:"n.",meaning:"a concept or idea that has no concrete or physical existence",example:"Justice is an abstraction that different cultures define in vastly different ways.",translation:"ഭൗതിക അസ്തിത്വമില്ലാത്ത സങ്കൽപം",ipa:"/æbˈstrækʃən/"},
-  {word:"nihilism",pos:"n.",meaning:"the belief that life has no meaning, purpose, or intrinsic value",example:"Nihilism can be both a liberating and a deeply unsettling philosophical position to adopt.",translation:"ജീവിതത്തിന് അർഥമില്ല എന്ന വിശ്വാസം",ipa:"/ˈnaɪɪlɪzəm/"},
-  {word:"epistemology",pos:"n.",meaning:"the branch of philosophy dealing with the nature, sources, and limits of knowledge",example:"Epistemology asks how we can truly know anything and what justifies our beliefs.",translation:"അറിവിന്റെ സ്വഭാവത്തെക്കുറിച്ചുള്ള തത്ത്വചിന്ത",ipa:"/ɪˌpɪstɪˈmɒlədʒi/"},
-  {word:"axiom",pos:"n.",meaning:"a statement accepted as self-evidently true and used as a basis for reasoning",example:"The axiom that all humans seek happiness underpins much of utilitarian moral philosophy.",translation:"സ്വയം സ്പഷ്ടമായ സത്യം",ipa:"/ˈæksiəm/"},
-  {word:"cogent",pos:"adj.",meaning:"powerfully convincing and logically well-constructed",example:"The professor presented a cogent argument that challenged centuries of accepted philosophical thought.",translation:"യുക്തിസഹമായ, ബോധ്യപ്പെടുത്തുന്ന",ipa:"/ˈkəʊdʒənt/"},
-  {word:"hermeneutics",pos:"n.",meaning:"the theory and methodology of interpreting texts and meaning",example:"Hermeneutics is essential in philosophy when trying to understand ancient texts in their original context.",translation:"ഗ്രന്ഥ വ്യാഖ്യാനത്തിന്റെ ശാസ്ത്രം",ipa:"/ˌhɜːmɪˈnjuːtɪks/"},
-  {word:"metaphysics",pos:"n.",meaning:"the branch of philosophy concerned with the fundamental nature of reality and existence",example:"Metaphysics explores questions about time, space, and causality that go beyond what science can measure.",translation:"യാഥാർഥ്യത്തിന്റെ മൂലസ്വഭാവത്തെക്കുറിച്ചുള്ള തത്ത്വചിന്ത",ipa:"/ˌmetəˈfɪzɪks/"},
-  {word:"relativism",pos:"n.",meaning:"the view that knowledge, truth, and morality exist only in relation to cultural or personal context",example:"Moral relativism suggests that no universal standard exists by which to judge all ethical systems.",translation:"സത്യം ആപേക്ഷികമാണ് എന്ന സിദ്ധാന്തം",ipa:"/ˈrelətɪvɪzəm/"},
-  {word:"numinous",pos:"adj.",meaning:"having a strong spiritual or mysterious quality that evokes awe",example:"The philosopher described certain experiences of beauty as numinous, pointing toward something beyond ordinary understanding.",translation:"ആദ്ധ്യാത്മിക ഭയഭക്തി ഉണർത്തുന്ന",ipa:"/ˈnjuːmɪnəs/"},
-  {word:"categorical",pos:"adj.",meaning:"unambiguously absolute and not dependent on conditions or exceptions",example:"Kant's categorical imperative demands that we act only according to principles we could will to be universal laws.",translation:"നിരുപാധികമായ, ഖണ്ഡിതമായ",ipa:"/ˌkætəˈɡɒrɪkəl/"},
-  {word:"ruminate",pos:"v.",meaning:"to think deeply and at length about something, often in a reflective way",example:"He would ruminate for hours on the paradoxes of identity before writing a single sentence.",translation:"ആഴത്തിൽ ചിന്തിച്ചുകൊണ്ടിരിക്കുക",ipa:"/ˈruːmɪneɪt/"},
-  {word:"noumenon",pos:"n.",meaning:"a thing as it exists independently of human perception, unknowable in itself",example:"Kant argued that the noumenon, or thing-in-itself, can never be directly accessed through human experience.",translation:"മനുഷ്യ ധാരണക്കതീതമായ യഥാർഥ വസ്തു",ipa:"/ˈnjuːmɪnɒn/"},
-  {word:"qualia",pos:"n.",meaning:"the subjective, conscious experiences of perception such as the redness of red or the pain of pain",example:"The existence of qualia presents one of the most challenging problems in the philosophy of mind.",translation:"ആത്മനിഷ്ഠ ബോധ അനുഭവങ്ങൾ",ipa:"/ˈkwɑːliə/"},
-  {word:"determinism",pos:"n.",meaning:"the doctrine that all events are caused by preceding factors and are therefore inevitable",example:"Hard determinism implies that human beings cannot genuinely choose their actions, raising serious questions about blame and responsibility.",translation:"എല്ലാ സംഭവങ്ങളും മുൻ കാരണങ്ങളാൽ നിർണ്ണയിക്കപ്പെടുന്നു എന്ന സിദ്ധാന്തം",ipa:"/dɪˈtɜːmɪnɪzəm/"},
-  {word:"perspicuous",pos:"adj.",meaning:"clearly expressed and easy to understand, especially in argument or writing",example:"A perspicuous philosophical argument leaves no room for misinterpretation of its core claims.",translation:"വ്യക്തവും എളുപ്പം മനസ്സിലാക്കാവുന്നതുമായ",ipa:"/pəˈspɪkjuəs/"},
-  {word:"transcendent",pos:"adj.",meaning:"going beyond ordinary limits of experience or material existence",example:"Many philosophers treat the concept of the infinite as transcendent, lying beyond the reach of human intuition.",translation:"സാധാരണ അനുഭവത്തിനപ്പുറമുള്ള",ipa:"/trænˈsendənt/"},
-  {word:"ethos",pos:"n.",meaning:"the characteristic spirit, values, or moral character of a culture, community, or philosophy",example:"The ethos of Stoic philosophy emphasizes rational self-control over emotional reaction.",translation:"ഒരു സംസ്കൃതിയുടെ അടിസ്ഥാന മൂല്യബോധം",ipa:"/ˈiːθɒs/"},
-  {word:"predetermine",pos:"v.",meaning:"to establish or decide something in advance, often implying inevitability",example:"Fatalistic thinkers believe that destiny predetermines every significant event in a person's life.",translation:"മുൻകൂട്ടി നിർണ്ണയിക്കുക",ipa:"/ˌpriːdɪˈtɜːmɪn/"},
-  {word:"analogical",pos:"adj.",meaning:"based on or using analogy as a method of reasoning or explanation",example:"Analogical reasoning allows philosophers to illuminate abstract principles through comparison with familiar situations.",translation:"സാദൃശ്യ യുക്തിയെ അടിസ്ഥാനമാക്കിയ",ipa:"/ˌænəˈlɒdʒɪkəl/"},
-  {word:"veridical",pos:"adj.",meaning:"coinciding with reality; truthful and accurate in perception or representation",example:"The debate centered on whether dreams could ever be considered veridical representations of external reality.",translation:"യഥാർഥ്യവുമായി പൊരുത്തപ്പെടുന്ന, സത്യസന്ധമായ",ipa:"/vəˈrɪdɪkəl/"},
-  {word:"intersubjective",pos:"adj.",meaning:"existing between or shared by multiple conscious minds, rather than being purely personal",example:"Language itself is an intersubjective system, since meaning only arises through shared agreement among speakers.",translation:"ഒന്നിലധികം ബോധമനസ്സുകൾക്കിടയിൽ പങ്കുവെക്കപ്പെടുന്ന",ipa:"/ˌɪntəsəbˈdʒektɪv/"},
-  {word:"arbitrage",pos:"n.",meaning:"the practice of buying and selling assets in different markets to profit from price differences",example:"Traders engaged in arbitrage to exploit the price gap between the two stock exchanges.",translation:"വിലവ്യത്യാസ വ്യാപാരം",ipa:"/ˈɑːbɪtrɑːʒ/"},
-  {word:"liquidity",pos:"n.",meaning:"the ease with which an asset can be converted into cash without affecting its price",example:"The central bank injected funds to improve liquidity in the financial system.",translation:"പണലഭ്യത",ipa:"/lɪˈkwɪdɪti/"},
-  {word:"deflation",pos:"n.",meaning:"a general decline in prices across an economy, often linked to reduced demand",example:"Prolonged deflation discouraged consumers from spending, deepening the recession.",translation:"വിലക്കുറവ്",ipa:"/dɪˈfleɪʃən/"},
-  {word:"austerity",pos:"n.",meaning:"government policies that reduce spending and increase taxes to cut budget deficits",example:"The austerity measures sparked widespread protests among public sector workers.",translation:"മിതവ്യയ നയം",ipa:"/ɒˈsterɪti/"},
-  {word:"remittance",pos:"n.",meaning:"money sent by a worker living abroad back to their home country",example:"Remittances from overseas workers form a significant part of the country's GDP.",translation:"വിദേശ പണ അയക്കൽ",ipa:"/rɪˈmɪtəns/"},
-  {word:"oligopoly",pos:"n.",meaning:"a market dominated by a small number of large firms that control supply and prices",example:"The telecommunications sector functions as an oligopoly, limiting consumer choice.",translation:"ഒലിഗോപൊളി",ipa:"/ˌɒlɪˈɡɒpəli/"},
-  {word:"fiscal",pos:"adj.",meaning:"relating to government revenue, taxation, and public spending",example:"The government announced a new fiscal policy to stimulate economic growth.",translation:"ധനകാര്യ സംബന്ധമായ",ipa:"/ˈfɪskəl/"},
-  {word:"divestiture",pos:"n.",meaning:"the process of selling off a subsidiary or asset of a company",example:"The conglomerate announced a divestiture of its underperforming retail division.",translation:"ആസ്തി വിൽക്കൽ",ipa:"/daɪˈvestɪtʃər/"},
-  {word:"stagflation",pos:"n.",meaning:"an economic condition combining high inflation, slow growth, and high unemployment",example:"The 1970s oil crisis led to stagflation in many Western economies.",translation:"സ്റ്റാഗ്ഫ്ലേഷൻ",ipa:"/stæɡˈfleɪʃən/"},
-  {word:"monopsony",pos:"n.",meaning:"a market situation where there is only one buyer, giving that buyer significant power",example:"The single large factory created a monopsony in the local labor market.",translation:"ഏകക്രേതൃ വിപണി",ipa:"/məˈnɒpsəni/"},
-  {word:"collateral",pos:"n.",meaning:"an asset pledged as security for a loan, which the lender can seize if the loan is not repaid",example:"The entrepreneur used his property as collateral to secure a business loan.",translation:"ജാമ്യ ആസ്തി",ipa:"/kəˈlætərəl/"},
-  {word:"encumbrance",pos:"n.",meaning:"a financial claim or liability attached to a property or asset",example:"The investor checked whether the land had any encumbrance before purchasing it.",translation:"ഭാരം അഥവാ ബാദ്ധ്യത",ipa:"/ɪnˈkʌmbrəns/"},
-  {word:"tariff",pos:"n.",meaning:"a tax imposed by a government on imported or exported goods",example:"The new tariff on steel imports was intended to protect domestic manufacturers.",translation:"ചുങ്കം",ipa:"/ˈtærɪf/"},
-  {word:"solvency",pos:"n.",meaning:"the ability of a company or individual to meet long-term financial obligations",example:"Analysts questioned the solvency of the bank after its loan defaults surged.",translation:"ദീർഘകാല കടമടയ്ക്കാനുള്ള ശേഷി",ipa:"/ˈsɒlvənsi/"},
-  {word:"contagion",pos:"n.",meaning:"the spread of an economic crisis from one country or market to others",example:"Financial contagion from the banking collapse quickly spread to neighboring economies.",translation:"സാമ്പത്തിക പകർച്ച",ipa:"/kənˈteɪdʒən/"},
-  {word:"repatriate",pos:"v.",meaning:"to send profits or capital back to one's home country from abroad",example:"Multinational firms often repatriate earnings to their headquarters after paying local taxes.",translation:"സ്വദേശത്തേക്ക് മടക്കി അയക്കുക",ipa:"/riːˈpætriˌeɪt/"},
-  {word:"hegemon",pos:"n.",meaning:"a country or entity that has dominant power and influence over others in global affairs",example:"As a global hegemon, the country's monetary policy influenced economies worldwide.",translation:"ആധിപത്യ ശക്തി",ipa:"/ˈheɡɪmɒn/"},
-  {word:"protectionism",pos:"n.",meaning:"government policies that restrict international trade to shield domestic industries",example:"Rising protectionism threatened to undermine decades of free trade agreements.",translation:"സംരക്ഷണ വ്യാപാര നയം",ipa:"/prəˈtekʃənɪzəm/"},
-  {word:"depreciation",pos:"n.",meaning:"the reduction in the value of a currency or asset over time",example:"Rapid depreciation of the local currency made imports significantly more expensive.",translation:"മൂല്യശോഷണം",ipa:"/dɪˌpriːʃiˈeɪʃən/"},
-  {word:"syndicate",pos:"n.",meaning:"a group of individuals or firms that combine resources to undertake a large financial deal",example:"A banking syndicate was formed to finance the multibillion-dollar infrastructure project.",translation:"സംയുക്ത വ്യാപാര സംഘം",ipa:"/ˈsɪndɪkət/"},
-  {word:"procurement",pos:"n.",meaning:"the process of obtaining goods or services for business or government use",example:"Transparent procurement practices are essential for reducing corruption in public contracts.",translation:"സംഭരണം",ipa:"/prəˈkjʊərmənt/"},
-  {word:"insolvency",pos:"n.",meaning:"the state of being unable to pay debts as they fall due",example:"The retailer filed for insolvency after failing to restructure its mounting debts.",translation:"കടം വീട്ടാനുള്ള കഴിവില്ലായ്മ",ipa:"/ɪnˈsɒlvənsi/"},
-  {word:"deregulation",pos:"n.",meaning:"the removal or reduction of government rules controlling an industry",example:"Deregulation of the energy sector led to increased competition but also price instability.",translation:"നിയന്ത്രണ നിർമ്മാർജ്ജനം",ipa:"/diːˌreɡjʊˈleɪʃən/"},
-  {word:"equilibrium",pos:"n.",meaning:"a state in a market where supply and demand are balanced and prices are stable",example:"The market reached equilibrium once supply adjusted to match consumer demand.",translation:"സന്തുലനാവസ്ഥ",ipa:"/ˌiːkwɪˈlɪbriəm/"},
-  {word:"moratorium",pos:"n.",meaning:"a temporary suspension of an activity, especially debt repayments",example:"The government declared a moratorium on loan repayments to ease the financial burden on farmers.",translation:"താൽക്കാലിക നിർത്തിവെക്കൽ",ipa:"/ˌmɒrəˈtɔːriəm/"},
-  {word:"cartel",pos:"n.",meaning:"a group of producers or suppliers who collude to control prices and output",example:"Several oil-producing nations formed a cartel to regulate global crude oil prices.",translation:"കാർട്ടൽ",ipa:"/kɑːˈtel/"},
-  {word:"subsidy",pos:"n.",meaning:"financial support given by a government to reduce the cost of a product or service",example:"Agricultural subsidies allowed local farmers to compete with cheaper imported produce.",translation:"സബ്സിഡി",ipa:"/ˈsʌbsɪdi/"},
-  {word:"aggregate",pos:"adj.",meaning:"formed by combining many separate elements into a total amount",example:"The aggregate demand in the economy fell sharply during the global downturn.",translation:"സമഗ്ര",ipa:"/ˈæɡrɪɡət/"},
-  {word:"denominate",pos:"v.",meaning:"to express or set the value of something in a particular currency",example:"Most international oil contracts are denominated in US dollars.",translation:"ഒരു നാണ്യത്തിൽ മൂല്യം നിർണ്ണയിക്കുക",ipa:"/dɪˈnɒmɪneɪt/"},
-  {word:"mercantilism",pos:"n.",meaning:"an economic theory that a nation's wealth depends on maximizing exports and minimizing imports",example:"Mercantilism shaped colonial trade policies for centuries, prioritizing national wealth accumulation.",translation:"വ്യാപാര ദേശീയതാ സിദ്ധാന്തം",ipa:"/ˈmɜːkəntɪˌlɪzəm/"},
-  {word:"allegory",pos:"n.",meaning:"a story or poem where characters and events represent deeper moral or political meanings",example:"The novel functions as an allegory for the corruption of political power in post-colonial societies.",translation:"ആലങ്കാരിക കഥ",ipa:"/ˈæl.ɪ.ɡɔː.ri/"},
-  {word:"catharsis",pos:"n.",meaning:"the emotional release or purification an audience experiences through literature or drama",example:"The tragic ending of the play provides catharsis, leaving readers emotionally cleansed and reflective.",translation:"വൈകാരിക മോചനം",ipa:"/kəˈθɑː.sɪs/"},
-  {word:"denouement",pos:"n.",meaning:"the final resolution or conclusion of a literary plot after the climax",example:"The denouement reveals the true identity of the narrator, reframing the entire story retrospectively.",translation:"കഥയുടെ അന്തിമ പരിഹാരം",ipa:"/deɪˈnuː.mɒ̃/"},
-  {word:"epistolary",pos:"adj.",meaning:"relating to or denoting a literary work written in the form of letters or correspondence",example:"The epistolary novel allows readers intimate access to the protagonist's unfiltered thoughts and emotions.",translation:"കത്തുരൂപത്തിലുള്ള",ipa:"/ɪˈpɪs.tə.ler.i/"},
-  {word:"metonymy",pos:"n.",meaning:"a figure of speech where something is referred to by a closely associated concept or object",example:"Using 'the crown' to represent the monarchy is a classic example of metonymy in political rhetoric.",translation:"സമീപ സൂചകം",ipa:"/mɪˈtɒn.ɪ.mi/"},
-  {word:"pathos",pos:"n.",meaning:"a quality in literature that evokes feelings of pity, sadness, or sympathetic emotion in the reader",example:"The author's vivid description of childhood poverty generates profound pathos throughout the memoir.",translation:"കരുണാരസം",ipa:"/ˈpeɪ.θɒs/"},
-  {word:"soliloquy",pos:"n.",meaning:"a dramatic technique where a character speaks their thoughts aloud, alone on stage",example:"Hamlet's soliloquy beginning with 'To be or not to be' remains one of literature's most analysed passages.",translation:"സ്വഗതോക്തി",ipa:"/səˈlɪl.ə.kwi/"},
-  {word:"peripeteia",pos:"n.",meaning:"a sudden reversal of fortune or circumstance experienced by a protagonist in a narrative",example:"The hero's peripeteia occurs when his closest ally betrays him at the story's most critical moment.",translation:"ഭാഗ്യവിപര്യയം",ipa:"/ˌper.ɪ.pɪˈtiː.ə/"},
-  {word:"analepsis",pos:"n.",meaning:"a narrative technique involving a flashback to earlier events within a story",example:"The author employs analepsis skillfully to gradually reveal the protagonist's traumatic childhood experiences.",translation:"ഫ്ലാഷ്ബാക്ക് ആഖ്യാനം",ipa:"/ˌæn.əˈlep.sɪs/"},
-  {word:"prolepsis",pos:"n.",meaning:"a narrative device where future events are anticipated or mentioned before they occur",example:"The opening line serves as prolepsis, hinting at the destruction that will consume the community by the novel's end.",translation:"മുൻകൂർ സൂചന",ipa:"/prəˈlep.sɪs/"},
-  {word:"diegesis",pos:"n.",meaning:"the narrative world or story-space in which the events of a literary work take place",example:"The music playing at the characters' party exists within the diegesis, heard by both characters and readers.",translation:"ആഖ്യാന ലോകം",ipa:"/ˌdaɪ.ɪˈdʒiː.sɪs/"},
-  {word:"polyphony",pos:"n.",meaning:"the presence of multiple distinct voices or perspectives coexisting within a single literary work",example:"Dostoevsky's novels are celebrated for their polyphony, giving each character an equally valid ideological voice.",translation:"ബഹുസ്വരത",ipa:"/pəˈlɪf.ə.ni/"},
-  {word:"bathos",pos:"n.",meaning:"an abrupt, jarring shift from the elevated or serious to the trivial or absurd in writing",example:"The poem's bathos undermines its solemn opening by concluding with a joke about the hero's missing sock.",translation:"ഉദ്വേഗ പതനം",ipa:"/ˈbeɪ.θɒs/"},
-  {word:"apostrophe",pos:"n.",meaning:"a rhetorical device where the writer addresses an absent person, abstract idea, or inanimate object",example:"In her elegy, the poet uses apostrophe to speak directly to death as if it were a sentient being.",translation:"അഭിസംബോധന അലങ്കാരം",ipa:"/əˈpɒs.trə.fi/"},
-  {word:"chiasmus",pos:"n.",meaning:"a rhetorical structure where the order of words or ideas is reversed in subsequent clauses",example:"The speech's memorable chiasmus — 'ask not what your country can do for you' — made it instantly quotable.",translation:"ക്രോഡീകൃത വിന്യാസം",ipa:"/kaɪˈæz.məs/"},
-  {word:"mimesis",pos:"n.",meaning:"the imitation or representation of reality in literature and art",example:"The novelist's commitment to mimesis ensures every detail of working-class life is rendered with documentary precision.",translation:"യാഥാർഥ്യ അനുകരണം",ipa:"/mɪˈmiː.sɪs/"},
-  {word:"intertextuality",pos:"n.",meaning:"the relationship between a text and other texts that it references, echoes, or builds upon",example:"The poem's intertextuality with Milton becomes apparent once the reader recognises the deliberate allusions to Paradise Lost.",translation:"ഗ്രന്ഥാന്തര ബന്ധം",ipa:"/ˌɪn.tə.teks.tʃuˈæl.ɪ.ti/"},
-  {word:"unreliable narrator",pos:"phrase",meaning:"a narrator whose credibility is compromised, requiring readers to question the accuracy of their account",example:"The unreliable narrator gradually reveals contradictions that force readers to reinterpret everything previously described.",translation:"വിശ്വസനീയമല്ലാത്ത ആഖ്യാതാവ്"},
-  {word:"enjambment",pos:"n.",meaning:"the continuation of a sentence or phrase beyond the end of a poetic line without a pause",example:"The enjambment across the stanza break creates a breathless urgency that mirrors the speaker's mounting anxiety.",translation:"വരി ഭേദരഹിത തുടർച്ച",ipa:"/ɪnˈdʒæm.mənt/"},
-  {word:"hubris",pos:"n.",meaning:"excessive pride or arrogance in a literary character that typically leads to their downfall",example:"The general's hubris blinds him to his army's weakness, making his defeat both inevitable and deserved.",translation:"അഹങ്കാരം",ipa:"/ˈhjuː.brɪs/"},
-  {word:"ekphrasis",pos:"n.",meaning:"a vivid literary description of a visual artwork, such as a painting or sculpture",example:"Keats's 'Ode on a Grecian Urn' is perhaps the most celebrated example of ekphrasis in English Romantic poetry.",translation:"ദൃശ്യകല വർണ്ണന",ipa:"/ˈek.frə.sɪs/"},
-  {word:"foil",pos:"n.",meaning:"a character whose contrasting traits highlight and emphasise the qualities of another character",example:"Watson serves as a foil to Holmes, making the detective's extraordinary intellect appear even more remarkable.",translation:"വൈരുദ്ധ്യ കഥാപാത്രം",ipa:"/fɔɪl/"},
-  {word:"doppelgänger",pos:"n.",meaning:"a literary double or ghostly counterpart of a character, often representing their darker nature",example:"The mysterious stranger functions as the protagonist's doppelgänger, embodying all the impulses she struggles to suppress.",translation:"ഇരട്ട കഥാപാത്രം",ipa:"/ˈdɒp.əlˌɡæŋ.ər/"},
-  {word:"dysphemism",pos:"n.",meaning:"the use of a harsh or offensive expression in place of a neutral or pleasant one",example:"The satirist employs dysphemism deliberately, replacing polite political language with bluntly unpleasant terms.",translation:"അശ്ലീല പ്രയോഗം",ipa:"/ˈdɪs.fɪ.mɪz.əm/"},
-  {word:"hamartia",pos:"n.",meaning:"the fatal flaw or error in judgment that causes a tragic hero's downfall",example:"Macbeth's hamartia is his boundless ambition, which overrides his moral conscience and destroys everything he values.",translation:"ദൗർഭാഗ്യകരമായ ന്യൂനത",ipa:"/ˌhæm.ɑːˈtiː.ə/"},
-  {word:"palimpsest",pos:"n.",meaning:"a text or narrative bearing visible traces of earlier versions or meanings beneath its surface",example:"The city's landscape reads as a palimpsest, with colonial architecture overlaid by indigenous symbols of resistance.",translation:"പഴയ അടയാളങ്ങൾ വഹിക്കുന്ന ഗ്രന്ഥം",ipa:"/ˈpæl.ɪmp.sest/"},
-  {word:"ambiguity",pos:"n.",meaning:"the quality of having more than one possible interpretation or meaning in a literary text",example:"The poem's ambiguity is intentional, allowing each reader to construct a personally meaningful interpretation.",translation:"അർഥ അനിശ്ചിതത്വം",ipa:"/ˌæm.bɪˈɡjuː.ɪ.ti/"},
-  {word:"free indirect discourse",pos:"phrase",meaning:"a narrative technique blending a character's thoughts with the narrator's voice without quotation marks",example:"Austen's use of free indirect discourse allows readers to inhabit Elizabeth Bennet's perspective while retaining narrative distance.",translation:"സ്വതന്ത്ര പരോക്ഷ ഭാഷണം"},
-  {word:"synesthesia",pos:"n.",meaning:"a literary device describing one sense in terms of another, blending sensory experiences in language",example:"Keats's synesthesia — hearing melody as a visual golden thread — creates an intensely immersive sensory experience.",translation:"ഇന്ദ്രിയ സമ്മിശ്രണം",ipa:"/ˌsɪn.ɪsˈθiː.zi.ə/"},
-  {word:"apocryphal",pos:"adj.",meaning:"describing a story or account of doubtful authenticity, often widely circulated but unverified",example:"The apocryphal tale of the author burning his manuscript was likely invented to add romantic mystery to his biography.",translation:"സംശയാസ്പദ കഥ",ipa:"/əˈpɒk.rɪ.fəl/"},
-  {word:"methodology",pos:"n.",meaning:"a system of methods used in a particular field of study",example:"The paper outlined a rigorous methodology for data collection.",translation:"ഗവേഷണരീതി",ipa:"/ˌmeθ.əˈdɒl.ə.dʒi/"},
-  {word:"conjecture",pos:"n.",meaning:"an opinion formed without sufficient evidence; a hypothesis",example:"The scientist's conjecture was later confirmed through extensive testing.",translation:"അനുമാനം",ipa:"/kənˈdʒek.tʃər/"},
-  {word:"inferential",pos:"adj.",meaning:"relating to conclusions reached through reasoning from evidence",example:"The inferential leap from correlation to causation must be made carefully.",translation:"അനുമാനപരമായ",ipa:"/ɪnˈfer.en.ʃəl/"},
-  {word:"posit",pos:"v.",meaning:"to put forward a fact, theory, or idea as a basis for argument",example:"The researcher posited that environmental factors significantly influence gene expression.",translation:"സിദ്ധാന്തിക്കുക",ipa:"/ˈpɒz.ɪt/"},
-  {word:"substantiate",pos:"v.",meaning:"to provide evidence to support or prove the truth of something",example:"Additional experiments are needed to substantiate these preliminary findings.",translation:"തെളിവ് നൽകി സ്ഥിരീകരിക്കുക",ipa:"/səbˈstæn.ʃi.eɪt/"},
-  {word:"nomenclature",pos:"n.",meaning:"the system of names or terms used in a scientific discipline",example:"Standardized nomenclature allows researchers worldwide to communicate without ambiguity.",translation:"നാമകരണ സമ്പ്രദായം",ipa:"/nəˈmen.klə.tʃər/"},
-  {word:"dialectical",pos:"adj.",meaning:"relating to the logical discussion of ideas and opinions",example:"The dialectical method encourages scholars to examine opposing arguments carefully.",translation:"വൈരുദ്ധ്യാത്മക",ipa:"/ˌdaɪ.əˈlek.tɪ.kəl/"},
-  {word:"replicability",pos:"n.",meaning:"the ability of an experiment or study to be repeated with the same results",example:"Replicability is considered a cornerstone of credible scientific research.",translation:"പ്രതിരൂപണ സാധ്യത",ipa:"/ˌrep.lɪ.kəˈbɪl.ɪ.ti/"},
-  {word:"synthesize",pos:"v.",meaning:"to combine different theories or information to form a new whole",example:"The review article synthesizes decades of research into a coherent framework.",translation:"സമന്വയിപ്പിക്കുക",ipa:"/ˈsɪn.θə.saɪz/"},
-  {word:"deductive",pos:"adj.",meaning:"relating to reasoning that moves from general principles to specific conclusions",example:"A deductive approach begins with a theory and then tests it against data.",translation:"നിഗമനാത്മക",ipa:"/dɪˈdʌk.tɪv/"},
-  {word:"inductive",pos:"adj.",meaning:"relating to reasoning that moves from specific observations to broader generalizations",example:"Through inductive reasoning, the team proposed a general law of cellular behavior.",translation:"ആഗമനാത്മക",ipa:"/ɪnˈdʌk.tɪv/"},
-  {word:"qualitative",pos:"adj.",meaning:"relating to data concerned with descriptions and characteristics rather than numbers",example:"Qualitative interviews provided rich insight into participants' lived experiences.",translation:"ഗുണപരമായ",ipa:"/ˈkwɒl.ɪ.tə.tɪv/"},
-  {word:"quantitative",pos:"adj.",meaning:"relating to data that can be measured and expressed numerically",example:"Quantitative analysis of the survey responses revealed a statistically significant trend.",translation:"അളവ് സംബന്ധമായ",ipa:"/ˈkwɒn.tɪ.tə.tɪv/"},
-  {word:"iterate",pos:"v.",meaning:"to repeat a process, especially to refine a result",example:"Scientists must iterate their models as new data become available.",translation:"ആവർത്തിക്കുക",ipa:"/ˈɪt.ə.reɪt/"},
-  {word:"taxonomy",pos:"n.",meaning:"a system of classification, especially of organisms or concepts",example:"The proposed taxonomy organizes cognitive processes into three distinct levels.",translation:"വർഗീകരണ ശാസ്ത്രം",ipa:"/tækˈsɒn.ə.mi/"},
-  {word:"proposition",pos:"n.",meaning:"a statement or assertion that expresses a judgment or opinion to be discussed",example:"The central proposition of the thesis is that language shapes scientific thought.",translation:"പ്രസ്താവന",ipa:"/ˌprɒp.əˈzɪʃ.ən/"},
-  {word:"stipulate",pos:"v.",meaning:"to demand or specify as part of an agreement or argument",example:"The protocol stipulates that all variables must be controlled before testing begins.",translation:"നിബന്ധനയായി നിർദ്ദേശിക്കുക",ipa:"/ˈstɪp.jʊ.leɪt/"},
-  {word:"consilience",pos:"n.",meaning:"the linking of knowledge across different disciplines to form a unified understanding",example:"Consilience between biology and sociology enriches our understanding of human behavior.",translation:"ജ്ഞാനശാഖകളുടെ ഏകോപനം",ipa:"/kənˈsɪl.i.əns/"},
-  {word:"falsifiability",pos:"n.",meaning:"the quality of a hypothesis that can in principle be proven wrong by evidence",example:"Falsifiability is a key criterion that distinguishes scientific claims from pseudoscience.",translation:"തെറ്റെന്ന് തെളിയിക്കാനാകുന്ന സ്വഭാവം",ipa:"/ˌfɒl.sɪ.faɪ.əˈbɪl.ɪ.ti/"},
-  {word:"cognition",pos:"n.",meaning:"the mental process of acquiring knowledge through thought, experience, and the senses",example:"Her research focused on how cognition develops in early childhood.",translation:"അറിവ് നേടൽ",ipa:"/kɒɡˈnɪʃ.ən/"},
-  {word:"metacognition",pos:"n.",meaning:"awareness and understanding of one's own thought processes",example:"Students who practise metacognition tend to perform better academically.",translation:"സ്വചിന്തനബോധം",ipa:"/ˌmet.əˌkɒɡˈnɪʃ.ən/"},
-  {word:"schema",pos:"n.",meaning:"a mental framework that helps organise and interpret information",example:"Children use existing schemas to make sense of new experiences.",translation:"മാനസിക ചട്ടക്കൂട്",ipa:"/ˈskiː.mə/"},
-  {word:"habituation",pos:"n.",meaning:"the process by which a person becomes accustomed to a stimulus and responds less strongly over time",example:"Habituation explained why the participants no longer reacted to the repeated noise.",translation:"ശീലീകരണം",ipa:"/həˌbɪtʃ.uˈeɪ.ʃən/"},
-  {word:"attribution",pos:"n.",meaning:"the process of explaining the causes of one's own or others' behaviour",example:"His attribution of failure to bad luck revealed a self-serving bias.",translation:"കാരണാരോപണം",ipa:"/ˌæt.rɪˈbjuː.ʃən/"},
-  {word:"reinforcement",pos:"n.",meaning:"a consequence that strengthens a behaviour, making it more likely to recur",example:"Positive reinforcement encouraged the child to repeat the desired behaviour.",translation:"ശക്തിപ്പെടുത്തൽ",ipa:"/ˌriːɪnˈfɔːs.mənt/"},
-  {word:"dissonance",pos:"n.",meaning:"the mental discomfort experienced when holding conflicting beliefs or attitudes",example:"Cognitive dissonance arose when her actions contradicted her stated values.",translation:"മാനസിക വൈരുദ്ധ്യം",ipa:"/ˈdɪs.ə.nəns/"},
-  {word:"priming",pos:"n.",meaning:"the phenomenon whereby exposure to one stimulus influences the response to a later stimulus",example:"Priming with aggressive words led participants to interpret ambiguous behaviour negatively.",translation:"മുൻ‌ഉദ്ദീപനം",ipa:"/ˈpraɪ.mɪŋ/"},
-  {word:"inhibition",pos:"n.",meaning:"the conscious or unconscious suppression of a behaviour or impulse",example:"Inhibition of impulsive responses is a key executive function.",translation:"നിയന്ത്രണം",ipa:"/ˌɪn.hɪˈbɪʃ.ən/"},
-  {word:"salience",pos:"n.",meaning:"the quality of being particularly noticeable or important in perception and memory",example:"The salience of emotional events makes them easier to recall later.",translation:"പ്രാധാന്യം",ipa:"/ˈseɪ.li.əns/"},
-  {word:"rumination",pos:"n.",meaning:"the repetitive and passive focus on distress and its possible causes and consequences",example:"Excessive rumination is strongly associated with depressive disorders.",translation:"ആവർത്തിത ചിന്ത",ipa:"/ˌruː.mɪˈneɪ.ʃən/"},
-  {word:"operant",pos:"adj.",meaning:"relating to behaviour that is controlled by its consequences in the environment",example:"Operant conditioning was used to train the animals to press a lever.",translation:"ക്രിയാധിഷ്ഠിത",ipa:"/ˈɒp.ər.ənt/"},
-  {word:"confabulation",pos:"n.",meaning:"the unconscious production of fabricated memories without the intention to deceive",example:"Confabulation in amnesic patients revealed how memory can be reconstructed falsely.",translation:"അബോധ കെട്ടുകഥ",ipa:"/kənˌfæb.jʊˈleɪ.ʃən/"},
-  {word:"desensitisation",pos:"n.",meaning:"the diminished emotional responsiveness to a stimulus after repeated exposure",example:"Systematic desensitisation helped the patient overcome her fear of heights.",translation:"സംവേദനശോഷണം",ipa:"/diːˌsen.sɪ.taɪˈzeɪ.ʃən/"},
-  {word:"propensity",pos:"n.",meaning:"a natural inclination or tendency to behave in a particular way",example:"Individuals with high neuroticism show a propensity for anxiety.",translation:"സ്വഭാവപ്രവണത",ipa:"/prəˈpen.sɪ.ti/"},
-  {word:"affective",pos:"adj.",meaning:"relating to moods, feelings, and attitudes as they influence behaviour",example:"Affective responses to images were recorded using facial coding software.",translation:"വൈകാരിക",ipa:"/əˈfek.tɪv/"},
-  {word:"maladaptive",pos:"adj.",meaning:"describing behaviour or thinking that is counterproductive and interferes with healthy functioning",example:"Maladaptive coping strategies such as avoidance worsen anxiety over time.",translation:"അനനുകൂലനപരം",ipa:"/ˌmæl.əˈdæp.tɪv/"},
-  {word:"encoding",pos:"n.",meaning:"the initial process of transforming information into a form that can be stored in memory",example:"Deep encoding strategies lead to better long-term retention of material.",translation:"ഏൻകോഡിംഗ്",ipa:"/ɪnˈkəʊ.dɪŋ/"},
-  {word:"resilience",pos:"n.",meaning:"the capacity to recover quickly from difficulties or psychological stress",example:"Building resilience in adolescents is a key goal of positive psychology.",translation:"മനഃസ്ഥൈര്യം",ipa:"/rɪˈzɪl.i.əns/"},
-  {word:"intrinsic",pos:"adj.",meaning:"arising from internal motivations or rewards rather than external incentives",example:"Intrinsic motivation led her to study psychology purely out of curiosity.",translation:"ആന്തരിക",ipa:"/ɪnˈtrɪn.zɪk/"},
-  {word:"stereotype",pos:"n.",meaning:"a widely held but oversimplified belief about a particular group of people",example:"Stereotype threat can negatively affect test performance in minority groups.",translation:"സ്ഥിരധാരണ",ipa:"/ˈster.i.ə.taɪp/"},
-  {word:"compliance",pos:"n.",meaning:"the act of changing one's behaviour in response to a direct request from another person",example:"Compliance with authority figures was demonstrated dramatically in Milgram's study.",translation:"അനുസരണം",ipa:"/kəmˈplaɪ.əns/"},
-  {word:"suppression",pos:"n.",meaning:"the deliberate effort to push unwanted thoughts or feelings out of conscious awareness",example:"Emotional suppression may provide short-term relief but increases long-term distress.",translation:"അടിച്ചമർത്തൽ",ipa:"/səˈpreʃ.ən/"},
-  {word:"perseveration",pos:"n.",meaning:"the uncontrollable repetition of a response even when it is no longer appropriate",example:"Perseveration in patients with frontal lobe damage illustrated its role in flexible thinking.",translation:"അനുചിത ആവർത്തനം",ipa:"/pəˌsev.əˈreɪ.ʃən/"},
-  {word:"introspection",pos:"n.",meaning:"the examination of one's own mental and emotional processes",example:"Early psychologists relied heavily on introspection as a research method.",translation:"ആത്മനിരീക്ഷണം",ipa:"/ˌɪn.trəˈspek.ʃən/"},
-  {word:"volition",pos:"n.",meaning:"the power of using one's own will to make conscious choices and decisions",example:"Volition is considered central to theories of self-regulated behaviour.",translation:"സ്വേച്ഛ",ipa:"/vəˈlɪʃ.ən/"},
-  {word:"anchoring",pos:"n.",meaning:"the cognitive bias of relying too heavily on the first piece of information encountered",example:"Anchoring caused negotiators to fixate on the initial price offered.",translation:"ആദ്യതാരതമ്യ പക്ഷപാതം",ipa:"/ˈæŋ.kər.ɪŋ/"},
-  {word:"somatosensory",pos:"adj.",meaning:"relating to the perception of bodily sensations such as touch, pain, and temperature",example:"The somatosensory cortex processes tactile information from across the body.",translation:"ശാരീരിക സംവേദനപരം",ipa:"/ˌsəʊ.mæt.əʊˈsen.sər.i/"},
-  {word:"adjudicate",pos:"v.",meaning:"to make an official judgement about a legal dispute",example:"The tribunal was asked to adjudicate the contract disagreement between the two firms.",translation:"തീർപ്പ് കൽപ്പിക്കുക",ipa:"/əˈdʒuːdɪkeɪt/"},
-  {word:"tort",pos:"n.",meaning:"a wrongful act that causes harm and leads to civil legal liability",example:"The plaintiff filed a tort claim after being injured on the defendant's property.",translation:"ദ്രോഹം (നിയമപരം)",ipa:"/tɔːrt/"},
-  {word:"jurisprudence",pos:"n.",meaning:"the theory, philosophy, and study of law",example:"Her doctoral thesis examined feminist jurisprudence and its influence on family law.",translation:"നിയമശാസ്ത്രം",ipa:"/ˌdʒʊərɪsˈpruːdəns/"},
-  {word:"indictment",pos:"n.",meaning:"a formal charge or accusation of a serious crime",example:"The grand jury issued an indictment against the corporate executive for fraud.",translation:"കുറ്റപത്രം",ipa:"/ɪnˈdaɪtmənt/"},
-  {word:"arbitration",pos:"n.",meaning:"a method of resolving disputes outside court using a neutral third party",example:"The parties agreed to settle their commercial dispute through binding arbitration.",translation:"മദ്ധ്യസ്ഥ തീർപ്പ്",ipa:"/ˌɑːrbɪˈtreɪʃən/"},
-  {word:"habeas corpus",pos:"n.",meaning:"a legal writ requiring a person to be brought before a court to determine lawful detention",example:"The defence lawyer filed a habeas corpus petition to challenge his client's imprisonment.",translation:"ഹേബിയസ് കോർപ്പസ്",ipa:"/ˌheɪbiəs ˈkɔːrpəs/"},
-  {word:"culpability",pos:"n.",meaning:"responsibility for a fault or wrongdoing; blameworthiness",example:"The court deliberated at length over the defendant's degree of culpability.",translation:"കുറ്റബോധ്യം",ipa:"/ˌkʌlpəˈbɪlɪti/"},
-  {word:"statute",pos:"n.",meaning:"a written law passed by a legislative body",example:"The new environmental statute imposed stricter penalties on industrial polluters.",translation:"നിയമനിർമ്മാണ ചട്ടം",ipa:"/ˈstætʃuːt/"},
-  {word:"deposition",pos:"n.",meaning:"sworn out-of-court testimony recorded for use in legal proceedings",example:"Attorneys gathered key evidence during the witness's pre-trial deposition.",translation:"സത്യവാങ്മൂലം",ipa:"/ˌdepəˈzɪʃən/"},
-  {word:"promulgate",pos:"v.",meaning:"to make a law or decree known to the public officially",example:"The government promulgated new regulations governing financial disclosures.",translation:"പ്രഖ്യാപിക്കുക",ipa:"/ˈprɒməlɡeɪt/"},
-  {word:"affidavit",pos:"n.",meaning:"a written statement confirmed by oath for use as evidence in court",example:"She submitted an affidavit detailing the events she had witnessed on that night.",translation:"സത്യപ്രതിജ്ഞാ പ്രസ്താവന",ipa:"/ˌæfɪˈdeɪvɪt/"},
-  {word:"juristic",pos:"adj.",meaning:"relating to jurists or the study and practice of law",example:"The professor offered a juristic analysis of the constitutional amendment.",translation:"നിയമശാസ്ത്ര സംബന്ധമായ",ipa:"/dʒʊˈrɪstɪk/"},
-  {word:"injunction",pos:"n.",meaning:"a court order requiring a party to do or refrain from doing an action",example:"The court granted an injunction preventing the company from releasing the disputed data.",translation:"നിരോധനാജ്ഞ",ipa:"/ɪnˈdʒʌŋkʃən/"},
-  {word:"subpoena",pos:"n.",meaning:"a legal document ordering someone to attend court or produce evidence",example:"The prosecutor issued a subpoena compelling the witness to testify before the jury.",translation:"ഹാജർ ഉത്തരവ്",ipa:"/səˈpiːnə/"},
-  {word:"malfeasance",pos:"n.",meaning:"wrongdoing or misconduct, especially by a public official",example:"The mayor faced charges of malfeasance after funds were found to be misappropriated.",translation:"ദുഷ്പ്രവൃത്തി",ipa:"/mælˈfiːzəns/"},
-  {word:"mens rea",pos:"n.",meaning:"the mental element of criminal intent required to constitute a crime",example:"The prosecution struggled to prove mens rea in the absence of clear evidence of intent.",translation:"കുറ്റകരമായ ഉദ്ദേശ്യം",ipa:"/menz ˈreɪə/"},
-  {word:"acquittal",pos:"n.",meaning:"a formal judgement that someone is not guilty of the charge brought",example:"The jury's acquittal of the accused was met with surprise by legal commentators.",translation:"കുറ്റവിമുക്തി",ipa:"/əˈkwɪtəl/"},
-  {word:"precedent",pos:"n.",meaning:"an earlier court decision used as a guide for future similar cases",example:"The landmark ruling set a precedent that courts have followed for decades.",translation:"മുൻനിദർശനം",ipa:"/ˈpresɪdənt/"},
-  {word:"exculpate",pos:"v.",meaning:"to clear someone from blame or criminal charges",example:"New DNA evidence emerged that completely exculpated the wrongly convicted man.",translation:"കുറ്റമുക്തനാക്കുക",ipa:"/ˈekskʌlpeɪt/"},
-  {word:"recuse",pos:"v.",meaning:"to remove oneself as a judge from a case due to a conflict of interest",example:"The judge decided to recuse herself because her brother worked for the defendant.",translation:"ഒഴിഞ്ഞുമാറുക",ipa:"/rɪˈkjuːz/"},
-  {word:"perjury",pos:"n.",meaning:"the offence of wilfully telling an untruth while under oath",example:"He was convicted of perjury after contradicting his earlier sworn testimony.",translation:"കള്ളസാക്ഷ്യം",ipa:"/ˈpɜːrdʒəri/"},
-  {word:"litigation",pos:"n.",meaning:"the process of taking legal action through the court system",example:"The prolonged litigation cost both companies millions in legal fees.",translation:"വ്യവഹാരം",ipa:"/ˌlɪtɪˈɡeɪʃən/"},
-  {word:"estoppel",pos:"n.",meaning:"a legal principle preventing someone from arguing something contrary to a previous claim",example:"The doctrine of estoppel barred the landlord from denying the tenant's right to occupy.",translation:"നിഷേധ നിരോധനം",ipa:"/ɪˈstɒpəl/"},
-  {word:"fiduciary",pos:"adj.",meaning:"involving a duty to act in the best interests of another party",example:"Directors owe a fiduciary duty to shareholders when making business decisions.",translation:"ഒപ്പുദ്ധർമ്മ സംബന്ധമായ",ipa:"/fɪˈdjuːʃiəri/"},
-  {word:"nullify",pos:"v.",meaning:"to make a legal act invalid or of no legal effect",example:"The appeals court moved to nullify the lower court's unconstitutional ruling.",translation:"റദ്ദ് ചെയ്യുക",ipa:"/ˈnʌlɪfaɪ/"},
-  {word:"due process",pos:"n.",meaning:"fair treatment through the normal judicial system as a legal right",example:"The accused claimed his right to due process had been violated during the investigation.",translation:"ന്യായമായ നടപടിക്രമം",ipa:"/ˌdjuː ˈprɒses/"},
-  {word:"remand",pos:"v.",meaning:"to send an accused person back into custody pending trial",example:"The magistrate decided to remand the suspect in custody for a further seven days.",translation:"കസ്റ്റഡിയിൽ തിരിച്ചയക്കുക",ipa:"/rɪˈmɑːnd/"},
-  {word:"locus standi",pos:"n.",meaning:"the right or capacity to bring a case before a court",example:"The environmental group was denied locus standi to challenge the planning decision.",translation:"ന്യായാലയ അവകാശം",ipa:"/ˌloʊkəs ˈstændi/"},
-  {word:"codify",pos:"v.",meaning:"to arrange laws into a systematic written code",example:"Parliament sought to codify centuries of common law into a single accessible document.",translation:"ക്രോഡീകരിക്കുക",ipa:"/ˈkɒdɪfaɪ/"},
-  {word:"acculturation",pos:"n.",meaning:"the process by which a person or group adopts the culture of another group",example:"The acculturation of immigrant communities often involves balancing new customs with heritage traditions.",translation:"സംസ്കാര സ്വാംശീകരണം",ipa:"/əˌkʌltʃəˈreɪʃən/"},
-  {word:"assimilation",pos:"n.",meaning:"the absorption of one cultural group into another dominant culture",example:"Forced assimilation policies historically suppressed indigenous languages and practices.",translation:"സ്വാംശീകരണം",ipa:"/əˌsɪməˈleɪʃən/"},
-  {word:"endogamy",pos:"n.",meaning:"the custom of marrying only within a particular social or cultural group",example:"Endogamy was strictly enforced in certain castes to preserve social boundaries.",translation:"അന്തർവിവാഹം",ipa:"/ɛnˈdɒɡəmi/"},
-  {word:"exogamy",pos:"n.",meaning:"the practice of marrying outside one's own social group or community",example:"Exogamy encourages alliances between different clans and reduces internal conflict.",translation:"ബഹിർവിവാഹം",ipa:"/ɛkˈsɒɡəmi/"},
-  {word:"liminality",pos:"n.",meaning:"a transitional state between two phases of social or cultural identity",example:"Adolescence is often described as a period of liminality between childhood and adulthood.",translation:"പരിവർത്തന അവസ്ഥ",ipa:"/ˌlɪmɪˈnælɪti/"},
-  {word:"ethnocentrism",pos:"n.",meaning:"the tendency to judge other cultures by the standards of one's own culture",example:"Ethnocentrism can lead researchers to misinterpret practices that differ from their own norms.",translation:"സ്വജാതി കേന്ദ്രിതത്വം",ipa:"/ˌɛθnəʊˈsɛntrɪzəm/"},
-  {word:"kinship",pos:"n.",meaning:"a network of social relationships based on blood, marriage, or cultural ties",example:"Kinship systems vary dramatically across societies in terms of lineage and inheritance rules.",translation:"കുടുംബബന്ധം",ipa:"/ˈkɪnʃɪp/"},
-  {word:"hegemony",pos:"n.",meaning:"dominance or leadership of one social group over others in cultural or political terms",example:"Cultural hegemony often determines which values and norms are considered universally acceptable.",translation:"ആധിപത്യം",ipa:"/hɪˈdʒɛməni/"},
-  {word:"diaspora",pos:"n.",meaning:"a community of people living outside their ancestral homeland while maintaining cultural identity",example:"The African diaspora has profoundly influenced music, language, and religion across the Americas.",translation:"പ്രവാസ സമൂഹം",ipa:"/daɪˈæspərə/"},
-  {word:"totemism",pos:"n.",meaning:"a belief system in which a group identifies with a symbolic animal or object as a sacred emblem",example:"Totemism played a central role in the social organization of many Native American tribes.",translation:"ടോട്ടം വ്യവസ്ഥ",ipa:"/ˈtəʊtəmɪzəm/"},
-  {word:"patriarchy",pos:"n.",meaning:"a social system in which men hold primary power and authority over women",example:"Feminist anthropologists have documented how patriarchy shapes inheritance and property rights.",translation:"പുരുഷാധിപത്യം",ipa:"/ˈpeɪtriɑːki/"},
-  {word:"matrilineal",pos:"adj.",meaning:"relating to descent or kinship traced through the mother's line",example:"In matrilineal societies, property and clan membership are inherited from the mother's side.",translation:"മാതൃവംശീയ",ipa:"/ˌmætrɪˈlɪniəl/"},
-  {word:"stratification",pos:"n.",meaning:"the hierarchical arrangement of social classes or groups within a society",example:"Social stratification based on wealth often intersects with race and gender in complex ways.",translation:"സാമൂഹിക വിഭജനം",ipa:"/ˌstrætɪfɪˈkeɪʃən/"},
-  {word:"enculturation",pos:"n.",meaning:"the process by which individuals learn and internalize the norms of their own culture",example:"Children undergo enculturation through family, education, and peer interaction from birth.",translation:"സംസ്കാര പഠനം",ipa:"/ɛnˌkʌltʃəˈreɪʃən/"},
-  {word:"syncretism",pos:"n.",meaning:"the blending of different cultural, religious, or philosophical traditions into a new system",example:"Caribbean religions often reflect a syncretism of African, European, and indigenous spiritual practices.",translation:"സമന്വയം",ipa:"/ˈsɪŋkrətɪzəm/"},
-  {word:"taboo",pos:"n.",meaning:"a social or cultural prohibition against certain behaviors or topics",example:"In many societies, discussing death openly remains a powerful taboo.",translation:"വിലക്ക്",ipa:"/təˈbuː/"},
-  {word:"ritual",pos:"n.",meaning:"a set of formal actions performed according to prescribed social or religious order",example:"Coming-of-age rituals mark the transition from youth to adult status in many cultures.",translation:"ആചാരം",ipa:"/ˈrɪtʃuəl/"},
-  {word:"folkways",pos:"n.",meaning:"informal social norms and customs that guide everyday behavior within a community",example:"Folkways such as greeting gestures differ significantly between Eastern and Western societies.",translation:"ജനരീതികൾ",ipa:"/ˈfəʊkweɪz/"},
-  {word:"mores",pos:"n.",meaning:"strongly held social norms that carry moral significance within a culture",example:"Violations of mores regarding family loyalty were severely judged in traditional communities.",translation:"സദാചാര നിയമങ്ങൾ",ipa:"/ˈmɔːreɪz/"},
-  {word:"anomie",pos:"n.",meaning:"a state of social instability resulting from a breakdown of norms and values",example:"Rapid industrialization caused anomie as traditional community structures collapsed.",translation:"സാമൂഹിക ശൂന്യത",ipa:"/ˈænəmi/"},
-  {word:"weltanschauung",pos:"n.",meaning:"a comprehensive worldview or philosophical framework of a particular culture or individual",example:"The researcher examined how a society's weltanschauung shapes its attitudes toward nature.",translation:"ലോകവീക്ഷണം",ipa:"/ˈvɛltænʃaʊʊŋ/"},
-  {word:"habitus",pos:"n.",meaning:"a set of internalized dispositions and behaviors shaped by one's social environment",example:"Bourdieu argued that habitus reproduces social inequality across generations.",translation:"സ്വഭാവ രൂപീകരണം",ipa:"/ˈhæbɪtəs/"},
-  {word:"diffusion",pos:"n.",meaning:"the spread of cultural elements such as ideas, practices, or artifacts between societies",example:"The diffusion of agricultural techniques transformed societies across continents over millennia.",translation:"സാംസ്കാരിക വ്യാപനം",ipa:"/dɪˈfjuːʒən/"},
-  {word:"primordialism",pos:"n.",meaning:"the view that ethnic and cultural identities are fixed, ancient, and deeply rooted",example:"Critics argue that primordialism ignores how ethnic identities are constructed over time.",translation:"ആദിമ ദേശീയത സിദ്ധാന്തം",ipa:"/praɪˈmɔːdiəlɪzəm/"},
-  {word:"subsistence",pos:"n.",meaning:"a minimal level of economic activity focused on meeting basic survival needs",example:"Subsistence farming communities often rely heavily on seasonal patterns and communal labor.",translation:"ഉപജീവനം",ipa:"/səbˈsɪstəns/"},
-  {word:"ostracism",pos:"n.",meaning:"the exclusion of an individual from a society or social group as a form of punishment",example:"Social ostracism was used historically to enforce conformity to community standards.",translation:"സാമൂഹ്യ ബഹിഷ്കരണം",ipa:"/ˈɒstrəsɪzəm/"},
-  {word:"fictive kinship",pos:"n.",meaning:"social bonds that mimic family relationships but are not based on blood or marriage",example:"Fictive kinship ties among migrant workers provide emotional support and practical aid.",translation:"കൃത്രിമ കുടുംബബന്ধം",ipa:"/ˈfɪktɪv ˈkɪnʃɪp/"},
-  {word:"necropolis",pos:"n.",meaning:"a large ancient cemetery or burial site that reflects the cultural practices of a civilization",example:"Excavation of the necropolis revealed elaborate burial rituals indicating a belief in afterlife.",translation:"പ്രാചീന ശ്മശാനം",ipa:"/nɪˈkrɒpəlɪs/"},
-  {word:"cosmology",pos:"n.",meaning:"a cultural system of beliefs about the origin and structure of the universe",example:"Indigenous cosmology often places humans in a reciprocal relationship with the natural world.",translation:"പ്രപഞ്ചശാസ്ത്ര വിശ്വാസം",ipa:"/kɒzˈmɒlədʒi/"},
-  {word:"rites of passage",pos:"n.",meaning:"ceremonies or events marking important transitions in a person's social status",example:"Graduation ceremonies function as modern rites of passage into professional adulthood.",translation:"പരിവർത്തന ആചാരങ്ങൾ",ipa:"/raɪts əv ˈpæsɪdʒ/"},
-  {word:"remuneration",pos:"n.",meaning:"payment or compensation received for employment or services",example:"The board reviewed the remuneration package offered to senior executives.",translation:"പ്രതിഫലം",ipa:"/rɪˌmjuːnəˈreɪʃən/"},
-  {word:"incumbent",pos:"adj.",meaning:"necessary as a duty or responsibility; currently holding an office",example:"It is incumbent upon the manager to disclose any conflicts of interest.",translation:"കടമയായിട്ടുള്ള",ipa:"/ɪnˈkʌmbənt/"},
-  {word:"ratify",pos:"v.",meaning:"to give formal approval or consent to something, making it officially valid",example:"The shareholders voted to ratify the proposed merger agreement.",translation:"ഔദ്യോഗികമായി അംഗീകരിക്കുക",ipa:"/ˈrætɪfaɪ/"},
-  {word:"indemnify",pos:"v.",meaning:"to compensate for harm or loss; to secure against legal liability",example:"The firm agreed to indemnify the client against any unforeseen damages.",translation:"നഷ്ടപരിഹാരം നൽകുക",ipa:"/ɪnˈdemnɪfaɪ/"},
-  {word:"deliberation",pos:"n.",meaning:"long and careful consideration or discussion before reaching a decision",example:"After thorough deliberation, the committee approved the revised policy.",translation:"ആലോചനയും ചർച്ചയും",ipa:"/dɪˌlɪbəˈreɪʃən/"},
-  {word:"ameliorate",pos:"v.",meaning:"to make something bad or unsatisfactory better; to improve",example:"The new guidelines were designed to ameliorate workplace conditions.",translation:"മെച്ചപ്പെടുത്തുക",ipa:"/əˈmiːlɪəreɪt/"},
-  {word:"enunciate",pos:"v.",meaning:"to express or state something clearly and formally",example:"The CEO enunciated the company's strategic priorities at the annual conference.",translation:"വ്യക്തമായി പ്രഖ്യാപിക്കുക",ipa:"/ɪˈnʌnsɪeɪt/"},
-  {word:"prerogative",pos:"n.",meaning:"an exclusive right or privilege belonging to a particular person or body",example:"Setting the agenda remains the prerogative of the chairperson.",translation:"പ്രത്യേക അവകാശം",ipa:"/prɪˈrɒɡətɪv/"},
-  {word:"circumspect",pos:"adj.",meaning:"carefully considering all circumstances and potential consequences before acting",example:"Managers should be circumspect when communicating sensitive information.",translation:"ജാഗ്രതയോടെ ആലോചിക്കുന്ന",ipa:"/ˈsɜːkəmspekt/"},
-  {word:"convene",pos:"v.",meaning:"to come together or cause to come together for a formal meeting",example:"The board will convene next Tuesday to address the restructuring proposal.",translation:"യോഗം വിളിച്ചുകൂട്ടുക",ipa:"/kənˈviːn/"},
-  {word:"propriety",pos:"n.",meaning:"conformity to conventionally accepted standards of behaviour or morals",example:"The auditor questioned the propriety of the expense claims submitted.",translation:"ഔചിത്യം",ipa:"/prəˈpraɪəti/"},
-  {word:"restitution",pos:"n.",meaning:"the restoration of something lost or stolen; compensation for loss or injury",example:"The court ordered restitution to all customers who had been overcharged.",translation:"നഷ്ടപരിഹാര തിരിച്ചുനൽകൽ",ipa:"/ˌrestɪˈtjuːʃən/"},
-  {word:"perfunctory",pos:"adj.",meaning:"carried out with minimal effort or care; routine and superficial",example:"A perfunctory review of the documents would not satisfy the auditors.",translation:"ഉദാസീനമായ",ipa:"/pəˈfʌŋktəri/"},
-  {word:"sanction",pos:"n.",meaning:"official permission or approval for an action; a penalty for disobeying a rule",example:"The committee granted formal sanction for the pilot programme to proceed.",translation:"ഔദ്യോഗിക അനുമതി",ipa:"/ˈsæŋkʃən/"},
-  {word:"acquiesce",pos:"v.",meaning:"to accept something without protest, though without enthusiasm",example:"The minority shareholders reluctantly acquiesced to the board's decision.",translation:"മൗനമായി സമ്മതിക്കുക",ipa:"/ˌækwiˈes/"},
-  {word:"compendium",pos:"n.",meaning:"a concise but comprehensive collection of information on a subject",example:"The legal team compiled a compendium of relevant case law for the trial.",translation:"സംഗ്രഹ സമാഹാരം",ipa:"/kəmˈpendiəm/"},
-  {word:"liaise",pos:"v.",meaning:"to communicate and cooperate with another person or organisation",example:"The project manager will liaise with external vendors throughout the process.",translation:"ബന്ധം പുലർത്തുക",ipa:"/liˈeɪz/"},
-  {word:"impasse",pos:"n.",meaning:"a situation in which no progress is possible due to disagreement",example:"Negotiations reached an impasse when neither party would compromise on price.",translation:"അഭിപ്രായ ഭിന്നതയിലെ നിർണ്ണായക തടസ്സം",ipa:"/ˈɪmpɑːs/"},
-  {word:"redress",pos:"n.",meaning:"remedy or compensation for a wrong or grievance",example:"Employees have the right to seek redress through the formal complaints procedure.",translation:"പ്രതിവിധി",ipa:"/rɪˈdres/"},
-  {word:"discretionary",pos:"adj.",meaning:"available for use at the judgement of the holder; not fixed or mandatory",example:"Managers have discretionary authority to approve expenses below a set threshold.",translation:"വിവേചനാധികാരത്തിലുള്ള",ipa:"/dɪˈskreʃənəri/"},
-  {word:"historiography",pos:"n.",meaning:"the study of how history has been written and interpreted over time",example:"Her dissertation focused on the development of historiography in nineteenth-century Europe.",translation:"ചരിത്രരചനാശാസ്ത്രം",ipa:"/ˌhɪstəriˈɒɡrəfi/"},
-  {word:"chronicle",pos:"n.",meaning:"a detailed factual written account of historical events in order of time",example:"The medieval chronicle recorded every significant event of the kingdom's reign.",translation:"കാലക്രമ ചരിത്രരേഖ",ipa:"/ˈkrɒnɪkəl/"},
-  {word:"annals",pos:"n.",meaning:"historical records of events arranged year by year",example:"The annals of ancient Rome provide valuable insight into daily political life.",translation:"വർഷാനുവർഷ ചരിത്രരേഖകൾ",ipa:"/ˈænəlz/"},
-  {word:"periodization",pos:"n.",meaning:"the process of dividing history into named blocks of time for analysis",example:"Historians debate the periodization of the Renaissance across different regions.",translation:"കാലഘട്ട വിഭജനം",ipa:"/ˌpɪəriədaɪˈzeɪʃən/"},
-  {word:"revisionism",pos:"n.",meaning:"the reinterpretation of accepted historical accounts or doctrines",example:"Post-colonial revisionism challenged many long-held assumptions about empire.",translation:"പുനർവ്യാഖ്യാനവാദം",ipa:"/rɪˈvɪʒənɪzəm/"},
-  {word:"anachronism",pos:"n.",meaning:"something placed in the wrong historical period or context",example:"The use of modern slang in the historical film was an obvious anachronism.",translation:"കാലദോഷം",ipa:"/əˈnækrənɪzəm/"},
-  {word:"archival",pos:"adj.",meaning:"relating to or contained within historical archives or records",example:"Archival research revealed documents that contradicted the official narrative.",translation:"ചരിത്രരേഖ സംബന്ധിയായ",ipa:"/ɑːˈkaɪvəl/"},
-  {word:"primary source",pos:"n.",meaning:"an original document or first-hand account from the historical period studied",example:"Letters written by soldiers serve as primary sources for understanding wartime experience.",translation:"പ്രാഥമിക സ്രോതസ്സ്",ipa:"/ˈpraɪməri sɔːs/"},
-  {word:"secondary source",pos:"n.",meaning:"an account that interprets or analyzes primary sources written after the event",example:"The textbook is a secondary source that synthesizes earlier scholarly findings.",translation:"ദ്വിതീയ സ്രോതസ്സ്",ipa:"/ˈsekəndri sɔːs/"},
-  {word:"antiquarian",pos:"adj.",meaning:"relating to the study or collection of historical objects and old records",example:"His antiquarian interests led him to catalog manuscripts ignored by mainstream scholars.",translation:"പ്രാചീന ഗവേഷണ സ്വഭാവമുള്ള",ipa:"/ˌæntɪˈkweəriən/"},
-  {word:"hagiography",pos:"n.",meaning:"a biography that idealizes or glorifies its subject, often uncritically",example:"The official biography was criticized as hagiography rather than serious history.",translation:"വിശുദ്ധജീവചരിത്ര ലേഖനം",ipa:"/ˌhæɡiˈɒɡrəfi/"},
-  {word:"exegesis",pos:"n.",meaning:"critical explanation or interpretation of a historical text",example:"Careful exegesis of the treaty revealed ambiguities that later caused conflict.",translation:"വ്യാഖ്യാനം",ipa:"/ˌeksɪˈdʒiːsɪs/"},
-  {word:"historianism",pos:"n.",meaning:"the view that history and culture are the primary factors shaping human thought",example:"His approach to philosophy was deeply influenced by historianism.",translation:"ചരിത്രനിർണ്ണയവാദം",ipa:"/hɪˈstɔːriənɪzəm/"},
-  {word:"provenance",pos:"n.",meaning:"the origin and history of ownership of a historical document or artifact",example:"The museum verified the provenance of the manuscript before adding it to the collection.",translation:"ഉദ്ഭവം",ipa:"/ˈprɒvənəns/"},
-  {word:"counterfactual",pos:"adj.",meaning:"relating to hypothetical scenarios exploring what might have happened in history",example:"Counterfactual analysis asks what Europe would look like had the First World War not occurred.",translation:"പ്രതിവസ്തുതാ ചിന്ത",ipa:"/ˌkaʊntəˈfæktʃuəl/"},
-  {word:"declension",pos:"n.",meaning:"a perceived decline or deterioration in historical progress or civilization",example:"Historians of the period debated whether Rome's fall represented a true declension.",translation:"അധഃപതനം",ipa:"/dɪˈklenʃən/"},
-  {word:"synchronic",pos:"adj.",meaning:"relating to the analysis of historical events at a single point in time",example:"A synchronic study of 1848 reveals simultaneous revolutions across multiple nations.",translation:"ഒരേ കാലഘട്ടത്തിൽ സ്ഥിതിചെയ്യുന്ന",ipa:"/ˈsɪŋkrɒnɪk/"},
-  {word:"diachronic",pos:"adj.",meaning:"relating to the study of how something develops through different historical periods",example:"A diachronic approach traces the transformation of democracy from Athens to the present.",translation:"കാലക്രമ വിശകലനം",ipa:"/ˌdaɪəˈkrɒnɪk/"},
-  {word:"empiricism",pos:"n.",meaning:"the method of basing historical claims on observable evidence and sources",example:"Ranke championed empiricism by insisting historians rely on primary documents.",translation:"അനുഭവവാദം",ipa:"/ɪmˈpɪrɪsɪzəm/"},
-  {word:"lacuna",pos:"n.",meaning:"a gap or missing portion in a historical manuscript or body of evidence",example:"The lacuna in the archive makes it impossible to reconstruct the full sequence of events.",translation:"ചരിത്രരേഖകളിലെ വിടവ്",ipa:"/ləˈkjuːnə/"},
-  {word:"positivism",pos:"n.",meaning:"the belief that history can be studied scientifically using verified facts",example:"Nineteenth-century positivism encouraged historians to treat the past as an objective science.",translation:"പ്രത്യക്ഷവാദം",ipa:"/ˈpɒzɪtɪvɪzəm/"},
-  {word:"metanarrative",pos:"n.",meaning:"a grand overarching story or framework used to interpret all of historical development",example:"Post-modern thinkers questioned the validity of any single metanarrative about human progress.",translation:"ബൃഹദ് ആഖ്യാനം",ipa:"/ˌmetəˈnærətɪv/"},
-  {word:"palaeography",pos:"n.",meaning:"the study of ancient and historical handwriting and manuscripts",example:"Palaeography helped scholars date the manuscript to the twelfth century.",translation:"പ്രാചീന ലിപിശാസ്ത്രം",ipa:"/ˌpæliˈɒɡrəfi/"},
-  {word:"commemoration",pos:"n.",meaning:"the act of officially remembering and honoring a historical event or person",example:"The annual commemoration of the battle draws thousands of visitors each year.",translation:"അനുസ്മരണം",ipa:"/kəˌmeməˈreɪʃən/"},
-  {word:"deixis",pos:"n.",meaning:"the use of words or expressions whose interpretation depends on context, such as 'here', 'now', or 'I'",example:"Understanding deixis is essential for interpreting phrases like 'come here' correctly.",translation:"ദേശിസ്",ipa:"/ˈdaɪksɪs/"},
-  {word:"utterance",pos:"n.",meaning:"a spoken or written statement considered as a unit of communication in context",example:"The pragmatic meaning of an utterance often differs from its literal semantic content.",translation:"ഉച്ചാരണം",ipa:"/ˈʌtərəns/"},
-  {word:"implicature",pos:"n.",meaning:"a meaning implied by an utterance that goes beyond its literal semantic content",example:"When she said 'it's cold in here', the implicature was a request to close the window.",translation:"സൂചിതാർഥം",ipa:"/ɪmˈplɪkətʃər/"},
-  {word:"morpheme",pos:"n.",meaning:"the smallest meaningful unit of language that cannot be further divided",example:"The word 'unhappiness' contains three morphemes: un-, happy, and -ness.",translation:"മോർഫീം",ipa:"/ˈmɔːrfiːm/"},
-  {word:"pragmatics",pos:"n.",meaning:"the branch of linguistics concerned with how context influences the interpretation of meaning",example:"Pragmatics explains why 'Can you pass the salt?' is a request, not a question about ability.",translation:"പ്രായോഗിക ഭാഷാശാസ്ത്രം",ipa:"/præɡˈmætɪks/"},
-  {word:"denotation",pos:"n.",meaning:"the literal or primary meaning of a word, as opposed to its emotional associations",example:"The denotation of 'snake' is simply a reptile, but its connotations are often negative.",translation:"അക്ഷരാർഥം",ipa:"/ˌdiːnəʊˈteɪʃən/"},
-  {word:"connotation",pos:"n.",meaning:"an idea or feeling that a word evokes beyond its literal meaning",example:"The word 'home' carries warm connotations of comfort and belonging.",translation:"ഉപലക്ഷ്യാർഥം",ipa:"/ˌkɒnəˈteɪʃən/"},
-  {word:"polysemy",pos:"n.",meaning:"the condition of a word having multiple related meanings",example:"The polysemy of 'bank' includes both a financial institution and the edge of a river.",translation:"ബഹ്വർഥകത",ipa:"/pəˈlɪsɪmi/"},
-  {word:"lexeme",pos:"n.",meaning:"the fundamental unit of the lexicon of a language, representing a word and its inflected forms",example:"'Run', 'runs', and 'ran' all belong to the same lexeme.",translation:"ലെക്സീം",ipa:"/ˈleksɪːm/"},
-  {word:"illocution",pos:"n.",meaning:"the performance of an act in saying something, such as promising, warning, or ordering",example:"The illocution of 'I now pronounce you married' is a declaration that changes reality.",translation:"ഇല്ലോക്യൂഷൻ",ipa:"/ˌɪləˈkjuːʃən/"},
-  {word:"locution",pos:"n.",meaning:"an act of speaking or the particular words used in an utterance",example:"The locution 'I will be there' expresses a future action through specific word choice.",translation:"ലോക്യൂഷൻ",ipa:"/ləˈkjuːʃən/"},
-  {word:"perlocution",pos:"n.",meaning:"the effect or result produced on a listener by a speech act",example:"The perlocution of the doctor's warning was that the patient immediately quit smoking.",translation:"പെർലോക്യൂഷൻ",ipa:"/ˌpɜːrləˈkjuːʃən/"},
-  {word:"referent",pos:"n.",meaning:"the object, concept, or entity in the world to which a linguistic expression refers",example:"The referent of the word 'moon' is the natural satellite orbiting the Earth.",translation:"നിർദേശ്യം",ipa:"/ˈrefərənt/"},
-  {word:"semiotics",pos:"n.",meaning:"the study of signs, symbols, and their use or interpretation in communication",example:"Semiotics examines how traffic lights communicate meaning through colour and position.",translation:"ചിഹ്നശാസ്ത്രം",ipa:"/ˌsiːmiˈɒtɪks/"},
-  {word:"entailment",pos:"n.",meaning:"a logical relationship where the truth of one sentence necessarily implies the truth of another",example:"The sentence 'She is a widow' carries the entailment that her husband has died.",translation:"അനിവാര്യ സൂചനം",ipa:"/ɪnˈteɪlmənt/"},
-  {word:"presupposition",pos:"n.",meaning:"an implicit assumption embedded in a statement that the speaker takes for granted",example:"The question 'Have you stopped lying?' carries the presupposition that the person once lied.",translation:"മുൻധാരണ",ipa:"/ˌpriːsʌpəˈzɪʃən/"},
-  {word:"cataphora",pos:"n.",meaning:"the use of a word that refers forward to a later word or expression in a text",example:"'Before she spoke, Maria cleared her throat' uses cataphora, as 'she' precedes 'Maria'.",translation:"കാറ്റഫൊറ",ipa:"/kəˈtæfərə/"},
-  {word:"hyponymy",pos:"n.",meaning:"a semantic relationship where the meaning of one word is included within another, more general word",example:"Through hyponymy, 'oak' and 'pine' are both types of 'tree'.",translation:"ഹൈപ്പോണിമി",ipa:"/haɪˈpɒnɪmi/"},
-  {word:"synonymy",pos:"n.",meaning:"the quality of two or more words having the same or very similar meanings",example:"The synonymy between 'begin' and 'commence' allows writers to vary their vocabulary.",translation:"സമാർഥകത",ipa:"/sɪˈnɒnɪmi/"},
-  {word:"antonymy",pos:"n.",meaning:"the semantic relationship between words with opposite meanings",example:"The antonymy of 'hot' and 'cold' represents a gradable scale of temperature.",translation:"വിപരീതാർഥകത",ipa:"/ænˈtɒnɪmi/"},
-  {word:"collocation",pos:"n.",meaning:"the habitual co-occurrence of particular words in a language",example:"'Strong tea' is a natural collocation in English, whereas 'powerful tea' sounds unnatural.",translation:"സഹസ്ഥാനം",ipa:"/ˌkɒləˈkeɪʃən/"},
-  {word:"cotext",pos:"n.",meaning:"the linguistic environment surrounding a particular word or utterance within a text",example:"The cotext of a pronoun helps identify its referent within the same passage.",translation:"സഹവചനം",ipa:"/ˈkəʊtekst/"},
-  {word:"grice",pos:"n.",meaning:"relating to the philosopher H.P. Grice's cooperative principle governing conversational maxims",example:"Flouting the Gricean maxim of quantity can generate implicatures in everyday conversation.",translation:"ഗ്രൈസിയൻ",ipa:"/ɡraɪs/"},
-  {word:"register",pos:"n.",meaning:"a variety of language used for a particular purpose or in a particular social setting",example:"Switching to a formal register is expected when writing academic or legal documents.",translation:"ഭാഷാസ്തരം",ipa:"/ˈredʒɪstər/"},
-  {word:"idiom",pos:"n.",meaning:"a phrase whose meaning cannot be deduced from the literal meanings of the individual words",example:"The idiom 'kick the bucket' means to die, which cannot be inferred from its words alone.",translation:"മൂടിയ പ്രയോഗം",ipa:"/ˈɪdiəm/"},
-  {word:"prototype",pos:"n.",meaning:"the most typical or central member of a semantic category, used as a reference point for classification",example:"A robin is often cited as a prototype of the category 'bird' in English-speaking cultures.",translation:"മാതൃകാരൂപം",ipa:"/ˈprəʊtətaɪp/"},
-  {word:"metaphor",pos:"n.",meaning:"a figure of speech in which a word is applied to something it does not literally denote, suggesting resemblance",example:"Conceptual metaphors like 'argument is war' shape how we structure our reasoning.",translation:"രൂപകം",ipa:"/ˈmetəfər/"},
-  {word:"defamiliarization",pos:"n.",meaning:"a literary technique that presents familiar things in an unfamiliar way to renew perception",example:"The poet's use of defamiliarization forced readers to see ordinary objects afresh.",translation:"അപരിചിതവൽക്കരണം",ipa:"/diːfəˌmɪliəraɪˈzeɪʃən/"},
-  {word:"parataxis",pos:"n.",meaning:"placing clauses or phrases side by side without coordinating conjunctions",example:"Hemingway's parataxis gives his prose a blunt, immediate quality.",translation:"സമന്വയരഹിത വാക്യഘടന",ipa:"/ˌpærəˈtæksɪs/"},
-  {word:"hypotaxis",pos:"n.",meaning:"the use of subordinate clauses to show dependent relationships between ideas",example:"Henry James's hypotaxis creates layers of qualification and nuance in every sentence.",translation:"ആശ്രിത വാക്യ ഘടന",ipa:"/ˌhaɪpəˈtæksɪs/"},
-  {word:"encomium",pos:"n.",meaning:"a formal speech or written work expressing high praise",example:"The critic published an encomium celebrating the poet's final collection.",translation:"ഔപചാരിക പ്രശംസാ കൃതി",ipa:"/ɪnˈkəʊmɪəm/"},
-  {word:"pastiche",pos:"n.",meaning:"a work that imitates the style of another artist or period, often affectionately",example:"The novel is an affectionate pastiche of Victorian detective fiction.",translation:"ശൈലീ അനുകരണ കൃതി",ipa:"/pæˈstiːʃ/"},
-  {word:"semiosis",pos:"n.",meaning:"the process by which signs produce meaning within a text or culture",example:"Barthes's analysis focuses on the semiosis at work in everyday cultural artefacts.",translation:"അർഥ നിർമ്മാണ പ്രക്രിയ",ipa:"/ˌsiːmɪˈəʊsɪs/"},
-  {word:"anagnorisis",pos:"n.",meaning:"the moment of critical discovery or recognition by the protagonist in a narrative",example:"The anagnorisis in the final act transforms the hero's understanding of his own identity.",translation:"നായക തിരിച്ചറിവ്",ipa:"/ˌænəɡˈnɒrɪsɪs/"},
-  {word:"proleptic",pos:"adj.",meaning:"relating to or involving the anticipation of future events or objections in a narrative",example:"The proleptic imagery in the first chapter foreshadows the novel's tragic conclusion.",translation:"ഭാവി സൂചകമായ",ipa:"/prəˈleptɪk/"},
-  {word:"carnivalesque",pos:"adj.",meaning:"relating to Bakhtin's concept of festive subversion of official culture in literature",example:"The carnivalesque elements of the play upend class hierarchies through comic excess.",translation:"ഉത്സവ ഭ്രാന്ത് സദൃശ",ipa:"/ˌkɑːnɪvəˈlesk/"},
-  {word:"heteroglossia",pos:"n.",meaning:"the coexistence of multiple social voices and registers within a single literary text",example:"Bakhtin argued that the novel's heteroglossia reflects the competing discourses of its society.",translation:"ബഹുഭാഷ്യ സഹവർത്തിത്വം",ipa:"/ˌhetərəˈɡlɒsiə/"},
-  {word:"dialogism",pos:"n.",meaning:"the principle that meaning in a text arises from interaction between multiple voices",example:"The dialogism of the narrative prevents any single character from claiming absolute truth.",translation:"സംവാദ തത്ത്വം",ipa:"/daɪˈæləɡɪzəm/"},
-  {word:"solecism",pos:"n.",meaning:"a grammatical or stylistic error, or an intentional violation of linguistic norms in literature",example:"The author's apparent solecism was revealed by critics to be a deliberate stylistic choice.",translation:"ഭാഷാ നിയമ ലംഘനം",ipa:"/ˈsɒlɪsɪzəm/"},
-  {word:"mitigation",pos:"n.",meaning:"the action of reducing the severity or impact of climate change",example:"The new policy focuses on mitigation strategies to limit global temperature rise.",translation:"ലഘൂകരണം",ipa:"/ˌmɪt.ɪˈɡeɪ.ʃən/"},
-  {word:"sequestration",pos:"n.",meaning:"the process of capturing and storing atmospheric carbon dioxide",example:"Forest sequestration plays a vital role in national climate commitments.",translation:"വേർതിരിച്ച് സൂക്ഷിക്കൽ",ipa:"/ˌsiː.kwɪˈstreɪ.ʃən/"},
-  {word:"ratification",pos:"n.",meaning:"the formal approval of an international agreement by a government",example:"The treaty awaits ratification by all signatory nations before taking effect.",translation:"അംഗീകാരം",ipa:"/ˌræt.ɪ.fɪˈkeɪ.ʃən/"},
-  {word:"decarbonization",pos:"n.",meaning:"the process of reducing carbon dioxide emissions from energy and industry",example:"Decarbonization of the steel sector remains a significant policy challenge.",translation:"കാർബൺ നീക്കം",ipa:"/diːˌkɑː.bə.naɪˈzeɪ.ʃən/"},
-  {word:"anthropogenic",pos:"adj.",meaning:"caused or produced by human activity, especially regarding climate change",example:"Scientists attribute most current warming to anthropogenic greenhouse gas emissions.",translation:"മാനവജന്യം",ipa:"/ˌæn.θrə.pəˈdʒen.ɪk/"},
-  {word:"governance",pos:"n.",meaning:"the system of rules and processes by which environmental policy is managed",example:"Effective global governance is essential for coordinated climate action.",translation:"ഭരണസംവിധാനം",ipa:"/ˈɡʌv.ə.nəns/"},
-  {word:"accountability",pos:"n.",meaning:"the obligation of governments or corporations to justify their environmental actions",example:"Civil society groups demanded greater accountability from fossil fuel companies.",translation:"ഉത്തരവാദിത്തം",ipa:"/əˌkaʊn.təˈbɪl.ɪ.ti/"},
-  {word:"benchmarking",pos:"n.",meaning:"the process of setting measurable targets against which environmental progress is evaluated",example:"The agency introduced benchmarking tools to track emission reduction performance.",translation:"മാനദണ്ഡ നിർണ്ണയം",ipa:"/ˈbentʃ.mɑː.kɪŋ/"},
-  {word:"trajectory",pos:"n.",meaning:"the projected path of emissions or temperatures over time under given policies",example:"Current policies put the emissions trajectory well above the two-degree target.",translation:"പഥം",ipa:"/trəˈdʒek.tər.i/"},
-  {word:"pledging",pos:"n.",meaning:"the act of formally committing to specific climate targets or financial contributions",example:"The pledging conference secured commitments from forty governments.",translation:"പ്രതിജ്ഞ നൽകൽ",ipa:"/ˈpledʒ.ɪŋ/"},
-  {word:"stewardship",pos:"n.",meaning:"the responsible management and protection of natural resources",example:"Indigenous communities have practiced environmental stewardship for centuries.",translation:"സംരക്ഷണ ദൗത്യം",ipa:"/ˈstjuː.əd.ʃɪp/"},
-  {word:"offset",pos:"n.",meaning:"a compensatory measure that counterbalances greenhouse gas emissions elsewhere",example:"Critics argue that carbon offsets can allow companies to avoid real reductions.",translation:"ഓഫ്സെറ്റ്",ipa:"/ˈɒf.set/"},
-  {word:"adaptation",pos:"n.",meaning:"adjustments in ecological, social, or economic systems in response to climate impacts",example:"Adaptation funding for vulnerable nations remains critically underfunded.",translation:"അനുകൂലനം",ipa:"/ˌæd.æpˈteɪ.ʃən/"},
-  {word:"deforestation",pos:"n.",meaning:"the large-scale removal of forests, contributing to carbon emissions and biodiversity loss",example:"Deforestation in tropical regions accelerates global warming significantly.",translation:"വനനശീകരണം",ipa:"/diːˌfɒr.ɪˈsteɪ.ʃən/"},
-  {word:"multilateral",pos:"adj.",meaning:"involving three or more countries or parties in climate negotiations or agreements",example:"A multilateral approach is necessary to address transboundary pollution effectively.",translation:"ബഹുരാഷ്ട്ര",ipa:"/ˌmʌl.tiˈlæt.ər.əl/"},
-  {word:"externality",pos:"n.",meaning:"a cost or benefit affecting parties not directly involved in an economic transaction, such as pollution",example:"Carbon taxes are designed to internalize the externality of fossil fuel combustion.",translation:"ബാഹ്യഫലം",ipa:"/ˌek.stɜːˈnæl.ɪ.ti/"},
-  {word:"sovereignty",pos:"n.",meaning:"a nation's authority to govern its own natural resources and environmental decisions",example:"Resource sovereignty complicates international efforts to regulate deforestation.",translation:"പരമാധികാരം",ipa:"/ˈsɒv.rɪn.ti/"},
-  {word:"catastrophic",pos:"adj.",meaning:"involving or causing sudden great damage, used to describe severe climate outcomes",example:"Scientists warn of catastrophic consequences if emissions are not drastically reduced.",translation:"വിനാശകരമായ",ipa:"/ˌkæt.əˈstrɒf.ɪk/"},
-  {word:"transparency",pos:"n.",meaning:"openness in reporting environmental data and policy implementation",example:"The agreement requires full transparency in national emissions reporting.",translation:"സുതാര്യത",ipa:"/trænsˈpær.ən.si/"},
-  {word:"encroachment",pos:"n.",meaning:"the gradual intrusion into protected ecological zones or indigenous lands",example:"Urban encroachment on wetlands has reduced natural flood defenses.",translation:"കടന്നുകയറ്റം",ipa:"/ɪnˈkrəʊtʃ.mənt/"},
-  {word:"degradation",pos:"n.",meaning:"the deterioration of land, water, or ecosystems due to human activity or climate stress",example:"Soil degradation threatens food security across drought-prone regions.",translation:"തകർച്ച",ipa:"/ˌdeɡ.rəˈdeɪ.ʃən/"},
-  {word:"consensus",pos:"n.",meaning:"general agreement among scientists or policymakers on climate evidence or action",example:"Scientific consensus on human-caused warming is now overwhelming.",translation:"സമവായം",ipa:"/kənˈsen.səs/"},
-  {word:"incentivize",pos:"v.",meaning:"to motivate businesses or individuals to adopt environmentally friendly practices through rewards",example:"The policy aims to incentivize renewable energy adoption through tax credits.",translation:"പ്രോത്സാഹിപ്പിക്കുക",ipa:"/ɪnˈsen.tɪ.vaɪz/"},
-  {word:"proliferation",pos:"n.",meaning:"rapid spread or increase of low-carbon technologies or environmental regulations",example:"The proliferation of solar installations has outpaced government forecasts.",translation:"വ്യാപനം",ipa:"/prəˌlɪf.əˈreɪ.ʃən/"},
-  {word:"liability",pos:"n.",meaning:"legal or financial responsibility for environmental damage caused by polluters",example:"New legislation extends climate liability to corporate executives.",translation:"ബാധ്യത",ipa:"/ˌlaɪ.əˈbɪl.ɪ.ti/"},
-  {word:"phaseout",pos:"n.",meaning:"the gradual elimination of a harmful substance or technology from use",example:"The phaseout of hydrofluorocarbons was agreed under the Kigali Amendment.",translation:"ഘട്ടം ഘട്ടമായ നിർത്തലാക്കൽ",ipa:"/ˈfeɪz.aʊt/"},
-  {word:"obligation",pos:"n.",meaning:"a legally or morally binding duty to meet environmental commitments",example:"Developed nations have a legal obligation to transfer climate finance to poorer states.",translation:"ബാധ്യത",ipa:"/ˌɒb.lɪˈɡeɪ.ʃən/"},
-  {word:"aetiology",pos:"n.",meaning:"the study or science of the causes or origins of a disease",example:"The aetiology of autoimmune disorders remains a subject of intense scientific investigation.",translation:"രോഗകാരണ ശാസ്ത്രം",ipa:"/ˌiːtiˈɒlədʒi/"},
-  {word:"anaesthesia",pos:"n.",meaning:"loss of sensation, especially artificially induced insensibility to pain during surgery",example:"General anaesthesia carries certain risks that must be carefully assessed before any major operation.",translation:"മയക്കമരുന്ന് പ്രയോഗം",ipa:"/ˌænɪsˈθiːziə/"},
-  {word:"angioplasty",pos:"n.",meaning:"a surgical procedure to widen narrowed or obstructed arteries or veins",example:"The cardiologist recommended angioplasty to restore adequate blood flow to the patient's heart.",translation:"ധമനി വികസന ശസ്ത്രക്രിയ",ipa:"/ˈændʒiəʊplæsti/"},
-  {word:"apoptosis",pos:"n.",meaning:"the process of programmed cell death that occurs in multicellular organisms",example:"Disruption of normal apoptosis is frequently observed in malignant tumour development.",translation:"കോശ മരണ പ്രക്രിയ",ipa:"/ˌæpəpˈtoʊsɪs/"},
-  {word:"arrhythmia",pos:"n.",meaning:"an irregular or abnormal heartbeat pattern",example:"The patient was fitted with a pacemaker after being diagnosed with a severe ventricular arrhythmia.",translation:"ഹൃദയ താള വൈകല്യം",ipa:"/əˈrɪðmiə/"},
-  {word:"asymptomatic",pos:"adj.",meaning:"producing or showing no symptoms of a disease",example:"Many carriers of the virus remained asymptomatic yet were capable of transmitting the infection.",translation:"ലക്ഷണരഹിതമായ",ipa:"/ˌeɪsɪmptəˈmætɪk/"},
-  {word:"benign",pos:"adj.",meaning:"(of a tumour) not malignant or cancerous; not life-threatening",example:"The biopsy confirmed that the growth was benign and required no further surgical intervention.",translation:"അനാരോഗ്യകരമല്ലാത്ത",ipa:"/bɪˈnaɪn/"},
-  {word:"carcinogen",pos:"n.",meaning:"a substance or agent capable of causing cancer in living tissue",example:"Long-term exposure to asbestos is a well-documented carcinogen linked to mesothelioma.",translation:"കാൻസർ കാരകം",ipa:"/kɑːˈsɪnədʒən/"},
-  {word:"catheterisation",pos:"n.",meaning:"the insertion of a catheter into a body cavity or blood vessel for diagnostic or therapeutic purposes",example:"Cardiac catheterisation allowed the physicians to measure pressures within the heart chambers directly.",translation:"കാതറ്റർ പ്രവേശനം",ipa:"/ˌkæθɪtəraɪˈzeɪʃən/"},
-  {word:"coagulation",pos:"n.",meaning:"the process by which blood changes from a liquid to a gel, forming a clot",example:"Patients on anticoagulant therapy must have their coagulation levels monitored regularly.",translation:"രക്തം കട്ടപിടിക്കൽ",ipa:"/koʊˌæɡjʊˈleɪʃən/"},
-  {word:"contraindication",pos:"n.",meaning:"a factor or condition that makes a particular treatment or procedure inadvisable",example:"Severe renal impairment is a contraindication for the administration of this nephrotoxic drug.",translation:"വിരോധ സൂചന",ipa:"/ˌkɒntrəˌɪndɪˈkeɪʃən/"},
-  {word:"cytotoxic",pos:"adj.",meaning:"toxic to living cells, especially used in reference to cancer-killing drugs",example:"Cytotoxic chemotherapy agents destroy rapidly dividing cells but may also damage healthy tissue.",translation:"കോശ നാശകമായ",ipa:"/ˌsaɪtəˈtɒksɪk/"},
-  {word:"debridement",pos:"n.",meaning:"the surgical removal of dead, damaged, or infected tissue to promote healing",example:"The surgeon performed thorough debridement of the wound before applying a sterile dressing.",translation:"മൃത കലകളുടെ നീക്കം",ipa:"/dɪˈbriːdmənt/"},
-  {word:"differential diagnosis",pos:"n.",meaning:"the process of distinguishing between diseases with similar symptoms",example:"A careful differential diagnosis was essential to rule out meningitis before initiating treatment.",translation:"വ്യത്യാസ രോഗനിർണ്ണയം",ipa:"/ˌdɪfərənʃəl ˌdaɪəɡˈnoʊsɪs/"},
-  {word:"endoscopy",pos:"n.",meaning:"a minimally invasive procedure using an instrument to examine the interior of a hollow organ",example:"An upper gastrointestinal endoscopy revealed a small peptic ulcer in the duodenum.",translation:"ഉള്ളിൽ നോക്കൽ പ്രക്രിയ",ipa:"/ɛnˈdɒskəpi/"},
-  {word:"epidemiology",pos:"n.",meaning:"the branch of medicine dealing with the incidence, distribution, and control of diseases",example:"Epidemiology studies provided crucial data linking tobacco use to elevated lung cancer rates.",translation:"മഹാമാരി ശാസ്ത്രം",ipa:"/ˌɛpɪˌdiːmiˈɒlədʒi/"},
-  {word:"haemostasis",pos:"n.",meaning:"the process by which bleeding is stopped and blood flow is maintained within a vessel",example:"Effective haemostasis following trauma depends on a coordinated response of platelets and clotting factors.",translation:"രക്തസ്രാവ നിയന്ത്രണം",ipa:"/ˌhiːməˈsteɪsɪs/"},
-  {word:"iatrogenic",pos:"adj.",meaning:"relating to illness or adverse effects caused by medical examination or treatment",example:"The antibiotic-resistant infection was identified as an iatrogenic complication of prolonged hospitalisation.",translation:"ചികിത്സാ ജനിത",ipa:"/ˌaɪˌætrəˈdʒɛnɪk/"},
-  {word:"immunosuppression",pos:"n.",meaning:"reduction of an immune response, typically induced to prevent organ rejection after transplantation",example:"Post-transplant immunosuppression must be carefully balanced to prevent infection and rejection simultaneously.",translation:"പ്രതിരോധ ശക്തി അടിച്ചമർത്തൽ",ipa:"/ˌɪmjʊnoʊsəˈprɛʃən/"},
-  {word:"metastasis",pos:"n.",meaning:"the spread of cancer from the initial site to other locations in the body",example:"Imaging confirmed that metastasis had occurred, with secondary tumours detected in the liver.",translation:"അർബുദ വ്യാപനം",ipa:"/mɪˈtæstəsɪs/"},
-  {word:"morbidity",pos:"n.",meaning:"the condition of suffering from a disease or medical problem; the rate of disease in a population",example:"Obesity-related morbidity places a significant burden on healthcare systems worldwide.",translation:"രോഗ നിരക്ക്",ipa:"/mɔːˈbɪdɪti/"},
-  {word:"nosocomial",pos:"adj.",meaning:"relating to an infection originating or acquired in a hospital setting",example:"Strict hygiene protocols are imperative to reduce the incidence of nosocomial infections in intensive care units.",translation:"ആശുപത്രി ജനിത",ipa:"/ˌnɒzəˈkoʊmiəl/"},
-  {word:"oncology",pos:"n.",meaning:"the branch of medicine concerned with the study and treatment of cancer",example:"Advances in molecular oncology have enabled the development of highly targeted cancer therapies.",translation:"അർബുദ ചികിത്സാ ശാസ്ত്രം",ipa:"/ɒŋˈkɒlədʒi/"},
-  {word:"palliative",pos:"adj.",meaning:"relieving pain or alleviating symptoms without curing the underlying disease",example:"The palliative care team focused on improving the patient's quality of life during the terminal stages.",translation:"ലക്ഷണ ശമനകരമായ",ipa:"/ˈpæliətɪv/"},
-  {word:"pathogenesis",pos:"n.",meaning:"the biological mechanism by which a disease develops and progresses",example:"Understanding the pathogenesis of Alzheimer's disease is critical for developing effective interventions.",translation:"രോഗ ഉൽഭവ പ്രക്രിയ",ipa:"/ˌpæθəˈdʒɛnɪsɪs/"},
-  {word:"pharmacokinetics",pos:"n.",meaning:"the branch of pharmacology concerned with how drugs move through the body",example:"Pharmacokinetics determines the appropriate dosing interval for maintaining therapeutic drug levels.",translation:"ഔഷധ ചലന ശാസ്ത്രം",ipa:"/ˌfɑːməkoʊkɪˈnɛtɪks/"},
-  {word:"prognosis",pos:"n.",meaning:"a medical forecast of the likely course and outcome of a disease",example:"The oncologist delivered a cautious prognosis, noting that early detection had improved survival odds.",translation:"രോഗ ഭാവി നിർണ്ണയം",ipa:"/prɒɡˈnoʊsɪs/"},
-  {word:"prophylaxis",pos:"n.",meaning:"preventive treatment or action taken to prevent disease",example:"Antimalarial prophylaxis is strongly advised for travellers visiting high-risk regions.",translation:"രോഗ പ്രതിരോധ ചികിത്സ",ipa:"/ˌproʊfɪˈlæksɪs/"},
-  {word:"sequela",pos:"n.",meaning:"a condition that is the consequence of a previous disease or injury",example:"Chronic fatigue is a common sequela observed in patients recovering from severe viral illness.",translation:"രോഗ പശ്ചാത്ഫലം",ipa:"/sɪˈkwiːlə/"},
-  {word:"thrombosis",pos:"n.",meaning:"the formation of a blood clot inside a blood vessel, obstructing blood flow",example:"Deep vein thrombosis can lead to life-threatening pulmonary embolism if left untreated.",translation:"രക്തക്കട്ട രൂപീകരണം",ipa:"/θrɒmˈboʊsɪs/"},
-  {word:"algorithmic bias",pos:"n.",meaning:"systematic and unfair discrimination embedded within automated decision-making systems",example:"Researchers discovered algorithmic bias in the hiring software that disadvantaged female applicants.",translation:"അൽഗോരിതമിക് പക്ഷപാതം",ipa:"/ˌælɡəˈrɪðmɪk baɪəs/"},
-  {word:"beneficence",pos:"n.",meaning:"the principle of acting for the benefit of others, applied ethically to technological development",example:"Beneficence demands that medical AI prioritise patient welfare above commercial profit.",translation:"പരോപകാരം",ipa:"/bɪˈnefɪsəns/"},
-  {word:"consequentialism",pos:"n.",meaning:"an ethical framework that judges actions solely by their outcomes or consequences",example:"Consequentialism is often invoked to justify surveillance technologies if they reduce crime rates.",translation:"പരിണാമ-ധർമ്മവാദം",ipa:"/kənˈsiːkwənʃəlɪzəm/"},
-  {word:"data sovereignty",pos:"n.",meaning:"the concept that data is subject to the laws and governance of the nation in which it is collected",example:"Data sovereignty concerns have led several countries to restrict cross-border data transfers.",translation:"ഡേറ്റ പരമാധികാരം",ipa:"/ˈdeɪtə ˈsɒvrənti/"},
-  {word:"deliberative",pos:"adj.",meaning:"relating to careful, inclusive reasoning and discussion, especially in forming ethical policies",example:"A deliberative approach to AI governance involves consulting diverse communities before deployment.",translation:"ചർച്ചാധിഷ്ഠിതമായ",ipa:"/dɪˈlɪbərətɪv/"},
-  {word:"deontological",pos:"adj.",meaning:"relating to an ethical theory that bases morality on adherence to rules or duties regardless of consequences",example:"A deontological view holds that lying to users is wrong even if it improves their experience.",translation:"കർത്തവ്യ-ധർമ്മശാസ്ത്രപരമായ",ipa:"/ˌdiːɒntəˈlɒdʒɪkəl/"},
-  {word:"digital divide",pos:"n.",meaning:"the inequality between those who have access to modern information technology and those who do not",example:"The digital divide deepened during the pandemic, leaving rural students without reliable internet access.",translation:"ഡിജിറ്റൽ അസമത്വം",ipa:"/ˈdɪdʒɪtəl dɪˈvaɪd/"},
-  {word:"disruptive",pos:"adj.",meaning:"describing technology or innovation that fundamentally alters established systems, industries, or social norms",example:"Blockchain proved disruptive to traditional banking by enabling decentralised financial transactions.",translation:"തകർക്കുന്ന",ipa:"/dɪsˈrʌptɪv/"},
-  {word:"epistemological",pos:"adj.",meaning:"relating to the theory of knowledge, particularly questions about what can be known and how",example:"The rise of deepfakes poses serious epistemological challenges about the reliability of visual evidence.",translation:"ജ്ഞാനശാസ്ത്രപരമായ",ipa:"/ɪˌpɪstɪməˈlɒdʒɪkəl/"},
-  {word:"equitable",pos:"adj.",meaning:"fair and impartial, ensuring just distribution of technological benefits and risks across all social groups",example:"Policymakers must ensure equitable access to healthcare technologies regardless of socioeconomic status.",translation:"ന്യായമായ",ipa:"/ˈekwɪtəbəl/"},
-  {word:"existential risk",pos:"n.",meaning:"a threat capable of permanently curtailing humanity's potential, often discussed in the context of advanced AI",example:"Several philosophers argue that superintelligent AI represents the most significant existential risk humanity has faced.",translation:"അസ്തിത്വ അപകടം",ipa:"/ˌeɡzɪˈstenʃəl rɪsk/"},
-  {word:"fallibilism",pos:"n.",meaning:"the philosophical position that human knowledge is always open to revision in light of new evidence",example:"Fallibilism underpins scientific ethics, acknowledging that today's technological certainties may be tomorrow's errors.",translation:"തെറ്റ്-സമ്മതവാദം",ipa:"/ˈfælɪbɪlɪzəm/"},
-  {word:"informed consent",pos:"n.",meaning:"permission granted with full knowledge of the possible risks and benefits, essential in data collection and medical technology",example:"Informed consent must be obtained before enrolling patients in clinical trials using experimental devices.",translation:"അറിഞ്ഞുകൊണ്ടുള്ള സമ്മതം",ipa:"/ɪnˈfɔːmd kənˈsent/"},
-  {word:"instrumentalism",pos:"n.",meaning:"the view that technology is a neutral tool whose ethical value depends entirely on how it is used",example:"Pure instrumentalism ignores the ways in which a technology's design can embed particular values.",translation:"ഉപകരണവാദം",ipa:"/ɪnˈstrʌmɛntəlɪzəm/"},
-  {word:"interoperability",pos:"n.",meaning:"the ability of different technological systems to exchange and use information seamlessly",example:"Lack of interoperability between hospital software systems can compromise patient safety.",translation:"പരസ്പര-പ്രവർത്തനക്ഷമത",ipa:"/ˌɪntərˌɒpərəˈbɪlɪti/"},
-  {word:"maleficence",pos:"n.",meaning:"the causing of harm or evil, used in ethics to describe harmful impacts of technological decisions",example:"The principle of non-maleficence obligates engineers to anticipate and prevent potential harm.",translation:"ദ്രോഹം",ipa:"/məˈlefɪsəns/"},
-  {word:"moral agency",pos:"n.",meaning:"the capacity of an entity to act with reference to right and wrong, debated extensively in relation to AI systems",example:"Philosophers dispute whether advanced robots could ever possess genuine moral agency.",translation:"ധാർമ്മിക കർതൃത്വം",ipa:"/ˈmɒrəl ˈeɪdʒənsi/"},
-  {word:"normative",pos:"adj.",meaning:"relating to an evaluative standard or rule about what ought to be done, central to technology ethics",example:"Normative frameworks for AI development specify how systems should behave in morally complex situations.",translation:"മാനദണ്ഡപരമായ",ipa:"/ˈnɔːmətɪv/"},
-  {word:"paternalism",pos:"n.",meaning:"restricting individuals' freedom for their own perceived good, a recurring tension in platform content moderation",example:"Automated content filtering is criticised as digital paternalism that underestimates users' critical thinking.",translation:"പിതൃ-ഭരണവാദം",ipa:"/pəˈtɜːnəlɪzəm/"},
-  {word:"precautionary principle",pos:"n.",meaning:"the ethical guideline that caution should be applied when an action raises potential harm, even without full scientific certainty",example:"The precautionary principle was invoked to delay the release of the facial recognition software pending further review.",translation:"മുൻകരുതൽ തത്വം",ipa:"/prɪˈkɔːʃənri ˈprɪnsɪpəl/"},
-  {word:"rectitude",pos:"n.",meaning:"morally correct behaviour or thinking, used to describe the ethical standards expected of technology leaders",example:"Public trust in tech companies depends on the demonstrated rectitude of their executives and engineers.",translation:"ധർമ്മനിഷ്ഠ",ipa:"/ˈrektɪtjuːd/"},
-  {word:"surveillance capitalism",pos:"n.",meaning:"an economic system centred on the commodification of personal data through surveillance, theorised by Shoshana Zuboff",example:"Surveillance capitalism transforms intimate human experience into raw material for behavioural prediction products.",translation:"നിരീക്ഷണ മുതലാളിത്തം",ipa:"/səˈveɪləns ˈkæpɪtəlɪzəm/"},
-  {word:"virtue ethics",pos:"n.",meaning:"an approach to morality focused on the character and virtues of the moral agent rather than rules or outcomes",example:"Virtue ethics asks not what we should do, but what kind of person we should strive to become.",translation:"സദ്‌ഗുണ നൈതികത",ipa:"ˈvɜːtʃuː ˈeθɪks"},
-  {word:"imperialism",pos:"n.",meaning:"the extension of power or authority over others, often critiqued in ethics as a violation of sovereignty and justice",example:"Philosophers have condemned cultural imperialism as a form of moral domination that suppresses local values.",translation:"സാമ്രാജ്യത്വം",ipa:"ɪmˈpɪəriəlɪzəm"},
-  {word:"utilitarian",pos:"adj.",meaning:"relating to the ethical principle that actions should maximise overall happiness or well-being",example:"The utilitarian case for wealth redistribution rests on the idea that money brings diminishing returns to the rich.",translation:"ഉപയോഗിതാവാദ",ipa:"juːˌtɪlɪˈteəriən"},
-  {word:"altruism",pos:"n.",meaning:"selfless concern for the well-being of others, often considered a central virtue in moral philosophy",example:"Effective altruism challenges us to measure the actual impact of our charitable actions rather than acting on sentiment alone.",translation:"പരോപകാരം",ipa:"ˈæltruɪzəm"},
-  {word:"complicity",pos:"n.",meaning:"the state of being involved with others in an activity that is morally wrong or harmful",example:"Silence in the face of injustice can itself be a form of complicity, argue many moral philosophers.",translation:"കൂട്ടുത്തരവാദിത്തം",ipa:"kəmˈplɪsɪti"},
-  {word:"probity",pos:"n.",meaning:"the quality of having strong moral principles; complete honesty and integrity",example:"The committee selected a candidate known for her probity rather than her political connections.",translation:"സദ്‌സ്വഭാവം",ipa:"ˈprəʊbɪti"},
-  {word:"equivocation",pos:"n.",meaning:"the use of ambiguous language to conceal the truth or avoid committing to a moral position",example:"His equivocation on the issue of torture was widely criticised as a failure of moral leadership.",translation:"ദ്വയാർഥ വ്യഭിചാരം",ipa:"ɪˌkwɪvəˈkeɪʃən"},
-  {word:"hedonism",pos:"n.",meaning:"the ethical view that pleasure is the highest good and the proper aim of human life",example:"Critics argue that hedonism fails to account for the moral weight of long-term commitments and duties.",translation:"സുഖവാദം",ipa:"ˈhiːdənɪzəm"},
-  {word:"reprehensible",pos:"adj.",meaning:"deserving condemnation or censure; morally blameworthy",example:"The philosopher argued that indifference to preventable suffering is morally reprehensible.",translation:"നിന്ദ്യമായ",ipa:"ˌreprɪˈhensɪbəl"},
-  {word:"sanctity",pos:"n.",meaning:"the quality of being sacred, inviolable, or morally beyond question",example:"Debates about euthanasia often centre on the sanctity of human life versus the right to die with dignity.",translation:"പാവിത്ര്യം",ipa:"ˈsæŋktɪti"},
-  {word:"forbearance",pos:"n.",meaning:"patient restraint from acting on an impulse or enforcing a right; moral self-control",example:"His forbearance in the face of severe provocation was praised as a mark of genuine moral maturity.",translation:"ക്ഷമാശീലം",ipa:"fɔːˈbeərəns"},
-  {word:"transgression",pos:"n.",meaning:"an act that goes against a law, rule, or moral principle; a violation of ethical boundaries",example:"The community debated whether social exclusion was a proportionate response to such a serious transgression.",translation:"ലംഘനം",ipa:"trænsˈɡreʃən"},
-  {word:"conscientious",pos:"adj.",meaning:"guided by one's sense of right and wrong; taking moral obligations seriously and carefully",example:"A conscientious objector refuses military service on the grounds of deeply held moral or religious beliefs.",translation:"മനഃസാക്ഷിബദ്ധമായ",ipa:"ˌkɒnʃiˈenʃəs"},
-  {word:"sophistry",pos:"n.",meaning:"the use of clever but misleading arguments to justify a morally questionable position",example:"The ethicist dismissed the corporation's defence as mere sophistry designed to confuse rather than illuminate.",translation:"കുതർക്കം",ipa:"ˈsɒfɪstri"},
-  {word:"perfidy",pos:"n.",meaning:"deliberate betrayal of trust; deceitfulness regarded as morally contemptible",example:"The perfidy of leaders who publicly condemn corruption while privately accepting bribes erodes public trust entirely.",translation:"വഞ്ചന",ipa:"ˈpɜːfɪdi"},
-  {word:"expediency",pos:"n.",meaning:"the tendency to prioritise practical advantage over moral principle in decision-making",example:"He warned that governing by expediency rather than principle ultimately corrodes a society's ethical foundations.",translation:"അവസരവാദം",ipa:"ɪkˈspiːdiənsi"},
-  {word:"disinterested",pos:"adj.",meaning:"free from personal bias or self-interest; impartial in moral reasoning or judgement",example:"A disinterested arbiter is essential when mediating disputes where both parties have strong emotional investments.",translation:"നിഃസ്വാർഥമായ",ipa:"dɪsˈɪntrəstɪd"},
-  {word:"reification",pos:"n.",meaning:"the process of treating abstract ideas or social relations as concrete things",example:"Reification occurs when market relationships are made to seem natural and inevitable rather than socially constructed.",translation:"വസ്തുവൽക്കരണം",ipa:"/ˌreɪɪfɪˈkeɪʃən/"},
-  {word:"praxis",pos:"n.",meaning:"the process of putting theory into practice within a social or political context",example:"Critical theorists argue that genuine praxis requires both intellectual reflection and transformative social action.",translation:"പ്രയോഗശാസ്ത്രം",ipa:"/ˈprækˌsɪs/"},
-  {word:"bricolage",pos:"n.",meaning:"creative construction using whatever materials are available, often across cultural boundaries",example:"Postmodern artists employ bricolage by assembling fragments from diverse cultural traditions into new meanings.",translation:"ബ്രിക്കോളാഷ്",ipa:"/ˈbrɪkəˌlɑːʒ/"},
-  {word:"subaltern",pos:"n.",meaning:"a person or group marginalized and excluded from mainstream social or cultural power",example:"Spivak questioned whether the subaltern could ever truly speak within dominant cultural frameworks.",translation:"അടിസ്ഥാനവർഗ്ഗം",ipa:"/ˈsʌbəltən/"},
-  {word:"interpellation",pos:"n.",meaning:"the process by which ideology constructs individual subjects and calls them to assume social identities",example:"Althusser's theory of interpellation describes how individuals are recruited into ideological positions through language and institutions.",translation:"ആഹ്വാനം",ipa:"/ɪnˌtɜːpəˈleɪʃən/"},
-  {word:"simulacrum",pos:"n.",meaning:"a copy or representation that has no original, masking the absence of reality",example:"Baudrillard argued that contemporary media culture consists of simulacra that replace rather than represent reality.",translation:"അനുകൃതി",ipa:"/ˌsɪmjʊˈleɪkrəm/"},
-  {word:"fetishism",pos:"n.",meaning:"the attribution of inherent power or value to objects, obscuring their social origins",example:"Commodity fetishism conceals the labor relations embedded in everyday consumer goods.",translation:"വസ്തുആരാധന",ipa:"/ˈfɛtɪʃɪzəm/"},
-  {word:"logocentrism",pos:"n.",meaning:"the privileging of speech and reason as the foundation of meaning in Western thought",example:"Derrida's deconstruction targeted logocentrism, challenging the assumption that language transparently conveys presence and truth.",translation:"വാക്കുകേന്ദ്രിതത",ipa:"/ˌlɒɡəʊˈsɛntrɪzəm/"},
-  {word:"episteme",pos:"n.",meaning:"the underlying framework of knowledge that defines what counts as truth in a given era",example:"Foucault traced shifts in the episteme across historical periods, showing how knowledge is always historically situated.",translation:"ജ്ഞാനചട്ടക്കൂട്",ipa:"/ˈɛpɪˌstiːm/"},
-  {word:"othering",pos:"n.",meaning:"the process of marking groups as fundamentally different and inferior to establish dominant identity",example:"Postcolonial scholars analyze how othering constructs binary distinctions between civilization and barbarism.",translation:"അന്യവൽക്കരണം",ipa:"/ˈʌðərɪŋ/"},
-  {word:"deconstruction",pos:"n.",meaning:"a critical method that exposes contradictions and instabilities within texts and systems of meaning",example:"Applying deconstruction to canonical literature reveals how apparently stable meanings depend on suppressed oppositions.",translation:"വിഘടനം",ipa:"/ˌdiːkənˈstrʌkʃən/"},
-  {word:"commodification",pos:"n.",meaning:"the transformation of cultural products, ideas, or relationships into marketable goods",example:"The commodification of indigenous art strips it of its ceremonial meaning and reduces it to tourist merchandise.",translation:"ചരക്കുവൽക്കരണം",ipa:"/kəˌmɒdɪfɪˈkeɪʃən/"},
-  {word:"essentialism",pos:"n.",meaning:"the belief that groups possess fixed, inherent characteristics that define their identity",example:"Critics of essentialism argue that it naturalizes cultural differences and reinforces stereotypical representations.",translation:"സത്താവാദം",ipa:"/ɪˈsɛnʃəlɪzəm/"},
-  {word:"hegemonic",pos:"adj.",meaning:"relating to or exercising dominant cultural, political, or ideological authority",example:"Feminist scholars challenge hegemonic representations of femininity that circulate through mainstream media.",translation:"ആധിപത്യപരം",ipa:"/ˌhɛɡɪˈmɒnɪk/"},
-  {word:"valorization",pos:"n.",meaning:"the process of assigning cultural or economic worth to practices, objects, or identities",example:"The valorization of high art over popular culture reflects deep class-based hierarchies of taste.",translation:"മൂല്യനിർണ്ണയം",ipa:"/ˌvæləraɪˈzeɪʃən/"},
-  {word:"genealogy",pos:"n.",meaning:"a historical method tracing the origins and development of concepts, discourses, or power relations",example:"Foucault's genealogy of the prison exposes how punishment was transformed from spectacle to disciplinary surveillance.",translation:"ഉദ്ഭവചരിത്രം",ipa:"/ˌdʒɛniˈælədʒi/"},
-  {word:"hybridity",pos:"n.",meaning:"the cultural mixing of identities, practices, and values produced through colonial encounters",example:"Bhabha's concept of hybridity challenges the purity of colonial categories by emphasizing ambivalence and cultural exchange.",translation:"സങ്കരസ്വത്വം",ipa:"/haɪˈbrɪdɪti/"},
-  {word:"inscription",pos:"n.",meaning:"the process by which social power writes itself onto bodies, texts, or cultural practices",example:"Gender theorists examine how normative expectations are inscribed onto the body through repeated cultural performances.",translation:"ആലേഖനം",ipa:"/ɪnˈskrɪpʃən/"},
-  {word:"overdetermination",pos:"n.",meaning:"a condition where multiple causes simultaneously produce a single cultural or social phenomenon",example:"Althusser used overdetermination to explain that social contradictions are always shaped by multiple intersecting forces.",translation:"അതിനിർണ്ണയം",ipa:"/ˌəʊvədɪˌtɜːmɪˈneɪʃən/"},
-  {word:"ambivalence",pos:"n.",meaning:"the simultaneous existence of contradictory attitudes toward a cultural object or identity",example:"Colonial discourse produces ambivalence in the colonized subject, who both desires and resists identification with the colonizer.",translation:"ദ്വന്ദ്വഭാവം",ipa:"/æmˈbɪvələns/"},
-  {word:"articulation",pos:"n.",meaning:"the contingent linking of cultural elements to form temporary ideological structures",example:"Hall's theory of articulation explains how meanings are not fixed but assembled through specific historical conjunctures.",translation:"സന്ധിബന്ധം",ipa:"/ɑːˌtɪkjʊˈleɪʃən/"},
-  {word:"problematize",pos:"v.",meaning:"to make something into an object of critical questioning rather than accepting it as given",example:"Cultural critics seek to problematize everyday assumptions about gender, race, and class that appear natural.",translation:"പ്രശ്നവൽക്കരിക്കുക",ipa:"/prəˈblɛmətaɪz/"},
-  {word:"contestation",pos:"n.",meaning:"the active struggle over the meaning, value, or ownership of cultural signs and practices",example:"Popular culture is a site of contestation where dominant meanings are both imposed and resisted by different social groups.",translation:"തർക്കം",ipa:"/ˌkɒntɛˈsteɪʃən/"},
-  {word:"multilateralism",pos:"n.",meaning:"the practice of coordinating policy among three or more states or international actors",example:"The summit promoted multilateralism as a solution to global security challenges.",translation:"ബഹുപക്ഷവാദം",ipa:"/ˌmʌl.tiˈlæt.ər.ə.lɪ.z(ə)m/"},
-  {word:"détente",pos:"n.",meaning:"the easing of hostility or strained relations between states through diplomacy",example:"The two rival powers entered a period of détente following decades of tension.",translation:"സൗഹൃദ ശിഥിലീകരണം",ipa:"/deɪˈtɒnt/"},
-  {word:"extraterritoriality",pos:"n.",meaning:"the exemption of individuals or institutions from the jurisdiction of local law",example:"Diplomatic missions rely on extraterritoriality to operate freely in host countries.",translation:"പ്രദേശേതര അധികാരം",ipa:"/ˌek.strə.ter.ɪˌtɔː.riˈæl.ɪ.ti/"},
-  {word:"containment",pos:"n.",meaning:"a strategic policy aimed at preventing the expansion of a rival power's influence",example:"Containment was a cornerstone of Western foreign policy during the Cold War.",translation:"നിയന്ത്രണ നയം",ipa:"/kənˈteɪn.mənt/"},
-  {word:"rapprochement",pos:"n.",meaning:"the re-establishment of harmonious relations between states after a period of conflict",example:"The recent rapprochement between the two nations surprised international observers.",translation:"അനുരഞ്ജനം",ipa:"/ræˈprɒʃ.mɒ̃/"},
-  {word:"belligerent",pos:"adj.",meaning:"engaged in or inclined toward warfare or aggressive hostility",example:"The belligerent rhetoric from both sides alarmed neighbouring governments.",translation:"യുദ്ധോന്മുഖമായ",ipa:"/bəˈlɪdʒ.ər.ənt/"},
-  {word:"annexation",pos:"n.",meaning:"the forcible acquisition of territory by one state from another",example:"The annexation of the region violated established principles of international law.",translation:"പ്രദേശ ലയനം",ipa:"/ˌæn.ekˈseɪ.ʃən/"},
-  {word:"geopolitics",pos:"n.",meaning:"the study of how geography, power, and international politics interact",example:"Rising sea levels are reshaping the geopolitics of the Arctic region.",translation:"ഭൗമരാഷ്ട്രതന്ത്രം",ipa:"/ˌdʒiː.əʊˈpɒl.ɪ.tɪks/"},
-  {word:"sanctions",pos:"n.",meaning:"economic or political penalties imposed on a state to compel a change in behaviour",example:"The international community imposed sweeping sanctions following the military coup.",translation:"ഉപരോധം",ipa:"/ˈsæŋk.ʃənz/"},
-  {word:"nonalignment",pos:"n.",meaning:"a foreign policy stance of not formally allying with any major power bloc",example:"Many developing nations championed nonalignment during the Cold War era.",translation:"ചേരിചേരാ നയം",ipa:"/ˌnɒn.əˈlaɪn.mənt/"},
-  {word:"irredentism",pos:"n.",meaning:"a political movement seeking to annex territories inhabited by co-nationals in other states",example:"Irredentism has historically fuelled territorial disputes across Eastern Europe.",translation:"ഇറഡന്റിസം",ipa:"/ɪˈred.ən.tɪ.z(ə)m/"},
-  {word:"diplomacy",pos:"n.",meaning:"the conduct of international relations through negotiation and formal communication",example:"Skilled diplomacy averted what could have become a full-scale military conflict.",translation:"നയതന്ത്രം",ipa:"/dɪˈpləʊ.mə.si/"},
-  {word:"insurgency",pos:"n.",meaning:"an organised armed rebellion against an established government or occupying force",example:"The government struggled to suppress the insurgency spreading across the northern provinces.",translation:"ഗറില്ലാ കലാപം",ipa:"/ɪnˈsɜː.dʒən.si/"},
-  {word:"spheres of influence",pos:"n.",meaning:"areas in which one country exerts dominant power over others' political or economic affairs",example:"The great powers divided the continent into competing spheres of influence.",translation:"സ്വാധീന മണ്ഡലങ്ങൾ",ipa:"/sfɪərz əv ˈɪn.flu.əns/"},
-  {word:"proxy war",pos:"n.",meaning:"a conflict instigated or supported by major powers who avoid direct confrontation",example:"The civil war quickly became a proxy war funded by rival superpowers.",translation:"പ്രോക്സി യുദ്ധം",ipa:"/ˈprɒk.si wɔː/"},
-  {word:"multilateralism",pos:"n.",meaning:"see above",example:"see above",translation:"ബഹുപക്ഷവാദം"},
-  {word:"realpolitik",pos:"n.",meaning:"politics based on practical power considerations rather than ideological principles",example:"The foreign minister's decisions were driven entirely by realpolitik rather than moral concerns.",translation:"പ്രായോഗിക രാഷ്ട്രതന്ത്രം",ipa:"/reɪˈɑːl.pɒl.ɪˌtiːk/"},
-  {word:"non-proliferation",pos:"n.",meaning:"efforts to prevent the spread of nuclear weapons or other weapons of mass destruction",example:"The treaty remains the cornerstone of global non-proliferation efforts.",translation:"അനു-വ്യാപന നിരോധനം",ipa:"/ˌnɒn prəˌlɪf.əˈreɪ.ʃən/"},
-  {word:"bilateralism",pos:"n.",meaning:"a framework of relations between exactly two sovereign states",example:"The two governments preferred bilateralism over broader regional agreements.",translation:"ദ്വിപക്ഷ ബന്ധം",ipa:"/baɪˈlæt.ər.ə.lɪ.z(ə)m/"},
-  {word:"interventionism",pos:"n.",meaning:"a policy of interfering in another state's internal affairs, especially militarily",example:"Domestic opposition to interventionism constrained the government's foreign policy options.",translation:"ഇടപെടൽ നയം",ipa:"/ˌɪn.təˈven.ʃən.ɪ.z(ə)m/"},
-  {word:"balkanisation",pos:"n.",meaning:"the fragmentation of a region into smaller, often hostile political units",example:"Analysts feared the balkanisation of the federation following the disputed elections.",translation:"ബൽക്കനൈസേഷൻ",ipa:"/ˌbɔːl.kə.naɪˈzeɪ.ʃən/"},
-  {word:"suzerainty",pos:"n.",meaning:"a situation in which a dominant state controls the foreign policy of a dependent state",example:"The empire maintained suzerainty over the smaller kingdoms along its border.",translation:"മേൽക്കോയ്മ",ipa:"/ˈsuː.zə.rɪn.ti/"},
-  {word:"counterinsurgency",pos:"n.",meaning:"military or political strategies used to defeat or suppress armed rebellions",example:"The government launched a comprehensive counterinsurgency campaign in the eastern region.",translation:"കലാപ നിയന്ത്രണ തന്ത്രം",ipa:"/ˌkaʊn.tər.ɪnˈsɜː.dʒən.si/"},
-  {word:"embargo",pos:"n.",meaning:"an official ban on trade or commercial activity with a specific country",example:"The oil embargo had devastating consequences for the country's struggling economy.",translation:"വ്യാപാര വിലക്ക്",ipa:"/ɪmˈbɑː.ɡəʊ/"},
-  {word:"alliance",pos:"n.",meaning:"a formal agreement between states to cooperate for mutual defence or shared goals",example:"The fragile alliance began to fracture under competing national interests.",translation:"സഖ്യം",ipa:"/əˈlaɪ.əns/"},
-  {word:"logos",pos:"n.",meaning:"an appeal to logic and reason as a means of persuasion",example:"His argument gained credibility through logos, supported by statistical evidence and expert citations.",translation:"യുക്തിസഹമായ അപേക്ഷ",ipa:"ˈloʊɡɒs"},
-  {word:"rhetorical",pos:"adj.",meaning:"relating to rhetoric; expressed in terms intended to persuade or impress",example:"The senator's rhetorical skill made even his weakest proposals sound compelling.",translation:"വാഗ്മിതാ സംബന്ധമായ",ipa:"rɪˈtɒrɪkəl"},
-  {word:"fallacy",pos:"n.",meaning:"a mistaken belief or a flawed argument based on unsound reasoning",example:"The debater quickly identified the straw man fallacy in her opponent's reasoning.",translation:"ദോഷയുക്തി",ipa:"ˈfæləsi"},
-  {word:"invective",pos:"n.",meaning:"insulting, abusive, or highly critical language used in argument",example:"His speech devolved into invective when he ran out of rational points to make.",translation:"നിന്ദാവചനം",ipa:"ɪnˈvektɪv"},
-  {word:"caveat",pos:"n.",meaning:"a warning or qualification attached to a statement or argument",example:"He accepted the proposal with the caveat that further evidence would be needed before implementation.",translation:"മുന്നറിയിപ്പ്",ipa:"ˈkæviæt"},
-  {word:"concession",pos:"n.",meaning:"an acknowledgment in argument that the opposing side has a valid point",example:"Making a concession to her critic's main objection actually strengthened her overall argument.",translation:"ഇളവ് അനുവദിക്കൽ",ipa:"kənˈseʃən"},
-  {word:"juxtaposition",pos:"n.",meaning:"placing two contrasting ideas side by side to highlight their differences for persuasive effect",example:"The speechwriter used juxtaposition to contrast the candidate's humble origins with his opponent's privilege.",translation:"സമീപസ്ഥാനം",ipa:"ˌdʒʌkstəpəˈzɪʃən"},
-  {word:"premise",pos:"n.",meaning:"a statement or proposition that forms the basis for a logical argument",example:"If the opening premise of your argument is flawed, then the entire conclusion becomes questionable.",translation:"ആധാരതത്ത്വം",ipa:"ˈpremɪs"},
-  {word:"rebuttal",pos:"n.",meaning:"a counterargument presented to disprove or contradict an opposing claim",example:"The defense attorney's rebuttal dismantled the prosecution's central piece of evidence.",translation:"പ്രതിവാദം",ipa:"rɪˈbʌtəl"},
-  {word:"embellishment",pos:"n.",meaning:"the addition of exaggerated or decorative details to make a speech more persuasive or appealing",example:"His account of events relied on embellishment rather than facts to win the audience's sympathy.",translation:"അലങ്കാരം",ipa:"ɪmˈbelɪʃmənt"},
-  {word:"insinuation",pos:"n.",meaning:"an indirect suggestion or hint implying something negative, used as a rhetorical tactic",example:"The opponent's insinuation that she lacked integrity was more damaging than any direct accusation.",translation:"സൂചനവഴി ആരോപണം",ipa:"ɪnˌsɪnjuˈeɪʃən"},
-  {word:"harangue",pos:"n.",meaning:"a lengthy and aggressive speech intended to persuade or criticize forcefully",example:"The manager's harangue about missed deadlines left the entire team feeling demoralized.",translation:"ദീർഘഭാഷണം",ipa:"həˈræŋ"},
-  {word:"amplification",pos:"n.",meaning:"the rhetorical technique of expanding on a statement to make it more persuasive or emphatic",example:"Through careful amplification, the advocate turned a minor grievance into a compelling moral case.",translation:"വിശദീകരണ വർദ്ധന",ipa:"ˌæmplɪfɪˈkeɪʃən"},
-  {word:"disputatious",pos:"adj.",meaning:"fond of or inclined to engage in argument or debate",example:"His disputatious nature made him an excellent debate team captain but a difficult colleague.",translation:"വഴക്കാളിയായ",ipa:"ˌdɪspjʊˈteɪʃəs"},
-  {word:"decolonise",pos:"v.",meaning:"to undo the cultural, political, and psychological effects of colonialism",example:"Universities are being urged to decolonise their curricula by including non-Western perspectives.",translation:"കോളനിവൽക്കരണം അവസാനിപ്പിക്കുക",ipa:"/diːˈkɒlənaɪz/"},
-  {word:"nativism",pos:"n.",meaning:"the ideology favouring the interests of indigenous inhabitants over those of settlers or colonisers",example:"Postcolonial debates about nativism question whether returning to pre-colonial traditions is politically desirable.",translation:"ദേശീയ പ്രാദേശികത്വം",ipa:"/ˈneɪtɪvɪzəm/"},
-  {word:"resistance",pos:"n.",meaning:"the act of opposing or fighting back against colonial authority or cultural domination",example:"Oral traditions served as a form of cultural resistance against the erasure imposed by colonial education.",translation:"പ്രതിരോധം",ipa:"/rɪˈzɪstəns/"},
-  {word:"representation",pos:"n.",meaning:"the way in which groups are depicted in cultural texts, often with political consequences",example:"Postcolonial scholars scrutinise the representation of African peoples in nineteenth-century travel writing.",translation:"പ്രതിനിധാനം",ipa:"/ˌrɛprɪzɛnˈteɪʃən/"},
-  {word:"orientalism",pos:"n.",meaning:"a Western tradition of portraying Eastern cultures as exotic, inferior, or timeless, analysed by Edward Said",example:"Said's Orientalism demonstrated how scholarly and literary texts reinforced colonial attitudes toward the Arab world.",translation:"ഓറിയന്റലിസം",ipa:"/ˌɔːrɪənˈtælɪzəm/"},
-  {word:"territoriality",pos:"n.",meaning:"the attachment to and control over a specific geographic space, central to colonial dispossession",example:"Indigenous land rights movements reclaim territoriality against centuries of colonial encroachment.",translation:"ഭൂ-അതിർത്തി ഉടമസ്ഥത",ipa:"/tɪˌrɪtɔːrɪˈælɪti/"},
-  {word:"appropriation",pos:"n.",meaning:"the taking of cultural elements by a dominant group without proper acknowledgement or respect",example:"The wearing of sacred Indigenous clothing as fashion is widely condemned as cultural appropriation.",translation:"സ്വാംശീകരണം",ipa:"/əˌprəʊprɪˈeɪʃən/"},
-  {word:"repatriation",pos:"n.",meaning:"the return of cultural artefacts or human remains to their country of origin",example:"Many museums now face pressure to agree to the repatriation of objects taken during colonial expeditions.",translation:"തിരിച്ചയയ്ക്കൽ",ipa:"/riːˌpætrɪˈeɪʃən/"},
-  {word:"marginalisation",pos:"n.",meaning:"the social process of confining a group to the outer edges of society",example:"The marginalisation of indigenous languages was a deliberate strategy of colonial administrations.",translation:"പാർശ്വവൽക്കരണം",ipa:"/ˌmɑːdʒɪnəlaɪˈzeɪʃən/"},
-  {word:"counternarrative",pos:"n.",meaning:"a story or account that challenges and subverts the dominant or official version of events",example:"Postcolonial novels often function as counternarratives that restore agency to historically silenced communities.",translation:"പ്രതി-ആഖ്യാനം",ipa:"/ˈkaʊntəˌnærətɪv/"},
-  {word:"deracination",pos:"n.",meaning:"the uprooting of people from their cultural or geographic origins through colonial displacement",example:"The forced migration of enslaved peoples represented the most extreme form of deracination in colonial history.",translation:"വേർതിരിക്കൽ",ipa:"/diːˌræsɪˈneɪʃən/"},
-  {word:"agency",pos:"n.",meaning:"the capacity of individuals or groups to act independently and make their own choices despite structural constraints",example:"Postcolonial feminists insist on recognising the agency of women in colonised societies rather than treating them solely as victims.",translation:"കർതൃത്വം",ipa:"/ˈeɪdʒənsi/"},
-  {word:"conscientisation",pos:"n.",meaning:"the process of developing critical awareness of social and political oppression, associated with Paulo Freire",example:"Community education programmes in postcolonial contexts often aim at the conscientisation of marginalised groups.",translation:"ബോധവൽക്കരണം",ipa:"/ˌkɒnʃɪɛnʃaɪˈzeɪʃən/"},
-  {word:"creolisation",pos:"n.",meaning:"the blending of African, European, and indigenous cultural elements into new hybrid forms",example:"The creolisation of Caribbean languages illustrates the creative cultural responses to colonial domination.",translation:"സങ്കരരൂപീകരണം",ipa:"/ˌkriːəlaɪˈzeɪʃən/"},
-  {word:"subjectivity",pos:"n.",meaning:"the sense of self and identity as shaped by cultural, historical, and political forces",example:"Postcolonial theory examines how colonial education reshaped the subjectivity of indigenous peoples.",translation:"ആത്മനിഷ്ഠത",ipa:"/səbˌdʒɛktɪˈvɪti/"},
-  {word:"envoy",pos:"n.",meaning:"a government representative sent on a diplomatic mission",example:"The president dispatched a special envoy to mediate in the border dispute.",translation:"ദൂതൻ",ipa:"/ˈɛnvɔɪ/"},
-  {word:"clandestine",pos:"adj.",meaning:"kept secret, especially for subversive political or diplomatic purposes",example:"Intelligence agencies uncovered a clandestine meeting between the two foreign ministers.",translation:"രഹസ്യമായ",ipa:"/klænˈdɛstɪn/"},
-  {word:"communiqué",pos:"n.",meaning:"an official statement issued by a government or international body",example:"A joint communiqué was released at the conclusion of the G20 summit.",translation:"ഔദ്യോഗിക പ്രസ്താവന",ipa:"/kəˈmjuːnɪkeɪ/"},
-  {word:"bilateral",pos:"adj.",meaning:"involving or agreed upon by two parties or nations",example:"The bilateral trade agreement was expected to boost exports significantly.",translation:"ദ്വിപക്ഷ",ipa:"/baɪˈlætərəl/"},
-  {word:"plenipotentiary",pos:"n.",meaning:"a diplomat with full authority to represent their government",example:"A plenipotentiary was appointed to sign the historic peace treaty on behalf of the state.",translation:"പൂർണ്ണ അധികാര ദൂതൻ",ipa:"/ˌplɛnɪpəˈtɛnʃəri/"},
-  {word:"autocracy",pos:"n.",meaning:"a system of government in which a single person holds unlimited political power",example:"International observers criticized the country's drift toward autocracy.",translation:"സ്വേച്ഛാധിപത്യം",ipa:"/ɔːˈtɒkrəsi/"},
-  {word:"coalition",pos:"n.",meaning:"a temporary alliance of political parties or states for joint action",example:"A broad international coalition was formed to address the humanitarian crisis.",translation:"സഖ്യം",ipa:"/ˌkəʊəˈlɪʃən/"},
-  {word:"reciprocity",pos:"n.",meaning:"the practice of exchanging equal privileges or obligations between nations",example:"Trade relations were built on the principle of full reciprocity between the partners.",translation:"പരസ്പരതത്ത്വം",ipa:"/ˌrɛsɪˈprɒsɪti/"},
-  {word:"dissident",pos:"n.",meaning:"a person who opposes official government policy, especially in an authoritarian state",example:"The dissident was granted asylum after fleeing political persecution.",translation:"വിമതൻ",ipa:"/ˈdɪsɪdənt/"},
-  {word:"appeasement",pos:"n.",meaning:"the policy of making concessions to an aggressive power to avoid conflict",example:"Historians debated whether the pre-war policy of appeasement had been a tragic mistake.",translation:"സമാധാനപ്രീണനം",ipa:"/əˈpiːzmənt/"},
-  {word:"hypothesis",pos:"n.",meaning:"a proposed explanation made on the basis of limited evidence as a starting point for investigation",example:"The hypothesis was tested through a series of controlled laboratory experiments.",translation:"സിദ്ധാന്ത അനുമാനം",ipa:"/haɪˈpɒθ.ɪ.sɪs/"},
-  {word:"replication",pos:"n.",meaning:"the repetition of an experiment or study to verify its findings",example:"Replication of the original study failed to produce the same results.",translation:"പ്രതിരൂപണം",ipa:"/ˌrep.lɪˈkeɪ.ʃən/"},
-  {word:"peer review",pos:"n.",meaning:"the evaluation of scientific work by others working in the same field",example:"All submissions undergo rigorous peer review before publication.",translation:"സഹ-അവലോകനം",ipa:"/ˌpɪər rɪˈvjuː/"},
-  {word:"variable",pos:"n.",meaning:"an element or factor that can change or be changed in an experiment",example:"Temperature was treated as the independent variable in the study.",translation:"ചరరാശി",ipa:"/ˈveər.i.ə.bəl/"},
-  {word:"theoretical framework",pos:"n.",meaning:"a structured set of concepts and theories that guide research",example:"The study adopted a constructivist theoretical framework to analyse classroom behaviour.",translation:"സൈദ്ധാന്തിക ചട്ടക്കൂട്"},
-  {word:"inference",pos:"n.",meaning:"a conclusion reached through reasoning from evidence or premises",example:"The inference drawn from the data supported the central claim of the paper.",translation:"അനുമാനം",ipa:"/ˈɪn.fər.əns/"},
-  {word:"discourse",pos:"n.",meaning:"a mode of organising knowledge, ideas, or experience in language used within a particular field",example:"Academic discourse requires precision in the use of technical terminology.",translation:"വ്യവഹാരം",ipa:"/ˈdɪs.kɔːs/"},
-  {word:"citation",pos:"n.",meaning:"a reference to a published or unpublished source to support an argument",example:"Every claim in the literature review must be supported by an appropriate citation.",translation:"ഉദ്ധരണം",ipa:"/saɪˈteɪ.ʃən/"},
-  {word:"validity",pos:"n.",meaning:"the extent to which a study accurately measures what it claims to measure",example:"The researchers questioned the validity of the instruments used in the earlier study.",translation:"妥当性 / സാധുത",ipa:"/vəˈlɪd.ɪ.ti/"},
-  {word:"reliability",pos:"n.",meaning:"the consistency of a measure or research finding across repeated trials",example:"High reliability was established by testing the same sample on multiple occasions.",translation:"വിശ്വാസ്യത",ipa:"/rɪˌlaɪ.əˈbɪl.ɪ.ti/"},
-  {word:"longitudinal",pos:"adj.",meaning:"relating to a study that follows the same subjects over an extended period",example:"The longitudinal study tracked participants' cognitive development across two decades.",translation:"ദീർഘകാലീനമായ",ipa:"/ˌlɒŋ.ɡɪˈtjuː.dɪ.nəl/"},
-  {word:"operationalise",pos:"v.",meaning:"to define a concept in measurable terms so it can be tested scientifically",example:"The researchers had to operationalise the concept of wellbeing before collecting data.",translation:"പ്രവർത്തനക്ഷമമാക്കുക",ipa:"/ˌɒp.ər.ə.ʃən.ə.laɪz/"},
-  {word:"triangulation",pos:"n.",meaning:"the use of multiple methods or data sources to increase the credibility of findings",example:"Triangulation of qualitative and quantitative data strengthened the overall conclusions.",translation:"ത്രികോണമാപനം",ipa:"/traɪˌæŋ.ɡjʊˈleɪ.ʃən/"},
-  {word:"confounding",pos:"adj.",meaning:"describing a variable that distorts the apparent relationship between two other variables",example:"Age was identified as a confounding factor in the analysis of health outcomes.",translation:"കുഴപ്പിക്കുന്ന",ipa:"/kənˈfaʊn.dɪŋ/"},
-  {word:"dissemination",pos:"n.",meaning:"the process of spreading research findings to a wider audience",example:"Effective dissemination of results is as important as the research itself.",translation:"പ്രചരണം",ipa:"/dɪˌsem.ɪˈneɪ.ʃən/"},
-  {word:"critique",pos:"n.",meaning:"a detailed analysis and assessment of the strengths and weaknesses of a theory or study",example:"The journal published a sharp critique of the methodology used in the seminal paper.",translation:"വിമർശനം",ipa:"/krɪˈtiːk/"},
-  {word:"interdisciplinary",pos:"adj.",meaning:"involving or combining two or more academic disciplines",example:"The project required an interdisciplinary team of biologists, chemists, and statisticians.",translation:"അന്തർ-വിഷയകമായ",ipa:"/ˌɪn.tə.dɪˈsɪp.lɪ.nər.i/"},
-  {word:"conceptualise",pos:"v.",meaning:"to form a concept or idea of something; to interpret in a particular theoretical framework",example:"How we conceptualise poverty determines which policy solutions we consider viable.",translation:"സങ്കൽപ്പിക്കുക",ipa:"/kənˈsep.tʃu.ə.laɪz/"},
-  {word:"saliency",pos:"n.",meaning:"the quality of being particularly noticeable or important in perception and attention",example:"The saliency of the red warning sign ensured that drivers noticed it immediately.",translation:"പ്രകടതാ സ്വഭാവം",ipa:"/ˈseɪliənsi/"},
-  {word:"attenuation",pos:"n.",meaning:"the reduction in strength or intensity of a signal, response, or psychological effect",example:"Repeated exposure led to the attenuation of the fear response in the participants.",translation:"ക്ഷയോപശമനം",ipa:"/əˌtenjuˈeɪʃən/"},
-  {word:"scaffolding",pos:"n.",meaning:"temporary cognitive support provided to help a learner achieve tasks beyond their current independent ability",example:"The teacher used scaffolding techniques to guide students through complex problem-solving steps.",translation:"സ്കഫോൾഡിങ്",ipa:"/ˈskæfəʊldɪŋ/"},
-  {word:"aversion",pos:"n.",meaning:"a strong dislike or disinclination toward something, often developed through negative experience",example:"Aversion therapy was once used to reduce unwanted behaviors by pairing them with unpleasant stimuli.",translation:"വിരക്തി",ipa:"/əˈvɜːʃən/"},
-  {word:"appraisal",pos:"n.",meaning:"the cognitive evaluation of a situation to determine its emotional and personal significance",example:"According to appraisal theory, emotions arise from how individuals evaluate events rather than from events themselves.",translation:"മൂല്യനിർണ്ണയം",ipa:"/əˈpreɪzəl/"},
-  {word:"chunking",pos:"n.",meaning:"a cognitive strategy of grouping individual pieces of information into larger meaningful units to aid memory",example:"By chunking the digits into groups, she was able to memorize the long phone number easily.",translation:"ചങ്കിങ്",ipa:"/ˈtʃʌŋkɪŋ/"},
-  {word:"embodiment",pos:"n.",meaning:"the theory that cognitive processes are deeply rooted in the physical body's interactions with the world",example:"Embodiment research shows that physical posture can significantly influence a person's confidence and mood.",translation:"ശരീരാവതാരം",ipa:"/ɪmˈbɒdɪmənt/"},
-  {word:"lateralization",pos:"n.",meaning:"the localization of specific cognitive functions to either the left or right hemisphere of the brain",example:"Language lateralization is predominantly left-hemispheric in the majority of right-handed individuals.",translation:"ലാറ്ററലൈസേഷൻ",ipa:"/ˌlætərəlaɪˈzeɪʃən/"},
-  {word:"deindividuation",pos:"n.",meaning:"a psychological state in which individuals lose their sense of self-awareness within a group",example:"Deindividuation in large online crowds often leads to behavior people would never exhibit alone.",translation:"ഡീഇൻഡിവിജ്വേഷൻ",ipa:"/ˌdiːɪndɪˌvɪdʒuˈeɪʃən/"},
-  {word:"proactive interference",pos:"n.",meaning:"the disruption of new learning caused by previously acquired information",example:"Proactive interference explained why the student confused new vocabulary with words learned last semester.",translation:"മുൻ‌കൈ ഇടപെടൽ",ipa:"/prəʊˌæktɪv ˈɪntəfɪərəns/"},
-  {word:"extinction",pos:"n.",meaning:"the gradual weakening and disappearance of a conditioned response when reinforcement is withheld",example:"After several sessions without reward, extinction of the learned behavior was clearly observable.",translation:"ലോപം",ipa:"/ɪkˈstɪŋkʃən/"},
-  {word:"dispositional",pos:"adj.",meaning:"relating to stable personal traits or tendencies that influence behavior across situations",example:"The researcher argued that dispositional factors were more predictive of behavior than situational ones.",translation:"സ്വഭാവപ്രവണതാ സംബന്ധിയായ",ipa:"/ˌdɪspəˈzɪʃənəl/"},
-  {word:"proprioception",pos:"n.",meaning:"the sense of the relative position and movement of one's own body parts",example:"Proprioception allows a person to touch their nose with their eyes closed without difficulty.",translation:"സ്വന്തശരീര ബോധം",ipa:"/ˌprəʊpriəˈsepʃən/"},
-  {word:"desensitization",pos:"n.",meaning:"the reduction of emotional responsiveness to a stimulus after repeated exposure",example:"Systematic desensitization helped the client overcome her phobia of open spaces within several weeks.",translation:"ഡീസെൻസിറ്റൈസേഷൻ",ipa:"/ˌdiːˌsensɪtaɪˈzeɪʃən/"},
-  {word:"forebrain",pos:"n.",meaning:"the anterior portion of the brain responsible for complex cognitive functions including reasoning and emotion",example:"The forebrain's prefrontal cortex is particularly associated with planning and impulse control.",translation:"മുൻ‌മസ്തിഷ്കം",ipa:"/ˈfɔːbreɪn/"},
-  {word:"hypervigilance",pos:"n.",meaning:"an enhanced state of sensory sensitivity and alertness often associated with anxiety or trauma",example:"Veterans returning from combat zones frequently exhibit hypervigilance in everyday civilian environments.",translation:"അതിജാഗ്രത",ipa:"/ˌhaɪpəˈvɪdʒɪləns/"},
-  {word:"appellate",pos:"adj.",meaning:"relating to legal appeals; having the power to review lower court decisions",example:"The appellate court overturned the original conviction on procedural grounds.",translation:"അപ്പീൽ സംബന്ധമായ",ipa:"/əˈpelət/"},
-  {word:"certiorari",pos:"n.",meaning:"a writ by which a higher court reviews a lower court's decision",example:"The defendant petitioned for certiorari, seeking Supreme Court review of the case.",translation:"ഉപരി കോടതി പുനരവലോകന ഉത്തരവ്",ipa:"/ˌsɜːʃɪəˈrɑːri/"},
-  {word:"obiter dictum",pos:"n.",meaning:"a judge's incidental remark in a ruling that is not legally binding",example:"Although the judge's comment on privacy rights was merely obiter dictum, it influenced later courts.",translation:"ബന്ധപ്പെട്ട ന്യായാധിപ അഭിപ്രായം",ipa:"/ˌɒbɪtə ˈdɪktəm/"},
-  {word:"plaintiff",pos:"n.",meaning:"the party who brings a civil lawsuit against another in a court of law",example:"The plaintiff sought substantial damages for breach of contract against her former employer.",translation:"വാദി",ipa:"/ˈpleɪntɪf/"},
-  {word:"proximate cause",pos:"n.",meaning:"the direct legal cause of harm that is sufficient to impose liability",example:"The judge instructed the jury to determine whether negligence was the proximate cause of the injury.",translation:"നേരിട്ടുള്ള നിയമ കാരണം",ipa:"/ˌprɒksɪmət ˈkɔːz/"},
-  {word:"recidivism",pos:"n.",meaning:"the tendency of a convicted criminal to reoffend after serving a sentence",example:"The new rehabilitation programme aimed to reduce recidivism among young offenders.",translation:"ആവർത്തിത കുറ്റകൃത്യം",ipa:"/rɪˈsɪdɪvɪzəm/"},
-  {word:"tortious",pos:"adj.",meaning:"constituting or involving a civil wrong that is not a breach of contract",example:"The company faced tortious liability for the environmental damage caused by its operations.",translation:"ദ്രോഹ ബാധ്യതാ സംബന്ധമായ",ipa:"/ˈtɔːʃəs/"},
-  {word:"ultra vires",pos:"adj.",meaning:"beyond the legal power or authority of an organisation or official",example:"The board's decision to sell public assets was declared ultra vires by the court.",translation:"അധികാര പരിധിക്ക് അതീതമായ",ipa:"/ˌʌltrə ˈvaɪriːz/"},
-  {word:"vicarious liability",pos:"n.",meaning:"legal responsibility imposed on one party for the wrongful acts of another",example:"The hospital accepted vicarious liability for the surgeon's negligence during the operation.",translation:"പ്രതിനിധി ബാധ്യത",ipa:"/vɪˌkeəriəs laɪəˈbɪlɪti/"},
-  {word:"voidable",pos:"adj.",meaning:"describing a contract or agreement that can be legally cancelled by one party",example:"The contract was voidable because one party had entered into it under duress.",translation:"റദ്ദാക്കാവുന്ന",ipa:"/ˈvɔɪdəbəl/"},
-  {word:"writ of mandamus",pos:"n.",meaning:"a court order compelling a government official or body to perform a required duty",example:"The claimant sought a writ of mandamus to force the minister to process the delayed application.",translation:"നിർദ്ദേശ ഉത്തരവ്",ipa:"/ˌrɪt əv mænˈdeɪməs/"},
-  {word:"ethnography",pos:"n.",meaning:"the systematic study and description of human cultures through direct observation",example:"Her ethnography of the fishing village revealed complex kinship networks previously undocumented.",translation:"നരവംശ വിവരണം",ipa:"/ɛθˈnɒɡrəfi/"},
-  {word:"cosmopolitanism",pos:"n.",meaning:"the idea that all human beings belong to a single global community with shared values",example:"Cosmopolitanism challenges the notion that cultural loyalty must be confined to the nation-state.",translation:"ലോകപൗരത്വ ചിന്ത",ipa:"/ˌkɒzməˈpɒlɪtənɪzəm/"},
-  {word:"intersectionality",pos:"n.",meaning:"the interconnected nature of social identities such as race, gender, and class creating overlapping systems of disadvantage",example:"Intersectionality reveals that a Black woman's experience of discrimination cannot be understood by examining race or gender alone.",translation:"വ്യതിഛേദനം",ipa:"/ˌɪntəsɛkʃəˈnælɪti/"},
-  {word:"patrilineage",pos:"n.",meaning:"a line of descent traced through the male members of a family",example:"In societies based on patrilineage, property and title pass exclusively from father to son.",translation:"പിതൃവംശം",ipa:"/ˌpætrɪˈlɪniɪdʒ/"},
-  {word:"polyvocality",pos:"n.",meaning:"the presence of multiple voices or perspectives within a text or cultural narrative",example:"Modern ethnographic writing embraces polyvocality to avoid reducing communities to a single authoritative account.",translation:"ബഹുസ്വരത",ipa:"/ˌpɒlivoʊˈkælɪti/"},
-  {word:"structural functionalism",pos:"n.",meaning:"a theoretical framework viewing society as a system of interrelated parts that maintain social stability",example:"Structural functionalism was criticised for being unable to account for social conflict and rapid change.",translation:"ഘടനാ പ്രവർത്തനവാദം",ipa:"/ˈstrʌktʃərəl ˌfʌŋkʃəˈnælɪzəm/"},
-  {word:"lifeworld",pos:"n.",meaning:"the domain of everyday lived experience as opposed to abstract systemic structures",example:"Habermas argued that modern institutions increasingly colonise the lifeworld, reducing human interaction to instrumental rationality.",translation:"ജീവിത ലോകം",ipa:"/ˈlaɪfwɜːld/"},
-  {word:"symbolic capital",pos:"n.",meaning:"the resources available to an individual based on honour, prestige, or recognition within a social field",example:"Academic titles function as symbolic capital, granting authority and influence beyond formal institutional roles.",translation:"പ്രതീകാത്മക മൂലധനം",ipa:"/ˈsɪmbəlɪk ˈkæpɪtl/"},
-  {word:"matrilineage",pos:"n.",meaning:"a line of descent traced through female members of a family",example:"In societies with matrilineage, children belong to their mother's clan and inherit through her line.",translation:"മാതൃവംശം",ipa:"/ˌmætrɪˈlɪniɪdʒ/"},
-  {word:"heterochrony",pos:"n.",meaning:"variation in the timing or rate of developmental events across generations or cultures",example:"Heterochrony in socialisation practices explains why childhood is defined differently across cultural contexts.",translation:"കാലഭ്രംശ വൈവിധ്യം",ipa:"/ˌhɛtərəˈkrɒni/"},
-  {word:"necropolitics",pos:"n.",meaning:"the political power to dictate who may live and who must die, often along racial or social lines",example:"Mbembe's theory of necropolitics analyses how certain populations are rendered expendable by state and colonial power.",translation:"മരണ രാഷ്ട്രീയം",ipa:"/ˌnɛkrəˈpɒlɪtɪks/"},
-  {word:"acumen",pos:"n.",meaning:"the ability to make good judgements and quick decisions in a particular domain",example:"Her financial acumen was evident in the company's rapid growth over five years.",translation:"വിവേകം",ipa:"/ˈækjʊmən/"},
-  {word:"assiduous",pos:"adj.",meaning:"showing great care, attention, and effort in one's work",example:"Her assiduous preparation for the board presentation impressed even the most senior executives.",translation:"ജാഗ്രതയുള്ള",ipa:"/əˈsɪdjuəs/"},
-  {word:"commensurate",pos:"adj.",meaning:"corresponding in size or degree; in proportion to something",example:"The remuneration package offered was commensurate with the candidate's extensive industry experience.",translation:"ആനുപാതികമായ",ipa:"/kəˈmenʃərət/"},
-  {word:"deferential",pos:"adj.",meaning:"showing respectful submission or courteous regard for another's authority",example:"The junior counsel adopted a deferential tone when addressing the senior partner's recommendations.",translation:"ആദരവുള്ള",ipa:"/ˌdefəˈrenʃəl/"},
-  {word:"disposition",pos:"n.",meaning:"the way in which something is placed, arranged, or settled; a formal tendency",example:"The final disposition of the assets was outlined clearly in the terms of the settlement agreement.",translation:"വ്യവസ്ഥ",ipa:"/ˌdɪspəˈzɪʃən/"},
-  {word:"efficacy",pos:"n.",meaning:"the ability to produce a desired or intended result in a professional or formal context",example:"The efficacy of the new compliance framework was evaluated through a series of internal audits.",translation:"ഫലപ്രാപ്തി",ipa:"/ˈefɪkəsi/"},
-  {word:"enumerate",pos:"v.",meaning:"to mention a number of things one by one in a formal and systematic manner",example:"The solicitor proceeded to enumerate each clause of the contract for the benefit of all parties.",translation:"എണ്ണിപ്പറയുക",ipa:"/ɪˈnjuːməreɪt/"},
-  {word:"exigency",pos:"n.",meaning:"an urgent need or demand requiring immediate action or attention",example:"The exigency of the situation required that senior management convene outside of the scheduled cycle.",translation:"അടിയന്തര ആവശ്യം",ipa:"/ˈeksɪdʒənsi/"},
-  {word:"forthwith",pos:"adv.",meaning:"immediately; without delay, especially in legal or official contexts",example:"The tribunal ordered the respondent to cease all operations forthwith pending further investigation.",translation:"ഉടനടി",ipa:"/fɔːθˈwɪð/"},
-  {word:"jurisdiction",pos:"n.",meaning:"the official power or territory within which authority may be exercised formally",example:"The matter falls outside the jurisdiction of this tribunal and must be referred to the appellate court.",translation:"അധികാരപരിധി",ipa:"/ˌdʒʊərɪsˈdɪkʃən/"},
-  {word:"paramount",pos:"adj.",meaning:"more important than anything else; supreme in a formal or professional sense",example:"Maintaining client confidentiality is of paramount importance in all dealings conducted by this firm.",translation:"പരമപ്രധാനമായ",ipa:"/ˈpærəmaʊnt/"},
-  {word:"waiver",pos:"n.",meaning:"the formal relinquishment of a legal right or claim",example:"The client signed a waiver acknowledging that they had been fully informed of the associated professional risks.",translation:"അവകാശ ഉപേക്ഷണം",ipa:"/ˈweɪvər/"},
-  {word:"periodisation",pos:"n.",meaning:"the division of history into named periods for study and analysis",example:"The periodisation of the Middle Ages remains a subject of scholarly debate.",translation:"ചരിത്ര കാലഘട്ട വിഭജനം",ipa:"/ˌpɪəriədaɪˈzeɪʃən/"},
-  {word:"antiquity",pos:"n.",meaning:"the ancient past, especially before the Middle Ages",example:"Scholars of antiquity rely heavily on fragmentary textual and archaeological evidence.",translation:"പ്രാചീന കാലഘട്ടം",ipa:"/ænˈtɪkwɪti/"},
-  {word:"chronology",pos:"n.",meaning:"the arrangement of events in the order in which they occurred",example:"Establishing an accurate chronology of the Bronze Age collapse remains difficult.",translation:"കാലക്രമ നിർണ്ണയം",ipa:"/krəˈnɒlədʒi/"},
-  {word:"epoch",pos:"n.",meaning:"a distinct period of history marked by notable events or characteristics",example:"The Industrial Revolution marked a new epoch in human economic development.",translation:"ചരിത്ര യുഗം",ipa:"/ˈiːpɒk/"},
-  {word:"interpolation",pos:"n.",meaning:"the insertion of later material into an earlier historical text",example:"Scholars suspect interpolation in several passages of the ancient chronicle.",translation:"പിന്നീട് കൂട്ടിച്ചേർക്കൽ",ipa:"/ɪnˌtɜːpəˈleɪʃən/"},
-  {word:"numismatics",pos:"n.",meaning:"the study of coins and medals as historical evidence",example:"Numismatics revealed the extent of trade networks in the ancient Mediterranean.",translation:"നാണയ ശാസ്ത്രം",ipa:"/ˌnjuːmɪzˈmætɪks/"},
-  {word:"polemical",pos:"adj.",meaning:"strongly and controversially argumentative in historical or political writing",example:"His polemical pamphlet reframed the revolution as a bourgeois conspiracy.",translation:"വിവാദാത്മകമായ",ipa:"/pəˈlemɪkəl/"},
-  {word:"veracity",pos:"n.",meaning:"the quality of being accurate and truthful, as required of historical sources",example:"Historians questioned the veracity of the ambassador's memoirs.",translation:"സത്യസന്ധത",ipa:"/vəˈræsɪti/"},
-  {word:"commemorative",pos:"adj.",meaning:"relating to the official or cultural remembrance of past events",example:"Commemorative ceremonies can shape public memory as powerfully as written history.",translation:"സ്മരണാത്മകമായ",ipa:"/kəˈmemərətɪv/"},
-  {word:"eschatology",pos:"n.",meaning:"the study of historical or theological doctrines about the ultimate end of history",example:"Medieval eschatology influenced how chroniclers interpreted plagues as divine punishment.",translation:"അന്ത്യകാല ദർശനം",ipa:"/ˌeskəˈtɒlədʒi/"},
-  {word:"illocutionary",pos:"adj.",meaning:"relating to the intended communicative act performed by an utterance, such as promising or warning",example:"The illocutionary force of his remark was clearly a threat, despite its polite wording.",translation:"ഇലോക്യൂഷണറി",ipa:"/ɪˌlɒkjuˈʃənəri/"},
-  {word:"speech act",pos:"n.",meaning:"an utterance that performs a social function such as promising, apologising, or requesting",example:"Saying 'I now pronounce you married' is a performative speech act with real-world consequences.",translation:"വാഗ്‌പ്രവർത്തനം",ipa:"/spiːtʃ ækt/"},
-  {word:"semantic field",pos:"n.",meaning:"a set of words grouped by shared conceptual meaning or thematic area",example:"Words like 'anxious', 'fearful', and 'apprehensive' belong to the same semantic field of emotion.",translation:"അർഥമേഖല",ipa:"/sɪˈmæntɪk fiːld/"},
-  {word:"lexical ambiguity",pos:"n.",meaning:"the state of a word having more than one possible meaning in a given context",example:"Lexical ambiguity in legal documents can lead to serious misinterpretation of clauses.",translation:"ലെക്സിക്കൽ അവ്യക്തത",ipa:"/ˈleksɪkəl æmˈbɪɡjuɪti/"},
-  {word:"coherence",pos:"n.",meaning:"the quality of a text being logically connected and meaningful as a unified whole",example:"The essay lacked coherence because the paragraphs did not logically follow from one another.",translation:"ആശയഘടനാബദ്ധത",ipa:"/kəʊˈhɪərəns/"},
-  {word:"prototype theory",pos:"n.",meaning:"the view that category membership is determined by resemblance to a typical or ideal example",example:"Prototype theory explains why a robin is considered a more typical bird than a penguin.",translation:"പ്രോട്ടോടൈപ്പ് സിദ്ധാന്തം",ipa:"/ˈprəʊtətaɪp ˈθɪəri/"},
-  {word:"reference",pos:"n.",meaning:"the relationship between a linguistic expression and the entity in the world it points to",example:"The reference of a proper noun like 'London' is fixed, but pronouns shift reference with context.",translation:"നിർദേശകത",ipa:"/ˈrefərəns/"},
-  {word:"cohesion",pos:"n.",meaning:"the grammatical and lexical linking within a text that holds it together structurally",example:"The use of pronouns and connectives provides cohesion across the paragraphs of the article.",translation:"ഘടനാബന്ധം",ipa:"/kəʊˈhiːʒən/"},
-  {word:"co-operative principle",pos:"n.",meaning:"Grice's maxim that speakers contribute to conversations in ways that are truthful, clear, and relevant",example:"Violating the co-operative principle can create irony, humour, or deliberate miscommunication.",translation:"സഹകാര തത്ത്വം",ipa:"/kəʊˈɒpərətɪv ˈprɪnsɪpəl/"},
-  {word:"discourse marker",pos:"n.",meaning:"a word or phrase used to organise, connect, or signal relationships between parts of spoken or written discourse",example:"Phrases like 'however' and 'in contrast' are common discourse markers in academic writing.",translation:"ഡിസ്‌കോഴ്‌സ് മാർക്കർ",ipa:"/ˈdɪskɔːs ˌmɑːkə/"},
-  {word:"propositional meaning",pos:"n.",meaning:"the factual or logical content conveyed by a sentence, independent of speaker attitude or context",example:"The propositional meaning of a declarative sentence can be evaluated as true or false.",translation:"പ്രമേയ അർഥം",ipa:"/ˌprɒpəˈzɪʃənəl ˈmiːnɪŋ/"},
-  {word:"adjacency pair",pos:"n.",meaning:"a sequence of two related utterances by different speakers where the first predicts the form of the second",example:"A question and its answer form the most common type of adjacency pair in conversation.",translation:"ആസന്ന ജോഡി",ipa:"/əˈdʒeɪsənsi peə/"},
-  {word:"face-threatening act",pos:"n.",meaning:"an utterance that potentially damages the social image or self-esteem of the speaker or hearer",example:"A blunt criticism without softening is considered a face-threatening act in politeness theory.",translation:"മുഖഭംഗകരമായ പ്രവൃത്തി",ipa:"/feɪs ˈθretnɪŋ ækt/"},
-  {word:"scalar implicature",pos:"n.",meaning:"a type of implicature arising from the use of a weaker term on a scale, implying that stronger terms do not apply",example:"Saying 'some' creates a scalar implicature that 'all' is not the case.",translation:"സ്‌കേലർ ഇംപ്ലിക്കേച്ചർ",ipa:"/ˈskeɪlə ɪmˈplɪkətʃə/"},
-  {word:"perlocutionary",pos:"adj.",meaning:"relating to the effect or consequence that an utterance produces on the listener's feelings or actions",example:"The perlocutionary effect of her speech was to inspire the audience to take immediate action.",translation:"ഫലദായകോക്തി സംബന്ധമായ",ipa:"/pəˌlɒkjuˈʃənəri/"},
-  {word:"semantic prosody",pos:"n.",meaning:"the tendency of a word to appear alongside words with consistently positive or negative connotations",example:"The word 'cause' often has negative semantic prosody when followed by words like 'damage'.",translation:"അർഥഗതിസ്വഭാവം",ipa:"/sɪˈmæntɪk ˈprɒsədi/"},
-  {word:"lexicalisation",pos:"n.",meaning:"the process by which a concept becomes encoded as a single word or fixed expression in a language",example:"The lexicalisation of 'selfie' reflects how new social practices enter the language.",translation:"പദബദ്ധീകരണം",ipa:"/ˌleksɪkəlaɪˈzeɪʃən/"},
-  {word:"anaphor",pos:"n.",meaning:"a word or expression that refers back to an earlier word or phrase in the same text",example:"In the sentence 'Mary left and she waved', the pronoun 'she' is an anaphor for 'Mary'.",translation:"പൂർവനിർദേശകം",ipa:"/ˈænəfɔː/"},
-  {word:"defamiliarisation",pos:"n.",meaning:"a technique making familiar things seem strange to provoke fresh perception",example:"Tolstoy's defamiliarisation of warfare strips away its romantic glorification.",translation:"അപരിചിതീകരണം",ipa:"/diːfəˌmɪlɪəraɪˈzeɪʃən/"},
-  {word:"irony",pos:"n.",meaning:"expression where the intended meaning differs from the literal meaning",example:"Swift's irony in A Modest Proposal savagely critiques British colonial attitudes.",translation:"വ്യംഗ്യോക്തി",ipa:"/ˈaɪrəni/"},
-  {word:"focalisation",pos:"n.",meaning:"the perspective through which a narrative is filtered",example:"The shift in focalisation from mother to daughter reveals conflicting loyalties.",translation:"കേന്ദ്രീകൃതദൃഷ്ടി",ipa:"/ˌfəʊkəlaɪˈzeɪʃən/"},
-  {word:"trope",pos:"n.",meaning:"a figurative or rhetorical device used recurrently in literature",example:"The journey is a foundational trope in Western literary tradition.",translation:"അലങ്കാരരൂപം",ipa:"/trəʊp/"},
-  {word:"canon",pos:"n.",meaning:"the body of works considered central and authoritative in a literary tradition",example:"Feminist critics challenged the exclusion of women writers from the literary canon.",translation:"ഗ്രന്ഥസ്ഥാപിതമൂലം",ipa:"/ˈkænən/"},
-  {word:"analgesia",pos:"n.",meaning:"the absence of pain sensation without loss of consciousness, often achieved through medication",example:"The patient was given analgesia before the procedure to ensure comfort throughout.",translation:"വേദനാ അഭാവം",ipa:"/ˌænəlˈdʒiːziə/"},
-  {word:"comorbidity",pos:"n.",meaning:"the simultaneous presence of two or more chronic diseases or conditions in a patient",example:"The patient's comorbidity of diabetes and hypertension complicated the treatment plan significantly.",translation:"സഹരോഗാവസ്ഥ",ipa:"/ˌkəʊmɔːˈbɪdɪti/"},
-  {word:"pathognomonic",pos:"adj.",meaning:"characteristic of or indicative of a specific disease and no other",example:"The rash pattern was considered pathognomonic for the viral condition in question.",translation:"രോഗനിർദ്ദിഷ്ട ലക്ഷണ സൂചകം",ipa:"/ˌpæθəɡˈnɒmɪk/"},
-  {word:"remission",pos:"n.",meaning:"a temporary or permanent decrease or disappearance of signs and symptoms of a disease",example:"After six months of chemotherapy, the patient entered complete remission.",translation:"രോഗശമനം",ipa:"/rɪˈmɪʃən/"},
-  {word:"homeostasis",pos:"n.",meaning:"the tendency of the body to maintain internal stability and equilibrium through coordinated physiological processes",example:"Disruption of homeostasis in electrolyte balance can lead to serious cardiac complications.",translation:"ആന്തരിക സന്തുലനം",ipa:"/ˌhəʊmiəʊˈsteɪsɪs/"},
-  {word:"auscultation",pos:"n.",meaning:"the action of listening to sounds from the heart, lungs, or other organs as a diagnostic method",example:"Auscultation of the chest revealed an abnormal murmur indicative of valvular disease.",translation:"ശ്രവണ പരിശോധന",ipa:"/ˌɔːskəlˈteɪʃən/"},
-  {word:"exacerbation",pos:"n.",meaning:"a worsening or increase in severity of a disease or its symptoms",example:"Cold weather triggered an exacerbation of the patient's chronic obstructive pulmonary disease.",translation:"രോഗ തീവ്രതാ വർദ്ധനവ്",ipa:"/ɪɡˌzæsəˈbeɪʃən/"},
-  {word:"titration",pos:"n.",meaning:"the process of gradually adjusting the dose of a medication to achieve optimal therapeutic effect",example:"Careful titration of the antihypertensive drug reduced side effects while controlling blood pressure.",translation:"ഔഷധ അളവ് ക്രമീകരണം",ipa:"/taɪˈtreɪʃən/"},
-  {word:"stenosis",pos:"n.",meaning:"the abnormal narrowing of a passage or opening in the body, especially a blood vessel or heart valve",example:"Aortic stenosis was confirmed by echocardiography and required immediate surgical intervention.",translation:"ദ്വാരസങ്കോചം",ipa:"/stɪˈnəʊsɪs/"},
-  {word:"neuropathy",pos:"n.",meaning:"disease or dysfunction of one or more peripheral nerves, typically causing numbness or weakness",example:"The patient reported tingling in his feet, which was diagnosed as diabetic neuropathy.",translation:"നാഡീരോഗം",ipa:"/njʊˈrɒpəθi/"},
-  {word:"perfusion",pos:"n.",meaning:"the passage of fluid through the circulatory system or lymphatic system to an organ or tissue",example:"Poor perfusion of the extremities indicated compromised peripheral vascular function.",translation:"രക്തചംക്രമണ ആർദ്രണം",ipa:"/pəˈfjuːʒən/"},
-  {word:"dysphagia",pos:"n.",meaning:"difficulty in swallowing, often caused by neurological or structural abnormalities",example:"Dysphagia following the stroke required the patient to be placed on a modified texture diet.",translation:"വിഴുങ്ങൽ ബുദ്ധിമുട്ട്",ipa:"/dɪsˈfeɪdʒiə/"},
-  {word:"fibrosis",pos:"n.",meaning:"the thickening and scarring of connective tissue, usually as a result of injury or disease",example:"Pulmonary fibrosis progressively reduced the patient's lung capacity over several years.",translation:"നാരുപടലം",ipa:"/faɪˈbrəʊsɪs/"},
-  {word:"phlebotomy",pos:"n.",meaning:"the practice of making an incision in a vein to draw blood for diagnostic purposes",example:"The nurse performed phlebotomy to collect samples for the full blood count analysis.",translation:"സിരച്ഛേദം",ipa:"/flɪˈbɒtəmi/"},
-  {word:"hypertrophy",pos:"n.",meaning:"the enlargement of an organ or tissue caused by the increase in size of its cells",example:"Cardiac hypertrophy was detected on imaging and linked to the patient's longstanding hypertension.",translation:"കോശ വർദ്ধനം",ipa:"/haɪˈpɜːtrəfi/"},
-  {word:"paresthesia",pos:"n.",meaning:"an abnormal sensation such as tingling, pricking, or numbness, often without apparent cause",example:"The patient described paresthesia in both hands, suggesting possible carpal tunnel syndrome.",translation:"അസ്വാഭാവിക ശരീര സംവേദനം",ipa:"/ˌpærɪsˈθiːziə/"},
-  {word:"anamnesis",pos:"n.",meaning:"a patient's account of their medical history, especially as used in clinical diagnosis",example:"A thorough anamnesis revealed a family history of autoimmune disorders relevant to the diagnosis.",translation:"രോഗചരിത്ര വിവരണം",ipa:"/ˌænæmˈniːsɪs/"},
-  {word:"tachycardia",pos:"n.",meaning:"an abnormally rapid heart rate, typically defined as exceeding 100 beats per minute",example:"Sustained tachycardia after exercise prompted further cardiac evaluation by the specialist.",translation:"ഹൃദയ ത്വരിതഗതി",ipa:"/ˌtækɪˈkɑːdiə/"},
-  {word:"epistaxis",pos:"n.",meaning:"bleeding from the nose, which may result from trauma, dryness, or underlying medical conditions",example:"Recurrent epistaxis led the physician to investigate for possible coagulation disorders.",translation:"മൂക്കിൽ നിന്നുള്ള രക്തസ്രാവം",ipa:"/ˌɛpɪˈstæksɪs/"},
-  {word:"utilitarianism",pos:"n.",meaning:"the doctrine that actions are right if they promote the greatest happiness for the greatest number",example:"Utilitarianism often requires individuals to sacrifice personal interests for the collective good.",translation:"ഉപയോഗിതാവാദം",ipa:"/juːˌtɪl.ɪˈteər.i.ə.nɪz.əm/"},
-  {word:"impunity",pos:"n.",meaning:"exemption from punishment or freedom from the injurious consequences of one's actions",example:"Powerful corporations often act with impunity, evading accountability for ethical violations.",translation:"ശിക്ഷാമുക്തി",ipa:"/ɪmˈpjuː.nɪ.ti/"},
-  {word:"moral turpitude",pos:"n.",meaning:"conduct that is considered contrary to community standards of justice and good morals",example:"Acts of fraud are widely classified as moral turpitude in legal and ethical discourse.",translation:"ധാർമ്മിക അധഃപതനം",ipa:"/ˈmɒr.əl ˈtɜː.pɪ.tjuːd/"},
-  {word:"nonmaleficence",pos:"n.",meaning:"the ethical principle of avoiding actions that cause harm to others",example:"Nonmaleficence is a cornerstone of bioethics, requiring practitioners to first do no harm.",translation:"അഹിംസാതത്ത്വം",ipa:"/nɒnməˈlef.ɪ.səns/"},
-  {word:"sanctimony",pos:"n.",meaning:"the appearance of being morally superior to others; self-righteous pretence",example:"His sanctimony was exposed when his private conduct contradicted his public moral pronouncements.",translation:"കപടഭക്തി",ipa:"/ˈsæŋk.tɪ.mə.ni/"},
-  {word:"precept",pos:"n.",meaning:"a general rule or principle intended to guide moral behaviour or thought",example:"The precept 'treat others as you wish to be treated' underlies many ethical traditions worldwide.",translation:"ധർമ്മോപദേശം",ipa:"/ˈpriː.sept/"},
-  {word:"retributivism",pos:"n.",meaning:"the theory of justice that holds punishment is morally justified as a deserved response to wrongdoing",example:"Retributivism asserts that offenders deserve to suffer proportionally for the harm they have caused.",translation:"പ്രതിഫലദണ്ഡവാദം",ipa:"/rɪˈtrɪb.jʊ.tɪ.vɪz.əm/"},
-  {word:"supererogation",pos:"n.",meaning:"the performance of more than duty requires; going beyond what morality strictly demands",example:"Donating one's entire inheritance to charity is an act of supererogation, admirable but not obligatory.",translation:"കർത്തവ്യാതിരിക്ത കർമ്മം",ipa:"/ˌsuː.pər.er.əˈɡeɪ.ʃən/"},
-  {word:"egalitarianism",pos:"n.",meaning:"the belief in human equality, especially with respect to social, political, and moral rights",example:"Egalitarianism challenges hierarchical systems that confer unequal moral worth upon individuals.",translation:"സമത്വവാദം",ipa:"/ɪˌɡæl.ɪˈteər.i.ə.nɪz.əm/"},
-  {word:"metaethics",pos:"n.",meaning:"the branch of philosophy that investigates the nature, foundations, and methodology of moral judgements",example:"Metaethics asks not what is right or wrong but what it even means for something to be morally right.",translation:"മെറ്റാനൈതികത",ipa:"/ˌmet.əˈeθ.ɪks/"},
-  {word:"deception",pos:"n.",meaning:"the act of causing someone to believe something false, raising serious moral questions of trust",example:"Philosophical debates about deception examine whether lying is ever morally permissible.",translation:"വഞ്ചന",ipa:"/dɪˈsep.ʃən/"},
-  {word:"scruples",pos:"n.",meaning:"moral doubts or reservations about the rightness of a particular action",example:"She had serious scruples about accepting a salary that depended on misleading advertisements.",translation:"ധർമ്മസംശയങ്ങൾ",ipa:"/ˈskruː.pəlz/"},
-  {word:"iniquity",pos:"n.",meaning:"immoral or grossly unfair behaviour; a serious sin or act of wickedness",example:"The philosopher condemned the iniquity of systems that profit from human suffering and exploitation.",translation:"അനീതി",ipa:"/ɪˈnɪk.wɪ.ti/"},
-  {word:"ideological",pos:"adj.",meaning:"relating to a system of ideas and beliefs that underpin political or cultural power",example:"The film was criticized for its ideological assumptions about gender roles.",translation:"പ്രത്യയശാസ്ത്രപരമായ",ipa:"/ˌaɪdɪəˈlɒdʒɪkəl/"},
-  {word:"postcolonialism",pos:"n.",meaning:"a theoretical framework examining cultural legacies of colonialism and imperialism",example:"Postcolonialism challenges Eurocentric narratives that dominated academic discourse for centuries.",translation:"ഉത്തരകൊളോണിയലിസം",ipa:"/ˌpəʊstˈkɒlənɪəlɪzəm/"},
-  {word:"counterculture",pos:"n.",meaning:"a culture whose values and norms challenge or oppose those of mainstream society",example:"The 1960s counterculture rejected consumerism and promoted communal living.",translation:"പ്രതിസംസ്കാരം",ipa:"/ˈkaʊntəˌkʌltʃə/"},
-  {word:"signification",pos:"n.",meaning:"the process by which signs produce meaning within a cultural or linguistic system",example:"Saussure's theory of signification distinguishes between the signifier and the signified.",translation:"അർഥദാനം",ipa:"/ˌsɪɡnɪfɪˈkeɪʃən/"},
-  {word:"genealogical",pos:"adj.",meaning:"relating to the historical tracing of the origins and development of concepts or practices",example:"Foucault used genealogical analysis to reveal how modern institutions exercise power.",translation:"ഉദ്ഭവചരിത്രപരമായ",ipa:"/ˌdʒiːniəˈlɒdʒɪkəl/"},
-  {word:"fetishisation",pos:"n.",meaning:"the attribution of excessive or irrational power and value to an object or concept",example:"Marxist theory describes the fetishisation of commodities as a hallmark of capitalist ideology.",translation:"ഭ്രാന്തപൂജ",ipa:"/ˌfɛtɪʃaɪˈzeɪʃən/"},
-  {word:"alienation",pos:"n.",meaning:"the estrangement of individuals from their work, society, or sense of identity",example:"Marx described alienation as the inevitable result of workers losing control over their labour.",translation:"അന്യാധീനം",ipa:"/ˌeɪliəˈneɪʃən/"},
-  {word:"canonicity",pos:"n.",meaning:"the status of being included in an authoritative body of texts or cultural works",example:"Scholars debate the canonicity of postcolonial literature within traditional university curricula.",translation:"സ്വീകൃതഗ്രന്ഥപദവി",ipa:"/ˌkænəˈnɪsɪti/"},
-  {word:"doxa",pos:"n.",meaning:"unquestioned beliefs and values that a society accepts as self-evident truths",example:"Bourdieu argued that doxa operates invisibly to naturalise the existing social order.",translation:"അംഗീകൃതമതം",ipa:"/ˈdɒksə/"},
-  {word:"performativity",pos:"n.",meaning:"the idea that identity and social norms are constituted through repeated actions",example:"Butler's theory of performativity argues that gender is enacted rather than biologically given.",translation:"ആചരണനിർമ്മിതി",ipa:"/pəˌfɔːmæˈtɪvɪti/"},
-  {word:"rhetoric",pos:"n.",meaning:"the art of effective or persuasive speaking or writing",example:"The senator's mastery of rhetoric made even his weakest proposals sound compelling.",translation:"വാഗ്മിത",ipa:"/ˈret.ər.ɪk/"},
-  {word:"demagogue",pos:"n.",meaning:"a political leader who appeals to emotions and prejudices rather than reason",example:"Historians warned that the charismatic speaker was becoming a demagogue exploiting public fears.",translation:"ജനരഞ്ജക നേതാവ്",ipa:"/ˈdem.ə.ɡɒɡ/"},
-  {word:"concede",pos:"v.",meaning:"to admit that something is true or valid, especially reluctantly in a debate",example:"Even the most ardent opponent had to concede that the evidence presented was overwhelming.",translation:"സമ്മതിക്കുക",ipa:"/kənˈsiːd/"},
-  {word:"equivocate",pos:"v.",meaning:"to use ambiguous language to conceal the truth or avoid committing oneself to a position",example:"The candidate continued to equivocate when asked directly about his stance on taxation.",translation:"ദ്വ്യർഥത്തിൽ സംസാരിക്കുക",ipa:"/ɪˈkwɪv.ə.keɪt/"},
-  {word:"apologia",pos:"n.",meaning:"a formal written defence of one's opinions or conduct",example:"The philosopher published an apologia explaining his controversial views on free will.",translation:"ആത്മസമർഥനം",ipa:"/ˌæp.əˈlɒdʒ.i.ə/"},
-  {word:"inveigh",pos:"v.",meaning:"to speak or write about something with great hostility and criticism",example:"The columnist inveighed against what he called the moral bankruptcy of contemporary advertising.",translation:"ശക്തമായി വിമർശിക്കുക",ipa:"/ɪnˈveɪ/"},
-  {word:"elocution",pos:"n.",meaning:"the skill of clear and expressive speech in public speaking",example:"She took elocution lessons to improve her delivery before the national debating championship.",translation:"വാഗ്മിതാ കല",ipa:"/ˌel.əˈkjuː.ʃən/"},
-  {word:"admonish",pos:"v.",meaning:"to warn or reprimand someone firmly but not harshly in order to correct behaviour",example:"The chairperson admonished speakers who resorted to personal attacks rather than logical argument.",translation:"ശാസിക്കുക",ipa:"/ədˈmɒn.ɪʃ/"},
-  {word:"credulous",pos:"adj.",meaning:"having too great a readiness to believe things without sufficient evidence",example:"A skilled propagandist knows how to exploit credulous audiences by repeating unverified claims.",translation:"എളുപ്പം വിശ്വസിക്കുന്ന",ipa:"/ˈkred.jʊ.ləs/"},
-  {word:"gainsay",pos:"v.",meaning:"to deny or contradict; to speak against or oppose",example:"No one could gainsay the evidence once the scientific community had reviewed the data.",translation:"നിഷേധിക്കുക",ipa:"/ˌɡeɪnˈseɪ/"},
-  {word:"impugn",pos:"v.",meaning:"to dispute the truth, validity, or honesty of someone's argument or character",example:"The barrister attempted to impugn the witness's credibility by highlighting inconsistencies in her testimony.",translation:"ആക്ഷേപിക്കുക",ipa:"/ɪmˈpjuːn/"},
-  {word:"pejorative",pos:"adj.",meaning:"expressing contempt or disapproval, often used to weaken or discredit opposing views",example:"The critic's use of pejorative language rather than logical argument undermined his own credibility.",translation:"അവഹേളനാർഥമുള്ള",ipa:"/pɪˈdʒɒr.ə.tɪv/"},
-  {word:"decolonisation",pos:"n.",meaning:"the process of undoing colonial structures, ideologies, and power relationships",example:"Decolonisation of the curriculum requires replacing Eurocentric texts with local voices.",translation:"കോളനിവൽക്കരണ നിർമാർജനം",ipa:"/diːˌkɒlənaɪˈzeɪʃən/"},
-  {word:"exoticisation",pos:"n.",meaning:"the act of portraying foreign cultures as strange or mysterious for an outsider's gaze",example:"Travel writing of the nineteenth century was notorious for its exoticisation of African peoples.",translation:"വിദേശവൽക്കരണം",ipa:"/ɪɡˌzɒtɪsaɪˈzeɪʃən/"},
-  {word:"neocolonialism",pos:"n.",meaning:"indirect economic or political domination of former colonies by powerful nations",example:"Critics argue that foreign aid conditionality perpetuates neocolonialism in African states.",translation:"നവകൊളോണിയലിസം",ipa:"/ˌniːəʊkəˈloʊniəlɪzəm/"},
-  {word:"subalternism",pos:"n.",meaning:"a theoretical approach centring the voices of marginalised, colonised populations",example:"Subalternism challenges historians to recover narratives suppressed by colonial archives.",translation:"അടിസ്ഥാനവർഗ്ഗ ചിന്ത",ipa:"/səˈbɔːltənɪzəm/"},
-  {word:"deterritorialisation",pos:"n.",meaning:"the disruption of fixed cultural or geographic identities through displacement",example:"Globalisation accelerates deterritorialisation, unsettling traditional community boundaries.",translation:"ദേശനിർബന്ധനനിർമ്മൂലനം",ipa:"/diːˌterɪtɔːriəlaɪˈzeɪʃən/"},
-  {word:"counter-narrative",pos:"n.",meaning:"a story or account that challenges and undermines the dominant colonial version of history",example:"Indigenous writers craft counter-narratives to reclaim histories distorted by empire.",translation:"പ്രതി-ആഖ്യാനം",ipa:"/ˈkaʊntə ˈnærətɪv/"},
-  {word:"reparation",pos:"n.",meaning:"compensation or redress offered for historical injustices inflicted by colonialism",example:"The conference debated whether financial reparation adequately addresses colonial harms.",translation:"പ്രായശ്ചിത്തം",ipa:"/ˌrepəˈreɪʃən/"},
-  {word:"vernacular",pos:"adj.",meaning:"relating to the native language or cultural expressions of a colonised people",example:"The author deliberately chose vernacular forms to resist the imposition of English literary norms.",translation:"ദേശഭാഷാപരമായ",ipa:"/vəˈnækjʊlə/"},
-  {word:"dispossession",pos:"n.",meaning:"the forcible removal of land, rights, or cultural heritage from colonised peoples",example:"Land dispossession remains a defining trauma in the histories of settler colonies.",translation:"നഷ്ടപ്പെടൽ",ipa:"/ˌdɪspəˈzeʃən/"},
-  {word:"transculturation",pos:"n.",meaning:"a bidirectional cultural exchange in which both coloniser and colonised are transformed",example:"Transculturation complicates simplistic models of cultural domination and passive reception.",translation:"സംസ്കാരാന്തരണം",ipa:"/trænsˌkʌltʃəˈreɪʃən/"},
-  {word:"interstitial",pos:"adj.",meaning:"occupying or relating to the in-between spaces of culture and identity",example:"Postcolonial writers often inhabit interstitial positions between their homeland and adopted country.",translation:"ഇടയിൽ നിലകൊള്ളുന്ന",ipa:"/ˌɪntəˈstɪʃəl/"},
-  {word:"mythopoeia",pos:"n.",meaning:"the deliberate construction of myths to shape national or cultural identity",example:"Postcolonial leaders used mythopoeia to forge a unifying national identity after independence.",translation:"മിത്തോദ്പാദനം",ipa:"/ˌmɪθəˈpiːə/"},
-  {word:"entrench",pos:"v.",meaning:"to establish something so firmly that it is difficult to change or remove",example:"Corruption had become so entrenched in the government that reforms were nearly impossible.",translation:"ദൃഢമായി സ്ഥാപിക്കുക",ipa:"ɪnˈtrɛntʃ"},
-  {word:"tribunal",pos:"n.",meaning:"a court or forum established to resolve disputes, especially at the international level",example:"The case was referred to an international tribunal for arbitration.",translation:"ട്രൈബ്യൂണൽ",ipa:"traɪˈbjuːnəl"},
-  {word:"pluralism",pos:"n.",meaning:"a system in which multiple groups, principles, or sources of authority coexist",example:"Liberal democracies are built on the foundation of political pluralism.",translation:"ബഹുസ്വരത",ipa:"ˈplʊərəlɪzəm"},
-  {word:"protocol",pos:"n.",meaning:"the official system of rules governing diplomatic affairs and state ceremonies",example:"Strict diplomatic protocol governed the seating arrangements at the state banquet.",translation:"നയതന്ത്ര ചട്ടങ്ങൾ",ipa:"ˈprəʊtəkɒl"},
-  {word:"ontological",pos:"adj.",meaning:"relating to ontology; concerned with the nature of being and existence",example:"The paper raised ontological questions about whether consciousness exists independently of the brain.",translation:"അസ്തിത്വശാസ്ത്രപരമായ",ipa:"/ˌɒn.təˈlɒdʒ.ɪ.kəl/"},
-  {word:"abductive",pos:"adj.",meaning:"relating to abduction; a form of reasoning that seeks the simplest and most likely explanation for observations",example:"Abductive reasoning allowed the team to formulate a plausible hypothesis from incomplete clinical evidence.",translation:"അനുമാനസൂചകമായ",ipa:"/æbˈdʌk.tɪv/"},
-  {word:"concomitant",pos:"adj./n.",meaning:"naturally accompanying or associated with something; occurring at the same time",example:"Economic instability is often a concomitant phenomenon of rapid political transformation.",translation:"സഹവർത്തിയായ",ipa:"/kɒnˈkɒm.ɪ.tənt/"},
-  {word:"locus of control",pos:"n.",meaning:"a person's belief about the extent to which they can control events affecting them, either internally or externally",example:"Participants with an internal locus of control showed greater persistence when facing difficult cognitive tasks.",translation:"നിയന്ത്രണ കേന്ദ്രം",ipa:"/ˈləʊkəs əv kənˈtrəʊl/"},
-  {word:"transference",pos:"n.",meaning:"the redirection of feelings and expectations from one person, often a past figure, onto someone in the present",example:"The therapist carefully managed transference when the client began reacting to her as though she were a parent.",translation:"ട്രാൻസ്ഫറൻസ്",ipa:"/ˈtrænsfərəns/"},
-  {word:"self-efficacy",pos:"n.",meaning:"an individual's belief in their own capacity to execute behaviors necessary to produce specific outcomes",example:"Higher self-efficacy was strongly associated with sustained effort and recovery after setbacks.",translation:"സ്വയം കാര്യക്ഷമതാ വിശ്വാസം",ipa:"/ˌself ˈefɪkəsi/"},
-  {word:"adjudication",pos:"n.",meaning:"the legal process by which a judge or arbitrator makes a formal decision on a disputed matter",example:"The adjudication of the contract dispute took several months before a verdict was reached.",translation:"വിധിനിർണ്ണയം",ipa:"/əˌdʒuːdɪˈkeɪʃən/"},
-  {word:"promulgation",pos:"n.",meaning:"the formal public declaration or announcement of a new law or decree",example:"Following the promulgation of the statute, all courts were obligated to apply the new sentencing guidelines.",translation:"പ്രഖ്യാപനം",ipa:"/ˌprɒməlˈɡeɪʃən/"},
-  {word:"subrogation",pos:"n.",meaning:"the legal substitution of one party for another in claiming a debt or legal right",example:"After paying the insurance claim, the company exercised its right of subrogation against the negligent third party.",translation:"പ്രതിസ്ഥാപനം",ipa:"/ˌsʌbrəˈɡeɪʃən/"},
-  {word:"tortfeasor",pos:"n.",meaning:"a person who commits a tort, thereby becoming liable for damages in civil law",example:"The court identified the manufacturer as the primary tortfeasor responsible for the plaintiff's injuries.",translation:"ദോഷകാരി",ipa:"/ˈtɔːtfiːzə/"},
-  {word:"interdiction",pos:"n.",meaning:"a formal legal prohibition or court order restraining a person from certain acts",example:"The court issued an interdiction barring the accused from contacting any witnesses during the proceedings.",translation:"നിരോധനാജ്ഞ",ipa:"/ˌɪntəˈdɪkʃən/"},
-  {word:"derogation",pos:"n.",meaning:"the partial repeal or relaxation of a law, or a deviation from an established legal standard",example:"The government sought a temporary derogation from the treaty obligations during the national emergency.",translation:"ഭേദഗതി ഒഴിവ്",ipa:"/ˌderəˈɡeɪʃən/"},
-  {word:"conveyance",pos:"n.",meaning:"the legal process of transferring property ownership from one party to another",example:"The solicitor prepared all necessary documents to complete the conveyance of the commercial property.",translation:"സ്വത്ത് കൈമാറ്റം",ipa:"/kənˈveɪəns/"},
-  {word:"turn of phrase",pos:"n.",meaning:"a particular or clever way of expressing something in words",example:"Her speech was full of memorable turns of phrase that lingered in the audience's minds long after she left the stage.",translation:"വാക്കുകളുടെ പ്രത്യേക പ്രയോഗരീതി",ipa:"tɜːn əv freɪz"},
-  {word:"loaded language",pos:"n.",meaning:"words or expressions that carry strong emotional or figurative implications beyond their literal meaning",example:"The politician's use of loaded language made it difficult to separate factual claims from emotional manipulation.",translation:"വൈകാരിക ഭാരമുള്ള ഭാഷ",ipa:"ˈloʊdɪd ˈlæŋɡwɪdʒ"},
-  {word:"dead metaphor",pos:"n.",meaning:"a metaphor that has been used so frequently it is no longer perceived as figurative",example:"The phrase 'leg of a table' is a classic dead metaphor that most speakers use without any awareness of its figurative origin.",translation:"നിർജ്ജീവ രൂപകം",ipa:"dɛd ˈmɛtəfə"},
-  {word:"catachresis",pos:"n.",meaning:"the misuse or strained use of a word or phrase for rhetorical or expressive effect",example:"Calling ambition 'the ladder of success' is a catachresis that has nonetheless become deeply embedded in everyday speech.",translation:"ദുർവിനിയോഗ രൂപകം",ipa:"ˌkætəˈkriːsɪs"},
-  {word:"tenor",pos:"n.",meaning:"the underlying meaning or subject that a metaphor describes, as distinct from the vehicle conveying it",example:"In the metaphor 'life is a journey,' life is the tenor and journey is the vehicle carrying the figurative weight.",translation:"രൂപകത്തിലെ മൂലാർത്ഥം",ipa:"ˈtɛnə"},
-  {word:"periphrasis",pos:"n.",meaning:"the practice of using a longer phrasing in place of a shorter form, often for stylistic or figurative emphasis",example:"The poet's deliberate periphrasis transformed a simple declaration of love into a rich tapestry of figurative imagery.",translation:"ദീർഘവർണന",ipa:"pəˈrɪfrəsɪs"},
-  {word:"decarbonisation",pos:"n.",meaning:"the process of reducing or eliminating carbon dioxide emissions from energy systems, industries, and economies to combat climate change",example:"The government's decarbonisation strategy requires all power plants to transition away from fossil fuels by 2040.",translation:"കാർബൺ നിർമാർജനം",ipa:"/ˌdiːˌkɑːbənaɪˈzeɪʃən/"},
-  {word:"carbon sequestration",pos:"n.",meaning:"the long-term capture and storage of atmospheric carbon dioxide in natural or artificial reservoirs, such as forests, oceans, or geological formations",example:"Investing in carbon sequestration through reforestation is central to the nation's net-zero climate policy framework.",translation:"കാർബൺ സംഭരണം",ipa:"/ˈkɑːbən ˌsekwɪˈstreɪʃən/"}],
+],
 };
 
 // Helper functions
@@ -6168,12 +2679,13 @@ const WotdCard = memo(function WotdCard({ settings = {}, dispatch }) {
                   <span style={{ fontSize:10, fontWeight:700, color:"rgba(255,255,255,.7)", textTransform:"uppercase" }}>Word of the Day</span>
                   <span style={{ fontSize:9, fontWeight:800, padding:"1px 7px", borderRadius:20, background:"rgba(255,255,255,.2)", color:"#fff" }}>{displayWord.cefr}</span>
                 </div>
+                <span style={{ fontSize:10, color:"rgba(255,255,255,.6)" }}>Tap to reveal</span>
               </div>
               <div>
                 <div style={{ fontFamily:"'Poppins',sans-serif", fontSize:30, fontWeight:700, color:"#fff", marginBottom:3 }}>{displayWord.word}</div>
                 <div style={{ fontSize:12, color:"rgba(255,255,255,.75)", fontStyle:"italic" }}>{displayWord.ipa} · {displayWord.pos}</div>
               </div>
-              <div style={{ fontSize:11, color:"rgba(255,255,255,.55)" }}>Tap to reveal meaning</div>
+              <div style={{ fontSize:11, color:"rgba(255,255,255,.55)" }}>Tap card to see meaning</div>
             </div>
             <div style={{
               position:"absolute", inset:0, backfaceVisibility:"hidden",
@@ -6217,12 +2729,12 @@ const Home = memo(function Home({ state, dispatch }) {
   const nav = (screen) => dispatch({ type: "SET_SCREEN", payload: screen });
 
   const quickActions = [
-    { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Speaking", sub:"Pronunciation", screen:"practice", grad:"linear-gradient(135deg,#2563EB,#4F46E5)" },
-    { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>, label:"Convo", sub:"AI Dialogue", screen:"conversation", grad:"linear-gradient(135deg,#4F46E5,#7C3AED)" },
-    { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>, label:"Vocab", sub:"Word Power", screen:"vocabulary", grad:"linear-gradient(135deg,#059669,#22C55E)" },
-    { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>, label:"Grammar", sub:"Rules", screen:"grammar", grad:"linear-gradient(135deg,#D97706,#F59E0B)" },
-    { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>, label:"Dictionary", sub:"Look Up", screen:"dictionary", grad:"linear-gradient(135deg,#0284C7,#2563EB)" },
-    { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9 9h.01M15 9h.01M9 15c0 0 1 2 3 2s3-2 3-2"/></svg>, label:"AI Coach", sub:"Smart Tutor", screen:"chatbot", grad:"linear-gradient(135deg,#7C3AED,#2563EB)" },
+    { icon: "🎙", label: "Speaking",   sub: "Pronunciation",  screen: "practice",     grad: "linear-gradient(135deg,#6C5CE7,#7C4DFF)" },
+    { icon: "💬", label: "Convo",      sub: "AI Dialogue",    screen: "conversation", grad: "linear-gradient(135deg,#7C4DFF,#4DA3FF)" },
+    { icon: "📚", label: "Vocab",      sub: "Word Power",     screen: "vocabulary",   grad: "linear-gradient(135deg,#22C55E,#00CEC9)" },
+    { icon: "📖", label: "Grammar",    sub: "Rules & Patterns",screen: "grammar",      grad: "linear-gradient(135deg,#F59E0B,#F97316)" },
+    { icon: "🔍", label: "Dictionary", sub: "Look Up Words",  screen: "dictionary",   grad: "linear-gradient(135deg,#4DA3FF,#6C5CE7)" },
+    { icon: "🤖", label: "AI Coach",   sub: "Smart Tutor",    screen: "chatbot",      grad: "linear-gradient(135deg,#F59E0B,#6C5CE7)" },
   ];
 
   const skillColors = { grammar:"var(--accent)", vocabulary:"var(--green)", speaking:"var(--purple)", writing:"var(--orange)" };
@@ -6246,60 +2758,9 @@ const Home = memo(function Home({ state, dispatch }) {
         <div style={{ position:"absolute", top:-30, right:-30, width:120, height:120, borderRadius:"50%", background:"rgba(255,255,255,.08)", pointerEvents:"none" }} />
         <div style={{ position:"absolute", bottom:-20, left:-20, width:90, height:90, borderRadius:"50%", background:"rgba(255,255,255,.06)", pointerEvents:"none" }} />
 
-        {/* Illustration - right side */}
-        <div style={{ position:"absolute", right:0, top:0, bottom:0, width:160, zIndex:0, pointerEvents:"none", overflow:"hidden" }}>
-          <img src="/hero-girl.jpeg" alt="" style={{ position:"absolute", bottom:0, right:-10, height:190, width:"auto", objectFit:"contain" }} />
-          <svg viewBox="0 0 160 200" width="160" height="200" style={{ display:"none" }}>
-            {/* Body */}
-            <ellipse cx="80" cy="185" rx="45" ry="18" fill="rgba(0,0,0,.15)"/>
-            {/* Hoodie body */}
-            <rect x="45" y="110" width="70" height="75" rx="20" fill="#7C3AED"/>
-            {/* Neck */}
-            <rect x="70" y="95" width="20" height="20" rx="8" fill="#FDBCB4"/>
-            {/* Head */}
-            <ellipse cx="80" cy="80" rx="28" ry="30" fill="#FDBCB4"/>
-            {/* Hair */}
-            <ellipse cx="80" cy="58" rx="30" ry="18" fill="#3D1F00"/>
-            <rect x="52" y="58" width="10" height="35" rx="5" fill="#3D1F00"/>
-            <rect x="98" y="58" width="10" height="35" rx="5" fill="#3D1F00"/>
-            {/* Eyes */}
-            <ellipse cx="70" cy="82" rx="5" ry="6" fill="#fff"/>
-            <ellipse cx="90" cy="82" rx="5" ry="6" fill="#fff"/>
-            <ellipse cx="71" cy="83" rx="3" ry="4" fill="#3D1F00"/>
-            <ellipse cx="91" cy="83" rx="3" ry="4" fill="#3D1F00"/>
-            <ellipse cx="72" cy="82" rx="1" ry="1.5" fill="#fff"/>
-            <ellipse cx="92" cy="82" rx="1" ry="1.5" fill="#fff"/>
-            {/* Smile */}
-            <path d="M73 93 Q80 99 87 93" stroke="#c0856a" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-            {/* Arms */}
-            <rect x="22" y="115" width="25" height="14" rx="7" fill="#7C3AED" transform="rotate(20 35 122)"/>
-            <rect x="113" y="115" width="25" height="14" rx="7" fill="#7C3AED" transform="rotate(-20 125 122)"/>
-            {/* Hands */}
-            <ellipse cx="30" cy="137" rx="9" ry="7" fill="#FDBCB4"/>
-            <ellipse cx="130" cy="137" rx="9" ry="7" fill="#FDBCB4"/>
-            {/* Book */}
-            <rect x="35" y="138" width="90" height="55" rx="4" fill="#1E40AF"/>
-            <rect x="35" y="138" width="45" height="55" rx="4" fill="#2563EB"/>
-            <line x1="80" y1="138" x2="80" y2="193" stroke="#1E3A8A" strokeWidth="2"/>
-            {/* Book lines */}
-            <line x1="42" y1="152" x2="72" y2="152" stroke="rgba(255,255,255,.4)" strokeWidth="1.5"/>
-            <line x1="42" y1="160" x2="72" y2="160" stroke="rgba(255,255,255,.4)" strokeWidth="1.5"/>
-            <line x1="42" y1="168" x2="72" y2="168" stroke="rgba(255,255,255,.4)" strokeWidth="1.5"/>
-            <line x1="87" y1="152" x2="117" y2="152" stroke="rgba(255,255,255,.3)" strokeWidth="1.5"/>
-            <line x1="87" y1="160" x2="117" y2="160" stroke="rgba(255,255,255,.3)" strokeWidth="1.5"/>
-            {/* Chat bubble */}
-            <rect x="90" y="25" width="58" height="35" rx="12" fill="rgba(255,255,255,.2)" stroke="rgba(255,255,255,.3)" strokeWidth="1"/>
-            <text x="119" y="40" textAnchor="middle" fontSize="8" fill="#fff" fontWeight="600">Let's</text>
-            <text x="119" y="50" textAnchor="middle" fontSize="8" fill="#fff" fontWeight="600">learn!</text>
-            {/* Stars */}
-            <text x="15" y="45" fontSize="14" fill="rgba(255,255,255,.7)">✦</text>
-            <text x="135" y="70" fontSize="10" fill="rgba(255,255,255,.5)">✦</text>
-            <text x="25" y="100" fontSize="8" fill="rgba(255,255,255,.4)">✦</text>
-          </svg>
-        </div>
         {/* Top row */}
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14, position:"relative", zIndex:1 }}>
-          <div style={{ maxWidth:"55%" }}>
+          <div>
             <p style={{ fontSize:12, color:"rgba(255,255,255,.7)", fontWeight:500, fontFamily:"'Inter',sans-serif", marginBottom:2 }}>{greeting} 👋</p>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <h1 style={{ fontFamily:"'Poppins',sans-serif", fontSize:22, fontWeight:700, color:"#fff", lineHeight:1.1 }}>
@@ -6327,16 +2788,16 @@ const Home = memo(function Home({ state, dispatch }) {
         {/* Stats row */}
         <div style={{ display:"flex", gap:8, marginBottom:14, position:"relative", zIndex:1 }}>
           {[
-            { icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="rgba(255,215,0,.95)"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>, label:"Level", value:user.level },
-            { icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="rgba(255,200,0,.95)"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>, label:"XP", value:user.xp.toLocaleString() },
-            { icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="rgba(255,100,50,.95)"><path d="M12 23c4.97 0 9-4.03 9-9 0-4.17-5-11-7.5-14.5C11 3 6 9.83 6 14c0 4.97 4.03 9 6 9z"/></svg>, label:"Streak", value:`${user.streak}d` },
+            { icon:"🎓", label:"Level", value:user.level },
+            { icon:"⚡", label:"XP", value:user.xp.toLocaleString() },
+            { icon:"🔥", label:"Streak", value:`${user.streak}d` },
           ].map(s => (
             <div key={s.label} style={{
               flex:1, background:"rgba(255,255,255,.15)", borderRadius:16,
               padding:"10px 8px", textAlign:"center",
               backdropFilter:"blur(8px)", border:"1px solid rgba(255,255,255,.15)",
             }}>
-              <div style={{ marginBottom:4, display:"flex", justifyContent:"center" }}>{s.icon}</div>
+              <div style={{ fontSize:15, lineHeight:1, marginBottom:3 }}>{s.icon}</div>
               <div style={{ fontFamily:"'Poppins',sans-serif", fontSize:16, fontWeight:700, color:"#fff", lineHeight:1.1 }}>{s.value}</div>
               <div style={{ fontSize:9, color:"rgba(255,255,255,.7)", fontWeight:500, marginTop:2 }}>{s.label}</div>
             </div>
@@ -6434,9 +2895,9 @@ const Home = memo(function Home({ state, dispatch }) {
             <button onClick={()=>nav("settings")} style={{ fontSize:11, color:"var(--accent)", background:"none", border:"none", cursor:"pointer", fontWeight:600 }}>Upgrade ↗</button>
           </div>
           {[
-            { key:"pronunciation",  label:"Speaking",      icon:<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/></svg>, limit:5  },
-            { key:"conversations",  label:"Conversations", icon:<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>, limit:3  },
-            { key:"aiChat",         label:"AI Coach",      icon:<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9 9h.01M15 9h.01M9 15c0 0 1 2 3 2s3-2 3-2"/></svg>, limit:10 },
+            { key:"pronunciation",  label:"Speaking",      icon:"🎙", limit:5  },
+            { key:"conversations",  label:"Conversations", icon:"💬", limit:3  },
+            { key:"aiChat",         label:"AI Coach",      icon:"🤖", limit:10 },
           ].map(({ key, label, icon, limit }) => {
             const used = dailyUsage[key] || 0;
             const pct  = Math.min(100, Math.round((used/limit)*100));
@@ -6444,15 +2905,12 @@ const Home = memo(function Home({ state, dispatch }) {
             return (
               <div key={key} style={{ marginBottom:10 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4, fontSize:12 }}>
-                  <span style={{ color:"var(--text-2)", fontWeight:500, display:"flex", alignItems:"center", gap:6 }}>
-                    <span style={{ color: key==="pronunciation" ? "#2563EB" : key==="conversations" ? "#4F46E5" : "#22C55E", display:"flex" }}>{icon}</span>
-                    {label}
-                  </span>
-                  <span style={{ color:over?"#EF4444":key==="pronunciation"?"#2563EB":key==="conversations"?"#4F46E5":"#22C55E", fontWeight:600 }}>{used}/{limit}</span>
+                  <span style={{ color:"var(--text-2)", fontWeight:500 }}>{icon} {label}</span>
+                  <span style={{ color:over?"var(--red)":"var(--text-3)", fontWeight:over?700:500 }}>{used}/{limit}</span>
                 </div>
                 <div style={{ height:5, background:"var(--border-2)", borderRadius:999, overflow:"hidden" }}>
                   <div style={{ height:"100%", width:`${pct}%`, borderRadius:999, transition:"width .5s",
-                    background:over?"#EF4444":key==="pronunciation"?"#2563EB":key==="conversations"?"#4F46E5":"#22C55E" }} />
+                    background:over?"var(--red)":pct>70?"var(--gold)":"var(--green)" }} />
                 </div>
               </div>
             );
@@ -6480,10 +2938,10 @@ const Home = memo(function Home({ state, dispatch }) {
             }}
           >
             <div style={{
-              width:44, height:44, borderRadius:14,
+              width:42, height:42, borderRadius:14,
               background:a.grad,
               display:"flex", alignItems:"center", justifyContent:"center",
-              boxShadow:`0 4px 14px rgba(0,0,0,.2)`,
+              fontSize:20, boxShadow:`0 4px 12px rgba(108,92,231,.25)`,
             }}>
               {a.icon}
             </div>
@@ -6493,105 +2951,6 @@ const Home = memo(function Home({ state, dispatch }) {
             </div>
           </div>
         ))}
-      </div>
-
-      {/* ── Today's Learning Path ── */}
-      <div style={{ marginBottom:16 }}>
-        <div style={{ fontFamily:"'Poppins',sans-serif", fontSize:15, fontWeight:700, color:"var(--text)", marginBottom:12 }}>
-          📚 Today's Learning Path
-        </div>
-        <div style={{ background:"var(--surf)", borderRadius:20, border:"1px solid var(--border)", padding:"16px", boxShadow:"var(--shadow-card)" }}>
-          {[
-            { step:1, label:"Vocabulary", screen:"vocabulary", done: (dailyUsage.vocabulary||0)>0,
-              icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg> },
-            { step:2, label:"Speaking", screen:"practice", done: (dailyUsage.pronunciation||0)>0,
-              icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg> },
-            { step:3, label:"AI Conversation", screen:"chatbot", done: (dailyUsage.aiChat||0)>0,
-              icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg> },
-          ].map((item, idx) => (
-            <div key={item.step} onClick={()=>nav(item.screen)} style={{ display:"flex", alignItems:"center", gap:12, cursor:"pointer", padding:"10px 0", borderBottom: idx<2 ? "1px solid var(--border)" : "none" }}>
-              <div style={{ width:40, height:40, borderRadius:14, background: item.done ? "#22C55E" : "linear-gradient(135deg,#2563EB,#4F46E5)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow: item.done ? "0 4px 12px rgba(34,197,94,.3)" : "0 4px 12px rgba(37,99,235,.3)" }}>
-                {item.done ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20,6 9,17 4,12"/></svg> : item.icon}
-              </div>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:"var(--text)", fontFamily:"'Poppins',sans-serif" }}>Step {item.step}: {item.label}</div>
-                <div style={{ fontSize:11, color:"var(--text-3)", marginTop:1 }}>{item.done ? "Completed ✓" : "Tap to start"}</div>
-              </div>
-              <div style={{ fontSize:16, color:"var(--text-3)" }}>›</div>
-            </div>
-          ))}
-          <div style={{ marginTop:12, height:6, background:"var(--border-2)", borderRadius:999, overflow:"hidden" }}>
-            <div style={{ height:"100%", borderRadius:999, background:"linear-gradient(90deg,#2563EB,#22C55E)", transition:"width 1s ease",
-              width:`${Math.round((((dailyUsage.vocabulary||0)>0?1:0)+((dailyUsage.pronunciation||0)>0?1:0)+((dailyUsage.aiChat||0)>0?1:0))/3*100)}%` }} />
-          </div>
-          <div style={{ fontSize:11, color:"var(--text-3)", marginTop:6, textAlign:"right" }}>
-            {Math.round((((dailyUsage.vocabulary||0)>0?1:0)+((dailyUsage.pronunciation||0)>0?1:0)+((dailyUsage.aiChat||0)>0?1:0))/3*100)}% Complete
-          </div>
-        </div>
-      </div>
-
-      {/* ── Daily Goal + Achievements Row ── */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
-        {/* Daily Goal */}
-        <div style={{ background:"var(--surf)", borderRadius:20, border:"1px solid var(--border)", padding:"14px", boxShadow:"var(--shadow-card)" }}>
-          <div style={{ fontSize:12, fontWeight:700, color:"var(--text)", fontFamily:"'Poppins',sans-serif", marginBottom:10 }}>🎯 Daily Goal</div>
-          <div style={{ display:"flex", justifyContent:"center", marginBottom:8 }}>
-            <svg width="64" height="64" viewBox="0 0 64 64">
-              <circle cx="32" cy="32" r="26" fill="none" stroke="var(--border-2)" strokeWidth="6"/>
-              <circle cx="32" cy="32" r="26" fill="none" stroke="#2563EB" strokeWidth="6"
-                strokeDasharray={`${Math.min(100,(dailyUsage.pronunciation||0)/5*100) * 1.634} 163.4`}
-                strokeLinecap="round" transform="rotate(-90 32 32)" style={{transition:"stroke-dasharray 1s ease"}}/>
-              <text x="32" y="37" textAnchor="middle" fontSize="14" fontWeight="700" fill="var(--text)">{dailyUsage.pronunciation||0}/5</text>
-            </svg>
-          </div>
-          <div style={{ fontSize:11, color:"var(--text-3)", textAlign:"center" }}>Speaking sessions</div>
-        </div>
-
-        {/* Achievements */}
-        <div style={{ background:"var(--surf)", borderRadius:20, border:"1px solid var(--border)", padding:"14px", boxShadow:"var(--shadow-card)" }}>
-          <div style={{ fontSize:12, fontWeight:700, color:"var(--text)", fontFamily:"'Poppins',sans-serif", marginBottom:10 }}>🏆 Achievements</div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-            {[
-              { svg:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>, label:"First Lesson", done: user.xp>0, color:"#F59E0B" },
-              { svg:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"/></svg>, label:"3-Day Streak", done: user.streak>=3, color:"#EF4444" },
-              { svg:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>, label:"Vocab Master", done: user.xp>=100, color:"#22C55E" },
-              { svg:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/></svg>, label:"Speaker", done: (dailyUsage.pronunciation||0)>=3, color:"#2563EB" },
-            ].map(a => (
-              <div key={a.label} style={{ textAlign:"center", opacity: a.done ? 1 : 0.35, transition:"opacity .3s" }}>
-                <div style={{ width:36, height:36, borderRadius:12, background: a.done ? `${a.color}20` : "var(--surf-2)", border: a.done ? `1.5px solid ${a.color}40` : "1.5px solid var(--border)", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 4px", color: a.done ? a.color : "var(--text-3)" }}>
-                  {a.svg}
-                </div>
-                <div style={{ fontSize:9, color: a.done ? "var(--text)" : "var(--text-3)", fontWeight: a.done ? 600 : 400, lineHeight:1.2 }}>{a.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Weekly Progress ── */}
-      <div style={{ background:"var(--surf)", borderRadius:20, border:"1px solid var(--border)", padding:"16px", marginBottom:16, boxShadow:"var(--shadow-card)" }}>
-        <div style={{ fontFamily:"'Poppins',sans-serif", fontSize:14, fontWeight:700, color:"var(--text)", marginBottom:14 }}>📊 Weekly Progress</div>
-        <div style={{ display:"flex", alignItems:"flex-end", gap:6, height:70 }}>
-          {[
-            {day:"Mon",h:20},{day:"Tue",h:35},{day:"Wed",h:28},{day:"Thu",h:45},
-            {day:"Fri",h:30},{day:"Sat",h:15},{day:"Sun",h:0}
-          ].map((item, i) => {
-            const today = new Date().getDay();
-            const dayMap = {0:6,1:0,2:1,3:2,4:3,5:4,6:5};
-            const isToday = dayMap[today] === i;
-            const barH = isToday ? Math.max(16, Math.min(60, user.xp || 20)) : item.h;
-            return (
-              <div key={item.day} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:5 }}>
-                <div style={{ width:"100%", borderRadius:8,
-                  background: isToday ? "linear-gradient(180deg,#2563EB,#4F46E5)" : i < dayMap[today] ? "linear-gradient(180deg,#22C55E80,#22C55E40)" : "var(--border-2)",
-                  height:`${barH}px`, minHeight:8,
-                  transition:"height .8s cubic-bezier(.4,0,.2,1)",
-                  boxShadow: isToday ? "0 4px 12px rgba(37,99,235,.35)" : "none" }} />
-                <div style={{ fontSize:9, color: isToday ? "#2563EB" : "var(--text-3)", fontWeight: isToday ? 700 : 400 }}>{item.day}</div>
-              </div>
-            );
-          })}
-        </div>
       </div>
 
       {/* Word of the Day */}
@@ -7269,7 +3628,7 @@ const AIFeedbackCard = memo(function AIFeedbackCard({ feedback, target, onRetry,
             </div>
           )}
           <div style={{ display:"flex", gap:5 }}>
-            {tts && target && <button onClick={() => { if(tts.speaking){tts.stop();}else{ const s=window.speechSynthesis; if(s){try{s.cancel();}catch(_){}} window._safeSpeak(target, settings?.accent||"en-US", 0.88, settings?.voice||state?.settings?.voice||"female"); } }} style={{ width:32,height:32,borderRadius:10,background:tts.speaking?"var(--red-soft)":"var(--accent-soft)",border:tts.speaking?"1px solid var(--red-border)":"1px solid var(--accent-border)",cursor:"pointer",fontSize:14,color:tts.speaking?"var(--red)":"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center" }}>{tts.speaking?"⏹":"🔊"}</button>}
+            {tts && target && <button onClick={() => { if(tts.speaking){tts.stop();}else{const s=window.speechSynthesis;if(s){try{s.cancel();}catch(_){}}setTimeout(()=>tts.speak(target,{lang:settings?.accent||"en-US",rate:.88}),80);} }} style={{ width:32,height:32,borderRadius:10,background:tts.speaking?"var(--red-soft)":"var(--accent-soft)",border:tts.speaking?"1px solid var(--red-border)":"1px solid var(--accent-border)",cursor:"pointer",fontSize:14,color:tts.speaking?"var(--red)":"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center" }}>{tts.speaking?"⏹":"🔊"}</button>}
             {onRetry && <button onClick={onRetry} style={{ width:32,height:32,borderRadius:10,background:"var(--surf-2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:13,color:"var(--text-2)",display:"flex",alignItems:"center",justifyContent:"center" }}>🔄</button>}
           </div>
         </div>
@@ -7331,7 +3690,7 @@ const AIFeedbackCard = memo(function AIFeedbackCard({ feedback, target, onRetry,
             <div style={{ fontSize:9, fontWeight:800, color:"var(--accent)", textTransform:"uppercase", letterSpacing:".06em", marginBottom:3 }}>🌟 Native Version</div>
             <div style={{ fontSize:12, color:"var(--text)", fontStyle:"italic", lineHeight:1.5 }}>"{naturalVersion}"</div>
           </div>
-          <button onClick={() => { if(tts.speaking){tts.stop();}else{ const s=window.speechSynthesis; if(s){try{s.cancel();}catch(_){}} window._safeSpeak(naturalVersion, settings?.accent||"en-US", 0.9, settings?.voice||state?.settings?.voice||"female"); } }} style={{ flexShrink:0, width:32, height:32, borderRadius:10, background:tts.speaking?"var(--red)":"var(--accent)", border:"none", cursor:"pointer", fontSize:13, color:"#fff", display:"flex", alignItems:"center", justifyContent:"center" }}>{tts.speaking?"⏹":"🔊"}</button>
+          <button onClick={() => { if(tts.speaking){tts.stop();}else{const s=window.speechSynthesis;if(s){try{s.cancel();}catch(_){}}setTimeout(()=>tts?.speak(naturalVersion,{lang:settings?.accent||"en-US",rate:.9}),80);} }} style={{ flexShrink:0, width:32, height:32, borderRadius:10, background:tts.speaking?"var(--red)":"var(--accent)", border:"none", cursor:"pointer", fontSize:13, color:"#fff", display:"flex", alignItems:"center", justifyContent:"center" }}>{tts.speaking?"⏹":"🔊"}</button>
         </div>
       )}
 
@@ -7442,7 +3801,7 @@ const TongueTwisterTab = memo(function TongueTwisterTab({ state, dispatch }) {
               {isAnalysing && <div style={{ display:"flex", justifyContent:"center", alignItems:"center", gap:8, marginBottom:12, padding:"10px", background:"var(--surf-2)", borderRadius:14 }}><div style={{ width:14,height:14,borderRadius:"50%",border:"2px solid var(--border-2)",borderTopColor:"var(--accent)",animation:"spin .7s linear infinite" }} /><span style={{ fontSize:12,color:"var(--text-2)" }}>Analysing...</span></div>}
               {!isDone&&!isAnalysing&&(
                 <div style={{ display:"flex", gap:8 }}>
-                  <button onClick={()=>{tts.speak(tt.text,{lang:state.settings.accent||"en-US",rate:state.settings.speed||0.85, gender:state.settings?.voice||"female"});}} style={{ flex:1,padding:"10px",borderRadius:14,background:"var(--surf-2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:12,fontWeight:700,color:"var(--text-2)",display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>🔊 Listen</button>
+                  <button onClick={()=>{const s=window.speechSynthesis;if(s){try{s.cancel();}catch(_){}}setTimeout(()=>tts.speak(tt.text,{lang:state.settings.accent||"en-US",rate:state.settings.speed||0.85}),80);}} style={{ flex:1,padding:"10px",borderRadius:14,background:"var(--surf-2)",border:"1px solid var(--border)",cursor:"pointer",fontSize:12,fontWeight:700,color:"var(--text-2)",display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}>🔊 Listen</button>
                   {!isRecording
                     ? <button onClick={()=>startRecord(tt)} style={{ flex:2,padding:"10px",borderRadius:14,background:"linear-gradient(135deg,var(--accent),var(--blue))",border:"none",cursor:"pointer",fontSize:12,fontWeight:700,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:5,boxShadow:"0 4px 14px rgba(108,92,231,.35)" }}>🎙 Speak</button>
                     : <button onClick={()=>stopRecord(tt)} style={{ flex:2,padding:"10px",borderRadius:14,background:"linear-gradient(135deg,var(--red),#DC2626)",border:"none",cursor:"pointer",fontSize:12,fontWeight:700,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:5,animation:"recPulse 1.5s ease infinite" }}>⏹ Stop</button>
@@ -7504,7 +3863,7 @@ const ShadowingMode = memo(function ShadowingMode({ state, dispatch }) {
     if(!isPro){dispatch({type:"SET_SCREEN",payload:"upgrade"});return;}
     setPhase("countdown"); setCountdown(3); setFeedback(null); stt.reset(); setDayComplete(false);
     let c=3;
-    const tick=()=>{ c--; setCountdown(c); if(c<=0){setPhase("playing");const synth=window.speechSynthesis;if(synth){try{synth.cancel();}catch(_){}}const s=window.speechSynthesis;if(s){try{s.cancel();}catch(_){}}window._safeSpeak(sentence,state.settings.accent||"en-US",state.settings.speed||0.9,state.settings.voice||"female");}else{ctRef.current=setTimeout(tick,1000);} };
+    const tick=()=>{ c--; setCountdown(c); if(c<=0){setPhase("playing");const synth=window.speechSynthesis;if(synth){try{synth.cancel();}catch(_){}}setTimeout(()=>tts.speak(sentence,{lang:state.settings.accent||"en-US",rate:state.settings.speed||0.9}),80);}else{ctRef.current=setTimeout(tick,1000);} };
     ctRef.current=setTimeout(tick,1000);
   },[isPro,sentence,tts,stt,state.settings,dispatch]);
 
@@ -7712,7 +4071,7 @@ const TransformTab = memo(function TransformTab({ state, dispatch }) {
       <div style={{ padding:"16px",background:`${current.col}10`,border:`1.5px solid ${current.col}30`,borderRadius:20,marginBottom:14 }}>
         <div style={{ fontSize:10,fontWeight:800,color:current.col,textTransform:"uppercase",letterSpacing:".08em",marginBottom:6 }}>{current.label}</div>
         <div style={{ fontFamily:"'Poppins',sans-serif",fontSize:17,fontWeight:700,color:"var(--text)",marginBottom:10 }}>{current.text}</div>
-        <button onClick={()=>{tts.speak(current.text,{lang:state.settings.accent||"en-US",rate:state.settings.speed||0.88, gender:state.settings?.voice||"female"});}} style={{ padding:"6px 14px",borderRadius:20,background:current.col,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,color:"#fff" }}>🔊 Listen</button>
+        <button onClick={()=>{const s=window.speechSynthesis;if(s){try{s.cancel();}catch(_){}}setTimeout(()=>tts.speak(current.text,{lang:state.settings.accent||"en-US",rate:state.settings.speed||0.88}),80);}} style={{ padding:"6px 14px",borderRadius:20,background:current.col,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,color:"#fff" }}>🔊 Listen</button>
       </div>
       {phase!=="done"&&<div style={{ display:"flex",gap:10,marginBottom:12 }}>{phase!=="recording"?<button onClick={startSpeak} style={{ flex:1,padding:"13px",borderRadius:16,background:"linear-gradient(135deg,var(--accent),var(--blue))",border:"none",cursor:"pointer",fontSize:13,fontWeight:700,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>🎙 Speak the {current.label.replace(/[+−?!⟹]/g,"").trim()}</button>:<button onClick={stopSpeak} style={{ flex:1,padding:"13px",borderRadius:16,background:"linear-gradient(135deg,var(--red),#DC2626)",border:"none",cursor:"pointer",fontSize:13,fontWeight:700,color:"#fff",animation:"recPulse 1.5s ease infinite",display:"flex",alignItems:"center",justifyContent:"center",gap:6 }}>⏹ Stop</button>}</div>}
       {phase==="recording"&&<div style={{ display:"flex",justifyContent:"center",marginBottom:12 }}><WaveformBars active bars={9} color="var(--red)" height={30} /></div>}
@@ -7776,7 +4135,7 @@ const GrammarExercisesTab = memo(function GrammarExercisesTab({ state, dispatch 
     <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:16 }}>
       <button onClick={()=>setTopic(null)} style={{ width:34,height:34,borderRadius:12,background:"var(--surf-2)",border:"1px solid var(--border)",cursor:"pointer",color:"var(--text-2)",display:"flex",alignItems:"center",justifyContent:"center" }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15,18 9,12 15,6"/></svg></button>
       <div style={{ flex:1 }}><div style={{ fontFamily:"'Poppins',sans-serif",fontSize:14,fontWeight:700,color:"var(--text)" }}>{topic}</div><div style={{ fontSize:11,color:"var(--text-3)" }}>Question {current+1} of {qs.length}</div></div>
-      <button onClick={()=>{const s=window.speechSynthesis;if(s){try{s.cancel();}catch(_){}}window._safeSpeak(q.q.replace("___","blank"),state.settings.accent||"en-US",.88,state.settings.voice||"female");}} style={{ background:"none",border:"none",cursor:"pointer",fontSize:20,color:"var(--accent)" }}>🔊</button>
+      <button onClick={()=>{const s=window.speechSynthesis;if(s){try{s.cancel();}catch(_){}}setTimeout(()=>tts.speak(q.q.replace("___","blank"),{lang:state.settings.accent||"en-US",rate:.88}),80);}} style={{ background:"none",border:"none",cursor:"pointer",fontSize:20,color:"var(--accent)" }}>🔊</button>
     </div>
     <div style={{ height:5,background:"var(--border-2)",borderRadius:999,overflow:"hidden",marginBottom:20 }}><div style={{ height:"100%",width:`${(current/qs.length)*100}%`,background:"linear-gradient(90deg,var(--accent),var(--blue))",borderRadius:999,transition:"width .4s" }} /></div>
     <div style={{ padding:"20px",background:"var(--surf)",border:"1px solid var(--border)",borderRadius:20,marginBottom:14,boxShadow:"var(--shadow-card)" }}>
@@ -9071,7 +5430,7 @@ const PictureSpeaking = memo(function PictureSpeaking({ state, dispatch }) {
               <div style={{ fontSize:14, color:"var(--text)", lineHeight:1.7, marginBottom:10 }}>
                 "{feedback.betterSentence}"
               </div>
-              <button onClick={() => tts.speak(feedback.betterSentence, { lang:state.settings.accent, rate:0.88, gender:state.settings.voice||"female" })}
+              <button onClick={() => tts.speak(feedback.betterSentence, { lang:state.settings.accent, rate:0.88 })}
                 style={{ display:"flex", gap:6, alignItems:"center", background:"var(--accent-soft)",
                   border:"none", cursor:"pointer", padding:"6px 14px", borderRadius:20,
                   fontSize:12, fontWeight:700, color:"var(--accent)" }}>
@@ -9274,7 +5633,7 @@ const Conversation = memo(function Conversation({ state, dispatch }) {
                   <span style={{ fontSize: 11, color: "var(--text-3)" }}>{line.note}</span>
                 )}
                 <button
-                  onClick={() => tts.speak(line.text, { lang: state.settings.accent, gender:state.settings.voice||"female" })}
+                  onClick={() => tts.speak(line.text, { lang: state.settings.accent })}
                   style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--accent)", padding: 0 }}
                 >
                   🔊
@@ -9297,7 +5656,7 @@ const Conversation = memo(function Conversation({ state, dispatch }) {
 /* ═══ Vocabulary.jsx ═══ */
 const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
   const isPro    = isActivePro(state.user);
-  const FREE_VOCAB_LIMIT = 200; // will be overridden below
+  const FREE_VOCAB_LIMIT = 200; // free users see 200 words per level
 
   const [level,      setLevel]     = useState(state.user.level.slice(0, 2) || "B1");
   const [words,      setWords]     = useState([]);
@@ -9308,29 +5667,27 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
   const [genMsg,     setGenMsg]    = useState("");
   const [txCache,    setTxCache]   = useState({});
   const [txLoading,  setTxLoading] = useState({});
-  const [favourites, setFavourites]= useState(() => { try { return JSON.parse(localStorage.getItem("ep_favourites")||"[]"); } catch { return []; } });
-  const [memoTips,   setMemoTips]  = useState({});
-  const [listView,   setListView]  = useState(false);
-  const [showFavs,   setShowFavs]  = useState(false);
-  const [loadingTip, setLoadingTip]= useState({});
   const tts = useTTS();
-  const STORAGE_KEY = `ep_vocab_v2_${level}`;
+  const STORAGE_KEY = `ep_vocab_${level}`;
   const currentLang = state.settings.lang || "ml";
 
   // Reset translation cache when language changes
   useEffect(() => {
     setTxCache({});
     setFlip(null);
-    setMemoTips({});
   }, [currentLang]);
 
   // Load from storage or seeds
   useEffect(() => {
     setFlip(null); setSearch(""); setPosFilter("All");
     (async () => {
-      // Always use seed words - no old cache
+      try {
+        const stored = await window.storage?.get(STORAGE_KEY);
+        if (stored?.value) { setWords(JSON.parse(stored.value)); return; }
+      } catch {}
       const seed = VOCAB[level] || [];
       setWords(seed);
+      try { await window.storage?.set(STORAGE_KEY, JSON.stringify(seed)); } catch {}
     })();
   }, [level]);
 
@@ -9367,60 +5724,6 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
     }
   }, [flip, currentLang]);
 
-  // Toggle favourite
-  const toggleFavourite = useCallback(async (word) => {
-    setFavourites(prev => {
-      const next = prev.includes(word) ? prev.filter(w => w !== word) : [...prev, word];
-      localStorage.setItem("ep_favourites", JSON.stringify(next));
-      return next;
-    });
-    // Sync to Supabase
-    const userId = state.user?.id || localStorage.getItem("ep_user_id") || "guest";
-    const isFav = favourites.includes(word);
-    if (!isFav) {
-      await sbInsert("user_favourites", { user_id: userId, word });
-    } else {
-      try {
-        await fetch(`${SB_URL}/rest/v1/user_favourites?user_id=eq.${userId}&word=eq.${encodeURIComponent(word)}`, {
-          method: "DELETE",
-          headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
-        });
-      } catch {}
-    }
-  }, [favourites, state.user]);
-
-  // Fetch AI memory tip
-  const fetchMemoTip = useCallback(async (word, meaning) => {
-    if (memoTips[word] || loadingTip[word]) return;
-    setLoadingTip(prev => ({ ...prev, [word]: true }));
-    try {
-      // Check Supabase cache first - no API cost!
-      const cached = await sbGet("memory_tips_cache", { word });
-      if (cached?.tip) {
-        setMemoTips(prev => ({ ...prev, [word]: cached.tip }));
-        setLoadingTip(prev => ({ ...prev, [word]: false }));
-        return;
-      }
-      // Call API if not cached
-      const res = await fetch("/api/ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          max_tokens: 120,
-          messages: [{ role: "user", content: `Give ONE very short clever memory trick (max 15 words) to remember the English word "${word}" (${meaning}). Only the tip, no intro.` }]
-        })
-      });
-      const data = await res.json();
-      const tip = data?.content?.[0]?.text?.trim() || "";
-      if (tip) {
-        setMemoTips(prev => ({ ...prev, [word]: tip }));
-        // Save to Supabase cache for future users!
-        await sbInsert("memory_tips_cache", { word, tip });
-      }
-    } catch {}
-    setLoadingTip(prev => ({ ...prev, [word]: false }));
-  }, [memoTips, loadingTip]);
-
   // AI: add 50 more words - Pro only
   const loadMore = useCallback(async () => {
     if (!isPro) {
@@ -9435,6 +5738,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
     if (newWords.length) {
       const merged = [...words, ...newWords];
       setWords(merged);
+      try { await window.storage?.set(STORAGE_KEY, JSON.stringify(merged)); } catch {}
       setGenMsg(`v Added ${newWords.length} words! Total: ${merged.length}`);
       dispatch({ type: "ADD_XP", payload: 15 });
     } else {
@@ -9444,24 +5748,21 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
     setTimeout(() => setGenMsg(""), 3500);
   }, [isPro, level, words, dispatch]);
 
-  const unlockedPool = useMemo(() => isPro ? words : words.slice(0, level==="A1"?100:50), [words, isPro, level]);
-  const allPos  = useMemo(() => ["All", ...[...new Set(unlockedPool.map(w => w.pos).filter(Boolean))]], [unlockedPool]);
+  const allPos  = useMemo(() => ["All", ...[...new Set(words.map(w => w.pos))]], [words]);
   const filtered = useMemo(() => {
-    // Free users: only ever browse within their unlocked word pool for this level
-    const pool = (isPro || showFavs) ? words : words.slice(0, level==="A1"?100:50);
-    return pool.filter(w => {
+    const base = words.filter(w => {
       const q = search.toLowerCase();
       const matchQ = !q || w.word.includes(q) || w.meaning.toLowerCase().includes(q);
       const matchP = posFilter === "All" || w.pos === posFilter;
-      const matchF = !showFavs || favourites.includes(w.word);
-      return matchQ && matchP && matchF;
+      return matchQ && matchP;
     });
-  }, [words, search, posFilter, isPro, showFavs, favourites, level]);
+    // Free users: show max 200 words
+    return isPro ? base : base.slice(0, FREE_VOCAB_LIMIT);
+  }, [words, search, posFilter, isPro]);
 
-  const LANG_NAMES = { ml:"Malayalam",hi:"Hindi",ta:"Tamil",te:"Telugu",ar:"Arabic",fr:"French",de:"German",es:"Spanish",zh:"Chinese",ja:"Japanese",ko:"Korean",pt:"Portuguese",id:"Indonesian",vi:"Vietnamese",tr:"Turkish",it:"Italian",bn:"Bengali",ur:"Urdu",th:"Thai",en:"English" };
+  const LANG_NAMES = { ml:"Malayalam",hi:"Hindi",ta:"Tamil",te:"Telugu",ar:"Arabic",fr:"French",de:"German",es:"Spanish",zh:"Chinese",ja:"Japanese",ko:"Korean",pt:"Portuguese" };
 
-  const freeLimit = level==="A1" ? 100 : 50;
-  const pct = Math.min(100, Math.round((words.length / 800) * 100));
+  const pct = Math.min(100, Math.round((words.length / 1500) * 100));
 
   return (
     <div style={{ padding: "16px", maxWidth: 680, margin: "0 auto", animation: "fadeUp .3s ease" }}>
@@ -9483,7 +5784,7 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
       <Card padding="14px 16px" style={{ marginBottom:16 }}>
         <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
           <span style={{ fontSize:12, fontWeight:600, color:"var(--text)", fontFamily:"'Poppins',sans-serif" }}>📚 Word Bank Progress</span>
-          <span style={{ fontSize:12, fontWeight:700, color:LEVEL_COLORS[level]||"var(--accent)" }}>{Math.min(words.length, 800)} / 800</span>
+          <span style={{ fontSize:12, fontWeight:700, color:LEVEL_COLORS[level]||"var(--accent)" }}>{words.length} / 1500</span>
         </div>
         <div style={{ height:8, background:"var(--border-2)", borderRadius:999, overflow:"hidden" }}>
           <div style={{ height:"100%", width:`${pct}%`, background:LEVEL_COLORS[level]||"var(--accent)", borderRadius:999, transition:"width .7s cubic-bezier(.4,0,.2,1)", boxShadow:`0 0 8px ${LEVEL_COLORS[level]||"var(--accent)"}60` }} />
@@ -9504,18 +5805,10 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
             {l}
           </button>
         ))}
-        <button onClick={()=>setListView(v=>!v)} title={listView?"Card view":"List view"}
-          style={{ width:38, height:38, borderRadius:14, border:"1px solid var(--border)", background:listView?"var(--accent)":"var(--surf-2)", color:listView?"#fff":"var(--text-2)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-          {listView ? (
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-          ) : (
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-          )}
-        </button>
-        <button onClick={()=>setShowFavs(v=>!v)} title={showFavs?"Showing saved":"Show saved words"}
-          style={{ width:38, height:38, borderRadius:14, border:"1px solid var(--border)", background:showFavs?"var(--red)":"var(--surf-2)", color:showFavs?"#fff":"var(--text-2)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-          <svg width="17" height="17" viewBox="0 0 24 24" fill={showFavs?"currentColor":"none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-        </button>
+        <Button variant={isPro?"secondary":"primary"} size="sm" icon={isPro?"⚡":"🔒"} loading={generating} onClick={loadMore} disabled={generating}
+          style={{ borderRadius:16, whiteSpace:"nowrap", fontSize:11 }}>
+          {isPro ? (generating ? "..." : "+AI") : "AI+"}
+        </Button>
       </div>
 
       {/* Free limit banner */}
@@ -9523,8 +5816,8 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
         <div onClick={()=>dispatch({type:"SET_SCREEN",payload:"upgrade"})}
           style={{ marginBottom:14, padding:"13px 16px", background:"linear-gradient(135deg,#6C5CE7,#4DA3FF)", borderRadius:20, display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer", boxShadow:"0 6px 20px rgba(108,92,231,.3)" }}>
           <div>
-            <div style={{ fontSize:13, fontWeight:700, color:"#fff", fontFamily:"'Poppins',sans-serif" }}>📚 {Math.min(words.length, level==="A1"?100:50)} / {level==="A1"?100:50} words this level (Free)</div>
-            <div style={{ fontSize:11, color:"rgba(255,255,255,.8)", marginTop:2 }}>Upgrade for 800 words per level & AI generation</div>
+            <div style={{ fontSize:13, fontWeight:700, color:"#fff", fontFamily:"'Poppins',sans-serif" }}>📚 {Math.min(words.length, FREE_VOCAB_LIMIT)} / 200 words (Free)</div>
+            <div style={{ fontSize:11, color:"rgba(255,255,255,.8)", marginTop:2 }}>Upgrade for 1500+ words & AI generation</div>
           </div>
           <span style={{ fontSize:11, fontWeight:700, color:"#fff", background:"rgba(255,255,255,.2)", padding:"5px 12px", borderRadius:999, backdropFilter:"blur(4px)" }}>⭐ Pro</span>
         </div>
@@ -9559,54 +5852,9 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
         Showing <strong style={{ color:"var(--accent)" }}>{filtered.length}</strong> words
       </div>
 
-      {/* List or Flip-card view */}
-      {listView ? (
-        <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-          {filtered.slice(0, isPro || showFavs ? filtered.length : (level==="A1"?100:50)).map((w, i) => {
-            const isFlipped = flip === i;
-            const cacheKey = `${currentLang}:${w.word}`;
-            const translationText = currentLang === "ml" ? w.translation : (txCache[cacheKey] ?? w.translation);
-            const isLoadingTx = !!txLoading[w.word];
-            return (
-              <div key={`${w.word}-${i}`} onClick={() => {
-                  const newFlip = isFlipped ? null : i;
-                  setFlip(newFlip);
-                  if (newFlip !== null && currentLang !== "ml") getTranslation(w.word, w.translation);
-                }}
-                style={{ background:"var(--surf)", border:"1px solid var(--border)", borderRadius:12, padding:"8px 12px", cursor:"pointer", animation:`fadeUp .15s ease ${Math.min(i*0.01,0.25)}s both` }}>
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-                      <span style={{ fontWeight:800, fontSize:13.5, color:"var(--text)" }}>{w.word}</span>
-                      {w.pos && <span style={{ fontSize:9.5, color:"var(--text-3)", background:"var(--surf-2)", padding:"1.5px 6px",borderRadius:999 }}>{w.pos}</span>}
-                    </div>
-                    {isFlipped && (
-                      <div style={{ marginTop:3 }}>
-                        <div style={{ fontSize:11.5, color:"var(--text-2)", lineHeight:1.4 }}>{w.meaning}</div>
-                        <div style={{ fontSize:11.5, color:"var(--accent)", lineHeight:1.4, marginTop:1 }}>
-                          {isLoadingTx ? "..." : translationText}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ display:"flex", gap:5, flexShrink:0 }}>
-                    <button onClick={e => { e.stopPropagation(); toggleFavourite(w.word); }}
-                      style={{ width:26, height:26, borderRadius:9, border:"none", background:"transparent", cursor:"pointer", fontSize:13 }}>
-                      {favourites.includes(w.word) ? "❤️" : "🤍"}
-                    </button>
-                    <button onClick={e => { e.stopPropagation(); tts.speak(`${w.word}. ${w.meaning}.`, { lang: state.settings.accent, rate: 0.88, gender:state.settings.voice||"female" }); }}
-                      style={{ width:26, height:26, borderRadius:9, border:"none", background:"var(--accent-soft)", cursor:"pointer", fontSize:11 }}>
-                      🔊
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
+      {/* Flip cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }}>
-        {filtered.slice(0, isPro || showFavs ? filtered.length : (level==="A1"?100:50)).map((w, i) => {
+        {filtered.slice(0, isPro ? 200 : 100).map((w, i) => {
           const cacheKey = `${currentLang}:${w.word}`;
           const translationText = currentLang === "ml"
             ? w.translation
@@ -9624,39 +5872,23 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
             isLoadingTx={isLoadingTx}
             tts={tts}
             settings={state.settings}
-            isFav={favourites.includes(w.word)}
-            memoTip={memoTips[w.word] || ""}
-            loadingTip={!!loadingTip[w.word]}
             onFlip={() => {
               const newFlip = isFlipped ? null : i;
               setFlip(newFlip);
-              if (newFlip !== null) {
-                if (currentLang !== "ml") getTranslation(w.word, w.translation);
-                fetchMemoTip(w.word, w.meaning);
-              }
+              if (newFlip !== null && currentLang !== "ml") getTranslation(w.word, w.translation);
             }}
-            onSpeak={e => { e.stopPropagation(); tts.speak(`${w.word}. ${w.meaning}.`, { lang: state.settings.accent, rate: 0.88, gender:state.settings.voice||"female" }); }}
-            onFav={e => { e.stopPropagation(); toggleFavourite(w.word); }}
+            onSpeak={e => { e.stopPropagation(); tts.speak(`${w.word}. ${w.meaning}.`, { lang: state.settings.accent, rate: 0.88 }); }}
           />
           );
         })}
       </div>
-
-      )}
 
       {filtered.length > (isPro ? 200 : 100) && (
         <div style={{ textAlign: "center", padding: 16, fontSize: 12, color: "var(--text-3)" }}>
           Showing {isPro ? 200 : 100} of {filtered.length}. Narrow your search to see more.
         </div>
       )}
-      {filtered.length === 0 && showFavs && (
-        <div style={{ textAlign: "center", padding: 40, color: "var(--text-3)", fontSize: 14 }}>
-          <div style={{ fontSize:38, marginBottom:10 }}>🤍</div>
-          <div style={{ fontWeight:700, marginBottom:4, color:"var(--text-2)" }}>No saved words yet</div>
-          <div>Tap the heart icon on any word to save it here</div>
-        </div>
-      )}
-      {filtered.length === 0 && !showFavs && (
+      {filtered.length === 0 && (
         <div style={{ textAlign: "center", padding: 40, color: "var(--text-3)", fontSize: 14 }}>
           No words found for "{search}"
         </div>
@@ -9666,34 +5898,26 @@ const Vocabulary = memo(function Vocabulary({ state, dispatch }) {
 });
 
 /* ── VocabCard - memoized so only the flipped card re-renders ── */
-const VocabCard = memo(function VocabCard({ w, i, isFlipped, translationText, isLoadingTx, tts, settings, onFlip, onSpeak, isFav, onFav, memoTip, loadingTip }) {
+const VocabCard = memo(function VocabCard({ w, i, isFlipped, translationText, isLoadingTx, tts, settings, onFlip, onSpeak }) {
   return (
-    <div onClick={onFlip} style={{ cursor:"pointer", perspective:900, minHeight:148, animation:`fadeUp .22s ease ${Math.min(i*0.025,0.4)}s both` }}>
-      <div style={{ position:"relative", minHeight:148, transformStyle:"preserve-3d", transform:isFlipped?"rotateY(180deg)":"none", transition:"transform .45s cubic-bezier(.4,0,.2,1)" }}>
+    <div onClick={onFlip} style={{ cursor:"pointer", perspective:900, height:148, animation:`fadeUp .22s ease ${Math.min(i*0.025,0.4)}s both` }}>
+      <div style={{ position:"relative", height:"100%", transformStyle:"preserve-3d", transform:isFlipped?"rotateY(180deg)":"none", transition:"transform .45s cubic-bezier(.4,0,.2,1)" }}>
 
         {/* ── Front ── */}
         <div style={{ position:"absolute", inset:0, backfaceVisibility:"hidden",
-          background:"var(--surf)", border: isFav ? "1.5px solid #f43f5e" : "1px solid var(--border)", borderRadius:20,
+          background:"var(--surf)", border:"1px solid var(--border)", borderRadius:20,
           padding:"14px 14px 12px", display:"flex", flexDirection:"column", justifyContent:"space-between",
-          boxShadow: isFav ? "0 4px 16px rgba(244,63,94,.15)" : "var(--shadow-card)" }}>
+          boxShadow:"var(--shadow-card)" }}>
           <div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
               <div style={{ fontFamily:"'Poppins',sans-serif", fontSize:19, fontWeight:700, color:"var(--text)", lineHeight:1.2 }}>
                 {w.word}
               </div>
-              <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                <button onClick={onFav} style={{
-                  width:26, height:26, borderRadius:999, border:"none", cursor:"pointer",
-                  background: isFav ? "rgba(244,63,94,.12)" : "var(--surf-2)",
-                  color: isFav ? "#f43f5e" : "var(--text-3)",
-                  display:"flex", alignItems:"center", justifyContent:"center", fontSize:13,
-                  transition:"all .2s", flexShrink:0,
-                }}>{isFav ? "❤️" : "🤍"}</button>
-                <span style={{ fontSize:9, fontWeight:700, padding:"3px 8px", borderRadius:999,
-                  background:"var(--surf-2)", color:"var(--text-3)", border:"1px solid var(--border)", flexShrink:0 }}>
-                  {w.pos}
-                </span>
-              </div>
+              <span style={{ fontSize:9, fontWeight:700, padding:"3px 8px", borderRadius:999,
+                background:"var(--surf-2)", color:"var(--text-3)", border:"1px solid var(--border)",
+                flexShrink:0, marginLeft:6 }}>
+                {w.pos}
+              </span>
             </div>
             {w.ipa && (
               <div style={{ fontSize:11, color:"var(--text-3)", fontFamily:"monospace", letterSpacing:".02em" }}>
@@ -9713,39 +5937,21 @@ const VocabCard = memo(function VocabCard({ w, i, isFlipped, translationText, is
         </div>
 
         {/* ── Back ── */}
-        <div style={{ position:isFlipped?"relative":"absolute", inset:0, backfaceVisibility:"hidden", transform:"rotateY(180deg)",
+        <div style={{ position:"absolute", inset:0, backfaceVisibility:"hidden", transform:"rotateY(180deg)",
           background:"linear-gradient(135deg, var(--accent-soft), var(--blue-soft))",
           border:"1.5px solid var(--accent-border)", borderRadius:20, padding:"13px 14px",
           boxShadow:"0 4px 20px rgba(108,92,231,.12)" }}>
-          {/* Meaning */}
-          <div style={{ fontSize:12, color:"var(--accent)", fontWeight:700, marginBottom:6, lineHeight:1.5 }}>
+          <div style={{ fontSize:11, color:"var(--accent)", fontWeight:700, marginBottom:6, lineHeight:1.5 }}>
             {w.meaning}
           </div>
-
-          {/* Example sentence - prominent */}
-          <div style={{ fontSize:12, color:"var(--text)", fontStyle:"italic", marginBottom:6, lineHeight:1.6,
-            background:"rgba(255,255,255,.5)", borderRadius:10, padding:"6px 10px",
-            border:"1px solid var(--accent-border)", borderLeft:"3px solid var(--accent)" }}>
-            📝 <strong style={{fontStyle:"normal",color:"var(--accent)"}}>Example:</strong> "{w.example}"
+          <div style={{ fontFamily:"'Inter',sans-serif", fontSize:12, color:"var(--text-2)", fontStyle:"italic", marginBottom:8, lineHeight:1.6 }}>
+            "{w.example}"
           </div>
-
-          {/* Translation */}
-          <div style={{ fontSize:12, color:"var(--text)", fontWeight:600, marginBottom:5 }}>
+          <div style={{ fontSize:12, color:"var(--text)", fontWeight:600, display:"flex", alignItems:"center", gap:5 }}>
             {isLoadingTx
               ? <span style={{ color:"var(--text-3)", fontSize:10, fontWeight:400 }}>Translating...</span>
-              : <span style={{ background:"var(--surf)", padding:"3px 10px", borderRadius:999, fontSize:12, border:"1px solid var(--border)" }}>🌐 {translationText}</span>
+              : <span style={{ background:"var(--surf)", padding:"3px 8px", borderRadius:999, fontSize:11, border:"1px solid var(--border)" }}>{translationText}</span>
             }
-          </div>
-
-
-
-          {/* Save button */}
-          <div style={{ display:"flex", justifyContent:"flex-end", marginTop:5 }}>
-            <button onClick={onFav} style={{
-              fontSize:10, padding:"3px 10px", borderRadius:999, border:"none", cursor:"pointer",
-              background: isFav ? "rgba(244,63,94,.15)" : "var(--surf)",
-              color: isFav ? "#f43f5e" : "var(--text-3)", fontWeight:600, transition:"all .2s",
-            }}>{isFav ? "❤️ Saved" : "🤍 Save"}</button>
           </div>
         </div>
       </div>
@@ -9753,127 +5959,28 @@ const VocabCard = memo(function VocabCard({ w, i, isFlipped, translationText, is
   );
 });
 
-/* ── Lightweight Markdown renderer for lesson content ── */
-function markdownToHtml(md) {
-  if (!md) return "";
-  let html = md
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-  // Tables: convert | a | b | rows into HTML tables
-  const lines = html.split("\n");
-  let out = [];
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-    if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i+1])) {
-      // table start
-      const headerCells = line.split("|").map(c => c.trim()).filter(c => c.length);
-      let rows = [];
-      i += 2;
-      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
-        rows.push(lines[i].split("|").map(c => c.trim()).filter((c,idx,arr) => !(idx===0 && c==="") && !(idx===arr.length-1 && c==="")));
-        i++;
-      }
-      let tbl = '<table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px">';
-      tbl += '<thead><tr>' + headerCells.map(h => `<th style="text-align:left;padding:8px 10px;border-bottom:2px solid var(--border);color:var(--accent);font-weight:700">${h}</th>`).join("") + '</tr></thead>';
-      tbl += '<tbody>' + rows.map(r => '<tr>' + r.map(c => `<td style="padding:7px 10px;border-bottom:1px solid var(--border)">${c}</td>`).join("") + '</tr>').join("") + '</tbody></table>';
-      out.push(tbl);
-      continue;
-    }
-    out.push(line);
-    i++;
-  }
-  html = out.join("\n");
-
-  html = html
-    .replace(/^### (.*)$/gm, '<h4 style="font-size:14px;font-weight:700;color:var(--text);margin:14px 0 6px">$1</h4>')
-    .replace(/^## (.*)$/gm, '<h3 style="font-size:16px;font-weight:800;color:var(--accent);margin:18px 0 8px">$1</h3>')
-    .replace(/^# (.*)$/gm, '<h2 style="font-size:19px;font-weight:800;color:var(--text);margin:6px 0 12px">$1</h2>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--text)">$1</strong>')
-    .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>')
-    .replace(/`([^`]+)`/g, '<code style="background:var(--surf-2);padding:2px 6px;border-radius:6px;font-size:12.5px">$1</code>')
-    .replace(/^---$/gm, '<hr style="border:none;border-top:1px solid var(--border);margin:16px 0"/>')
-    .replace(/^✅\s*(.*)$/gm, '<div style="display:flex;gap:8px;align-items:flex-start;margin:4px 0"><span style="color:#22C55E">✅</span><span>$1</span></div>')
-    .replace(/^❌\s*(.*)$/gm, '<div style="display:flex;gap:8px;align-items:flex-start;margin:4px 0"><span style="color:#EF4444">❌</span><span>$1</span></div>')
-    .replace(/^\d+\.\s+(.*)$/gm, '<div style="margin:6px 0;padding-left:4px">$1</div>')
-    .replace(/^-\s+(.*)$/gm, '<div style="margin:4px 0 4px 14px">• $1</div>')
-    .replace(/\n{2,}/g, '</p><p style="margin:10px 0">')
-    .replace(/\n/g, '<br/>');
-
-  return `<div style="margin:0">${html}</div>`;
-}
 /* ═══ Grammar.jsx ═══ */
 const GRAMMAR_LEVELS = ["A1", "A2", "B1", "B2", "C1"];
-const GRAMMAR_MAX_VERSIONS = 5;
+
 const Grammar = memo(function Grammar({ state, dispatch }) {
   const [selected,    setSelected]    = useState(null);
   const [content,     setContent]     = useState("");
   const [loading,     setLoading]     = useState(false);
   const [tab,         setTab]         = useState("A1");
   const [grammarView, setGrammarView] = useState("topics"); // "topics" | "exercises"
-  const [verIdx,      setVerIdx]      = useState(0);
   const tts   = useTTS();
   const isPro = isActivePro(state.user);
-  const loadCachedVersion = async (topic, v) => {
-    try {
-      const row = await sbGet("grammar_cache", { topic: topic.title, level: topic.level, version: v });
-      return row?.content || null;
-    } catch { return null; }
-  };
-  const saveCachedVersion = async (topic, v, text) => {
-    try { await sbInsert("grammar_cache", { topic: topic.title, level: topic.level, version: v, content: text }); } catch {}
-  };
+
   const loadTopic = async (topic) => {
     setSelected(topic);
     setLoading(true);
     setContent("");
-    setVerIdx(0);
     try {
-      const cached = await loadCachedVersion(topic, 1);
-      if (cached) {
-        setContent(cached);
-        setLoading(false);
-        return;
-      }
       const text = await getGrammarLesson(topic.title, topic.level);
-      if (text) {
-        setContent(text);
-        await saveCachedVersion(topic, 1, text);
-      } else {
-        setContent("Could not load this lesson. Please try again.");
-      }
+      setContent(text || "Could not load this lesson. Please try again.");
     } catch {
       setContent("Network error. Please check your connection.");
     }
-    setLoading(false);
-  };
-  const regenerate = async () => {
-    if (!selected) return;
-    setLoading(true);
-    try {
-      const nextV = verIdx + 1;
-      if (nextV < GRAMMAR_MAX_VERSIONS) {
-        const cached = await loadCachedVersion(selected, nextV + 1);
-        if (cached) {
-          setContent(cached);
-          setVerIdx(nextV);
-        } else {
-          const text = await getGrammarLesson(selected.title, selected.level);
-          if (text) {
-            setContent(text);
-            await saveCachedVersion(selected, nextV + 1, text);
-            setVerIdx(nextV);
-          }
-        }
-      } else {
-        const cycleV = (verIdx % GRAMMAR_MAX_VERSIONS) + 1;
-        const cached = await loadCachedVersion(selected, cycleV);
-        if (cached) {
-          setContent(cached);
-          setVerIdx(verIdx + 1);
-        }
-      }
-    } catch {}
     setLoading(false);
   };
 
@@ -10044,14 +6151,15 @@ const Grammar = memo(function Grammar({ state, dispatch }) {
               Loading AI lesson...
             </div>
           ) : (
-            <div style={{ fontSize: 14, lineHeight: 1.9, color: "var(--text)" }}
-              dangerouslySetInnerHTML={{ __html: markdownToHtml(content) }} />
+            <div style={{ fontSize: 14, lineHeight: 1.9, color: "var(--text)", whiteSpace: "pre-wrap" }}>
+              {content}
+            </div>
           )}
         </Card>
       )}
 
       {!loading && content && (
-        <Button variant="secondary" onClick={regenerate} style={{ marginTop: 10 }}>
+        <Button variant="secondary" onClick={() => loadTopic(selected)} style={{ marginTop: 10 }}>
           🔄 Regenerate
         </Button>
       )}
@@ -10075,7 +6183,7 @@ const Dictionary = memo(function Dictionary({ state, dispatch }) {
   });
   const tts = useTTS();
 
-  const LANG_MAP = { ml:"Malayalam",hi:"Hindi",ta:"Tamil",te:"Telugu",ar:"Arabic",fr:"French",de:"German",es:"Spanish",zh:"Chinese",ja:"Japanese",ko:"Korean",pt:"Portuguese",id:"Indonesian",vi:"Vietnamese",tr:"Turkish",it:"Italian",bn:"Bengali",ur:"Urdu",th:"Thai",en:"English" };
+  const LANG_MAP = { ml:"Malayalam",hi:"Hindi",ta:"Tamil",ar:"Arabic",fr:"French",de:"German",es:"Spanish",zh:"Chinese",ja:"Japanese",ko:"Korean" };
 
   const search = async (word) => {
     const q = (word || query).trim().toLowerCase();
@@ -10184,7 +6292,7 @@ const Dictionary = memo(function Dictionary({ state, dispatch }) {
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button
-                  onClick={() => tts.speak(result.word, { lang: state.settings.accent, rate: 0.88, gender:state.settings.voice||"female" })}
+                  onClick={() => tts.speak(result.word, { lang: state.settings.accent, rate: 0.88 })}
                   style={{ width: 40, height: 40, borderRadius: 12, background: "var(--accent-soft)", border: "1px solid var(--accent-border)", cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" }}
                 >
                   {tts.speaking ? <div style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid var(--accent)", borderTopColor: "transparent", animation: "spin .7s linear infinite" }} /> : "🔊"}
@@ -10234,7 +6342,7 @@ const Dictionary = memo(function Dictionary({ state, dispatch }) {
                     <span style={{ color: "var(--accent)", flexShrink: 0, marginTop: 1 }}>{'>'}</span>
                     <span style={{ fontSize: 13, color: "var(--text-2)", fontStyle: "italic", flex: 1 }}>"{ex}"</span>
                     <button
-                      onClick={() => tts.speak(ex, { lang: state.settings.accent, rate: 0.88, gender:state.settings.voice||"female" })}
+                      onClick={() => tts.speak(ex, { lang: state.settings.accent, rate: 0.88 })}
                       style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--text-3)", flexShrink: 0 }}
                     >🔊</button>
                   </div>
@@ -10598,15 +6706,13 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
   const [messages,  setMessages]  = useState([]);
   const [input,     setInput]     = useState("");
   const [loading,   setLoading]   = useState(false);
-  const [showModes,   setShowModes]   = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [histSearch,  setHistSearch]  = useState("");
-  const [voiceMode,   setVoiceMode]   = useState(false); // ChatGPT voice chat toggle
+  const [showModes, setShowModes] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false); // ChatGPT voice chat toggle
   const [voiceGender, setVoiceGender] = useState(state.settings.voice || "female");
 
   const tts        = useTTS();
   // Auto STT language from user settings
-  const sttLangMap = { ml:"ml-IN", hi:"hi-IN", ta:"ta-IN", te:"te-IN", ar:"ar-SA", fr:"fr-FR", de:"de-DE", es:"es-ES", zh:"zh-CN", ja:"ja-JP", tl:"fil-PH", ko:"ko-KR", pt:"pt-BR", id:"id-ID", vi:"vi-VN", tr:"tr-TR", it:"it-IT", bn:"bn-BD", ur:"ur-PK", th:"th-TH", en:"en-US" };
+  const sttLangMap = { ml:"ml-IN", hi:"hi-IN", ta:"ta-IN", te:"te-IN", ar:"ar-SA", fr:"fr-FR", de:"de-DE", es:"es-ES", zh:"zh-CN", ja:"ja-JP", tl:"fil-PH" };
   const sttLang    = sttLangMap[state.settings.lang] || state.settings.accent || "en-US";
   const sttEn      = useSTT({ lang: sttLang });
   const sttNative  = useSTT({ lang: sttLang });
@@ -10707,34 +6813,12 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
 
   // Init welcome on mode change
   useEffect(() => {
-    const welcomeMsg = {
+    setMessages([{
       id:      "welcome",
       role:    "assistant",
       content: modeData.welcome(state.user.level),
-    };
-    const proUser = isActivePro(state.user);
-    if (!proUser) {
-      setMessages([welcomeMsg]);
-      return;
-    }
-    try {
-      const saved = JSON.parse(localStorage.getItem(`ep_ai_chat_${mode}`) || "null");
-      if (saved && Array.isArray(saved) && saved.length > 0) {
-        setMessages(saved);
-      } else {
-        setMessages([welcomeMsg]);
-      }
-    } catch {
-      setMessages([welcomeMsg]);
-    }
+    }]);
   }, [mode]);
-  // Persist chat history for Pro users only (last 30 messages per mode)
-  useEffect(() => {
-    const proUser = isActivePro(state.user);
-    if (!proUser || messages.length === 0) return;
-    const toSave = messages.slice(-30);
-    try { localStorage.setItem(`ep_ai_chat_${mode}`, JSON.stringify(toSave)); } catch {}
-  }, [messages, mode, state.user]);
 
   // When voice mode turns off, stop everything
   useEffect(() => {
@@ -10873,43 +6957,8 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
             boxShadow: voiceMode ? "0 3px 12px rgba(108,92,231,.35)" : "none",
           }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
-          {voiceMode ? "Voice ON" : "Voice"}
+          🎧 {voiceMode ? "Voice ON" : "Voice"}
         </button>
-        {isPro && (
-          <>
-            {messages.length > 1 && (
-              <button
-                onClick={() => {
-                  // Save current chat to history before clearing
-                  try {
-                    const histKey = `ep_ai_hist_${mode}`;
-                    const existing = JSON.parse(localStorage.getItem(histKey) || "[]");
-                    const entry = { id: Date.now(), date: new Date().toLocaleDateString(), preview: messages.find(m=>m.role==="user")?.content?.slice(0,40) || "Chat", msgs: messages.slice(-30) };
-                    const updated = [entry, ...existing].slice(0, 10); // keep last 10 conversations
-                    localStorage.setItem(histKey, JSON.stringify(updated));
-                  } catch {}
-                  const welcomeMsg = { id:"welcome", role:"assistant", content: modeData.welcome(state.user.level) };
-                  setMessages([welcomeMsg]);
-                  try { localStorage.setItem(`ep_ai_chat_${mode}`, JSON.stringify([welcomeMsg])); } catch {}
-                }}
-                title="Start a new chat"
-                style={{ padding:"6px 11px", borderRadius:999, background:"var(--surf-2)", border:"1px solid var(--border)", cursor:"pointer", fontSize:11, color:"var(--text-2)", fontWeight:600, display:"flex", alignItems:"center", gap:4 }}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                New
-              </button>
-            )}
-            <button
-              onClick={() => setShowHistory(h => !h)}
-              title="Chat history"
-              style={{ padding:"6px 11px", borderRadius:999, background: showHistory ? "var(--accent)" : "var(--surf-2)", border:"1px solid var(--border)", cursor:"pointer", fontSize:11, color: showHistory ? "#fff" : "var(--text-2)", fontWeight:600, display:"flex", alignItems:"center", gap:4 }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              History
-            </button>
-          </>
-        )}
         <button
           onClick={() => setShowModes(m => !m)}
           style={{ padding:"6px 11px", borderRadius:999, background:"var(--surf-2)", border:"1px solid var(--border)", cursor:"pointer", fontSize:11, color:"var(--text-2)", fontWeight:600 }}
@@ -10940,95 +6989,21 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
         </div>
       )}
 
-      {/* History panel */}
-      {showHistory && isPro && (
-        <div style={{ background:"var(--surf)", borderBottom:"1px solid var(--border)", padding:"14px 16px", flexShrink:0, maxHeight:320, overflowY:"auto" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <div style={{ width:28, height:28, borderRadius:8, background:"linear-gradient(135deg,#2563EB,#4F46E5)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              </div>
-              <span style={{ fontSize:13, fontWeight:700, color:"var(--text)", fontFamily:"'Poppins',sans-serif" }}>Previous Chats</span>
-            </div>
-            <button onClick={() => { setShowHistory(false); setHistSearch(""); }} style={{ background:"var(--surf-2)", border:"1px solid var(--border)", cursor:"pointer", width:26, height:26, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", color:"var(--text-3)", fontSize:13 }}>✕</button>
-          </div>
-          {/* Search bar */}
-          <div style={{ position:"relative", marginBottom:10 }}>
-            <svg style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)" }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input
-              placeholder="Search chats..."
-              value={histSearch}
-              onChange={e => setHistSearch(e.target.value)}
-              style={{ width:"100%", padding:"8px 10px 8px 30px", borderRadius:10, border:"1.5px solid var(--border)", background:"var(--surf-2)", fontSize:12, color:"var(--text)", outline:"none", boxSizing:"border-box" }}
-            />
-            {histSearch && <button onClick={() => setHistSearch("")} style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:"var(--text-3)", fontSize:14 }}>✕</button>}
-          </div>
-          {(() => {
-            try {
-              const hist = JSON.parse(localStorage.getItem(`ep_ai_hist_${mode}`) || "[]");
-              const q = histSearch.toLowerCase();
-              const recent = hist
-                .filter(h => Date.now() - h.id < 30*24*60*60*1000)
-                .filter(h => !q || (h.preview||"").toLowerCase().includes(q))
-                .slice(0,20);
-              if (!recent.length) return (
-                <div style={{ textAlign:"center", padding:"20px 0" }}>
-                  <div style={{ fontSize:24, marginBottom:6 }}>💬</div>
-                  <p style={{ fontSize:12, color:"var(--text-3)", margin:0 }}>{q ? "No chats match your search." : "No previous chats yet."}</p>
-                  {!q && <p style={{ fontSize:11, color:"var(--text-3)", margin:"4px 0 0" }}>Start chatting and tap <strong>+ New</strong> to save!</p>}
-                </div>
-              );
-              return recent.map((h, idx) => (
-                <div key={h.id || idx} style={{ padding:"11px 14px", borderRadius:14, background:"var(--surf-2)", border:"1.5px solid var(--border)", marginBottom:8, transition:"all .18s", display:"flex", alignItems:"center", gap:12 }}>
-                  <div onClick={() => { setMessages(h.msgs); setShowHistory(false); try { localStorage.setItem(`ep_ai_chat_${mode}`, JSON.stringify(h.msgs)); } catch {} }}
-                    style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#EEF2FF,#E0E7FF)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, cursor:"pointer" }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                  </div>
-                  <div onClick={() => { setMessages(h.msgs); setShowHistory(false); try { localStorage.setItem(`ep_ai_chat_${mode}`, JSON.stringify(h.msgs)); } catch {} }}
-                    style={{ flex:1, minWidth:0, cursor:"pointer" }}>
-                    <div style={{ fontSize:13, color:"var(--text)", fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{h.preview || "Chat session"}...</div>
-                    <div style={{ display:"flex", gap:8, marginTop:3, alignItems:"center" }}>
-                      <span style={{ fontSize:11, color:"var(--text-3)" }}>{h.date}</span>
-                      <span style={{ fontSize:11, color:"#2563EB", fontWeight:600, background:"#EEF2FF", padding:"1px 7px", borderRadius:999 }}>{h.msgs?.length || 0} msgs</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      try {
-                        const all = JSON.parse(localStorage.getItem(`ep_ai_hist_${mode}`) || "[]");
-                        const updated = all.filter(x => x.id !== h.id);
-                        localStorage.setItem(`ep_ai_hist_${mode}`, JSON.stringify(updated));
-                        setShowHistory(false);
-                        setTimeout(() => setShowHistory(true), 10);
-                      } catch {}
-                    }}
-                    style={{ background:"#FEF2F2", border:"1px solid #FECACA", cursor:"pointer", width:28, height:28, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}
-                    title="Delete this chat"
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-                  </button>
-                </div>
-              ));
-            } catch { return null; }
-          })()}
-        </div>
-      )}
       {/* Messages */}
       <div style={{ flex:1, overflowY:"auto", padding:"16px 14px", display:"flex", flexDirection:"column", gap:12 }}>
 
         {/* Quick prompts - modern suggestion chips */}
         {messages.length <= 1 && (
           <div style={{ marginBottom:4 }}>
-            <p style={{ fontSize:11, color:"var(--text-3)", marginBottom:8, fontWeight:600 }}>Suggested questions:</p>
+            <p style={{ fontSize:11, color:"var(--text-3)", marginBottom:8, fontWeight:500 }}>Suggested questions:</p>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
               {(QUICK_PROMPTS[mode] || []).map(q => (
                 <button key={q} onClick={() => send(q)}
                   style={{
-                    padding:"8px 14px", borderRadius:999,
-                    background:"linear-gradient(135deg,#EEF2FF,#F0F9FF)",
-                    border:"1.5px solid #C7D2FE",
-                    fontSize:12, cursor:"pointer", color:"#4F46E5", fontWeight:600,
-                    transition:"all .18s", boxShadow:"0 1px 4px rgba(79,70,229,0.08)",
+                    padding:"7px 13px", borderRadius:999,
+                    background:"var(--surf)", border:"1.5px solid var(--border)",
+                    fontSize:12, cursor:"pointer", color:"var(--text-2)", fontWeight:500,
+                    transition:"all .18s", boxShadow:"var(--shadow-sm)",
                   }}>
                   {q}
                 </button>
@@ -11055,17 +7030,17 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
             {/* Message bubble */}
             <div style={{
               maxWidth:"78%",
-              padding: m.role==="user" ? "11px 16px" : "13px 16px",
+              padding: m.role==="user" ? "11px 15px" : "13px 15px",
               borderRadius: m.role==="user" ? "20px 6px 20px 20px" : "6px 20px 20px 20px",
               background: m.role==="user"
-                ? "linear-gradient(135deg, #2563EB, #4F46E5)"
+                ? "linear-gradient(135deg, #6C5CE7, #7C4DFF)"
                 : "var(--surf)",
-              border: m.role==="user" ? "none" : "1.5px solid var(--border)",
+              border: m.role==="user" ? "none" : "1px solid var(--border)",
               color: m.role==="user" ? "#fff" : "var(--text)",
               fontSize:14, lineHeight:1.8,
               boxShadow: m.role==="user"
-                ? "0 4px 16px rgba(37,99,235,.28)"
-                : "0 2px 8px rgba(0,0,0,0.06)",
+                ? "0 4px 16px rgba(108,92,231,.35)"
+                : "var(--shadow-sm)",
               animation:"fadeUp .22s ease",
               fontFamily:"'Inter',sans-serif",
             }}>
@@ -11086,29 +7061,7 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
             {/* TTS button for AI messages */}
             {m.role==="assistant" && (
               <button
-                onClick={() => {
-  unlockAudio();
-  const s = window.speechSynthesis;
-  if (!s) return;
-  const clean = m.content.replace(/[✅❌💡📌*#`>]/g,"").replace(/\*\*([^*]+)\*\*/g,"$1").replace(/\*([^*]+)\*/g,"$1").trim();
-  if (!clean) return;
-  const utt = new SpeechSynthesisUtterance(clean);
-  utt.lang = state.settings.accent || "en-US";
-  utt.rate = state.settings.speed || 0.9;
-  const voices = s.getVoices();
-  const gender = state.settings.voice || "female";
-  const isMale = gender === "male";
-  const maleRe = /david|mark|daniel|fred|guy|aaron|brian|joey|matthew|justin|kevin|james|george|richard|tom|male/i;
-  const femRe = /zira|female|samantha|karen|victoria|aria|jenny|alice|heera|linda|susan|allison|tessa/i;
-  const langBase = (state.settings.accent || "en-US").slice(0,2);
-  const byLang = v => v.lang && v.lang.startsWith(langBase);
-  const matched = voices.find(v => byLang(v) && (isMale ? maleRe.test(v.name) : femRe.test(v.name)));
-  const fallback = voices.find(v => byLang(v));
-  if (matched || fallback) utt.voice = matched || fallback;
-  utt.pitch = isMale ? 0.8 : 1.2;
-  s.cancel();
-  s.speak(utt);
-}}
+                onClick={() => tts.speak(m.content.replace(/[✅❌💡📌*#`>]/g,""), {lang:state.settings.accent, rate:state.settings.speed})}
                 style={{ background:"none", border:"none", cursor:"pointer", fontSize:14, color:"var(--text-3)", flexShrink:0, marginBottom:6, padding:4, borderRadius:8, transition:"color .15s" }}
               >🔊</button>
             )}
@@ -11223,7 +7176,7 @@ const Chatbot = memo(function Chatbot({ state, dispatch }) {
         </div>
 
         <div style={{ display:"flex", justifyContent:"space-between", marginTop:5, padding:"0 4px", fontSize:10, color:"var(--text-3)" }}>
-          <span>🎙 {({"ml":"Malayalam","hi":"Hindi","ta":"Tamil","te":"Telugu","ar":"Arabic","fr":"French","de":"German","es":"Spanish","zh":"Chinese","ja":"Japanese","tl":"Tagalog","ko":"Korean","pt":"Portuguese","id":"Indonesian","vi":"Vietnamese","tr":"Turkish","it":"Italian","bn":"Bengali","ur":"Urdu","th":"Thai","en":"English"})[state.settings.lang] || "English"} mic · AI replies in English</span>
+          <span>🎙 {({"ml":"Malayalam","hi":"Hindi","ta":"Tamil","te":"Telugu","ar":"Arabic","fr":"French","de":"German","es":"Spanish","zh":"Chinese","ja":"Japanese","tl":"Tagalog"})[state.settings.lang] || "English"} mic · AI replies in English</span>
           <span style={{ color:modeData.color, fontWeight:600 }}>{modeData.icon} {modeData.label}</span>
         </div>
       </div>
@@ -11241,30 +7194,20 @@ const ACCENTS = [
 ];
 
 const LANGUAGES = [
-  ["en","🇬🇧","English"],
   ["ml","🇮🇳","Malayalam"],
   ["hi","🇮🇳","Hindi"],
   ["ta","🇮🇳","Tamil"],
   ["te","🇮🇳","Telugu"],
   ["ar","🇸🇦","Arabic"],
-  ["es","🇪🇸","Spanish"],
   ["fr","🇫🇷","French"],
-  ["pt","🇧🇷","Portuguese"],
-  ["zh","🇨🇳","Chinese"],
   ["de","🇩🇪","German"],
+  ["es","🇪🇸","Spanish"],
+  ["zh","🇨🇳","Chinese"],
   ["ja","🇯🇵","Japanese"],
-  ["ko","🇰🇷","Korean"],
-  ["id","🇮🇩","Indonesian"],
-  ["vi","🇻🇳","Vietnamese"],
-  ["tr","🇹🇷","Turkish"],
-  ["it","🇮🇹","Italian"],
-  ["bn","🇧🇩","Bengali"],
-  ["ur","🇵🇰","Urdu"],
-  ["th","🇹🇭","Thai"],
 ];
 
 // ✅ FIX: Free users are limited to the first 5 languages
-const FREE_LANG_COUNT = 10;
+const FREE_LANG_COUNT = 5;
 
 const SPEEDS = [[0.5,"0.5×"],[0.75,"0.75×"],[1,"1×"],[1.25,"1.25×"],[1.5,"1.5×"],[1.75,"1.75×"]];
 const SETTINGS_LEVELS = ["A1","A2","B1","B2","C1"];
@@ -11580,7 +7523,7 @@ const Settings = memo(function Settings({ state, dispatch }) {
       <Section title="Translation Language" icon="🌐" accent="var(--blue)">
         {!(isActivePro(user)) && (
           <div style={{ marginBottom:12, padding:"10px 14px", background:"var(--gold-soft)", border:"1px solid var(--gold-border)", borderRadius:16, fontSize:12, color:"var(--gold)", display:"flex", gap:7, alignItems:"center", fontWeight:500 }}>
-            🔒 <span><strong>{FREE_LANG_COUNT} languages free</strong> · Upgrade to Pro for all {LANGUAGES.length} languages</span>
+            🔒 <span><strong>5 languages free</strong> · Upgrade to Pro for all {LANGUAGES.length} languages</span>
           </div>
         )}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:8 }}>
@@ -12789,17 +8732,18 @@ const TopBar = memo(function TopBar({ screen, onNav, user }) {
             {title}
           </span>
         ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <img src="/ep-logo.jpg" alt="EngPath" style={{
-              width: 32, height: 32, borderRadius: 10, objectFit: "cover",
-              boxShadow: "0 2px 8px rgba(0,0,0,.10)",
-            }} />
-            <span style={{
-              fontFamily: "'Poppins', sans-serif", fontSize: 17, fontWeight: 700,
-              background: "linear-gradient(135deg, #2563EB, #22C55E)",
-              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-              letterSpacing: "-0.02em",
-            }}>EngPath</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: 12,
+              background: "linear-gradient(135deg, #6C5CE7, #7C4DFF)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 14, boxShadow: "0 3px 10px rgba(108,92,231,.4)",
+            }}>
+              ✦
+            </div>
+            <span style={{ fontFamily: "'Poppins', sans-serif", fontSize: 17, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em" }}>
+              EngPath
+            </span>
           </div>
         )}
       </div>
@@ -13288,21 +9232,14 @@ const LoginPage = memo(function LoginPage({ dispatch }) {
     }}>
       {/* ── Logo ── */}
       <div style={{ textAlign: "center", marginBottom: 28 }}>
-        <img src="/ep-logo.jpg" alt="EngPath" style={{
-          width: 88, height: 88, borderRadius: 22, objectFit: "cover",
-          boxShadow: "0 6px 24px rgba(37,99,235,.20)", marginBottom: 12,
-        }} />
         <div style={{
-          fontFamily: "'Poppins', sans-serif", fontSize: 28, fontWeight: 700,
-          background: "linear-gradient(135deg, #2563EB, #22C55E)",
-          WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-          marginBottom: 4, letterSpacing: "-0.02em",
-        }}>EngPath</div>
-        <div style={{
-          fontFamily: "'Poppins', sans-serif", fontSize: 13, fontWeight: 600,
-          color: "#4F46E5", marginBottom: 2,
-        }}>Learn. Speak. Grow.</div>
-        <div style={{ fontSize: 12, color: "var(--text-2)" }}>AI-Powered English Coach 🇬🇧</div>
+          fontFamily: "'Poppins',sans-serif", fontSize: 38, fontWeight: 900,
+          background: "linear-gradient(135deg,var(--accent),var(--blue))",
+          WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", marginBottom: 6,
+        }}>
+          EngPath
+        </div>
+        <div style={{ fontSize: 13, color: "var(--text-2)" }}>AI-Powered English Coach 🇬🇧</div>
       </div>
 
       {/* ── Card ── */}
