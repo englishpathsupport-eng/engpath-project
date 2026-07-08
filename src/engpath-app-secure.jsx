@@ -6242,116 +6242,95 @@ const Home = memo(function Home({ state, dispatch }) {
         };
         const userLevel = user?.level?.slice(0,2) || "B1";
         const heroImg = heroImages[userLevel] || "/images/hero-girl.webp";
-        const totalSessions = (user?.xp || 0);
+        const totalSessions = user?.xp || 0;
         const milestones = [10,25,50,100,150,200,300,500,750,1000,2000,5000];
-        const nextMilestone = milestones.find(m => m > totalSessions) || milestones[milestones.length-1];
+        const nextMilestone = milestones.find(m => m > totalSessions) || 5000;
         const prevMilestone = milestones.filter(m => m <= totalSessions).pop() || 0;
         const milestoneProgress = nextMilestone > prevMilestone
-          ? Math.round(((totalSessions - prevMilestone) / (nextMilestone - prevMilestone)) * 100)
+          ? Math.round(((totalSessions - prevMilestone)/(nextMilestone - prevMilestone))*100)
           : 100;
+        const remaining = nextMilestone - totalSessions;
+        const xpNext = Math.ceil((user.xp + 1) / 100) * 100;
+        const xpPct = Math.min(100, user.xp % 100 || Math.min(100, user.xp));
         return (
-      <div style={{
-        borderRadius: 28,
-        background: "linear-gradient(135deg, #2563EB 0%, #4F46E5 45%, #7C3AED 100%)",
-        padding: "0",
-        marginBottom: 16,
-        position: "relative", overflow: "hidden",
-        boxShadow: "0 16px 48px rgba(37,99,235,.45)",
-        minHeight: 200,
-      }}>
-        {/* Background glow orbs */}
-        <div style={{ position:"absolute", top:-40, left:-20, width:180, height:180, borderRadius:"50%", background:"rgba(255,255,255,.06)", pointerEvents:"none" }} />
-        <div style={{ position:"absolute", bottom:-30, left:60, width:120, height:120, borderRadius:"50%", background:"rgba(255,255,255,.04)", pointerEvents:"none" }} />
-        <div style={{ position:"absolute", top:10, right:"38%", width:60, height:60, borderRadius:"50%", background:"rgba(255,255,255,.05)", pointerEvents:"none" }} />
-
-        {/* Hero Character - Right Side */}
         <div style={{
-          position:"absolute", right:0, bottom:0, top:0,
-          width:"42%", zIndex:1, pointerEvents:"none",
-          display:"flex", alignItems:"flex-end", justifyContent:"flex-end",
+          borderRadius:28,
+          background:"linear-gradient(135deg,#2563EB 0%,#4F46E5 50%,#7C3AED 100%)",
+          marginBottom:16, position:"relative", overflow:"hidden",
+          boxShadow:"0 20px 60px rgba(37,99,235,.5)",
+          minHeight:220,
         }}>
-          <img
-            src={heroImg}
-            alt="English Tutor"
-            style={{
-              height:"100%", maxHeight:220,
-              width:"auto", objectFit:"contain",
-              objectPosition:"bottom right",
-              filter:"drop-shadow(-8px 4px 16px rgba(0,0,0,.3))",
-              display:"block",
-            }}
-          />
-        </div>
+          {/* Ambient orbs */}
+          <div style={{position:"absolute",top:-50,left:-30,width:200,height:200,borderRadius:"50%",background:"rgba(255,255,255,.05)",pointerEvents:"none"}}/>
+          <div style={{position:"absolute",bottom:-40,left:40,width:150,height:150,borderRadius:"50%",background:"rgba(255,255,255,.04)",pointerEvents:"none"}}/>
 
-        {/* Content - Left Side */}
-        <div style={{ padding:"22px 20px 20px", position:"relative", zIndex:2, maxWidth:"62%" }}>
-          {/* Greeting + Name */}
-          <p style={{ fontSize:12, color:"rgba(255,255,255,.75)", fontWeight:500, fontFamily:"'Inter',sans-serif", marginBottom:3 }}>{greeting} 👋</p>
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
-            <h1 style={{ fontFamily:"'Poppins',sans-serif", fontSize:24, fontWeight:700, color:"#fff", lineHeight:1.1, margin:0 }}>
-              {user?.name || "Learner"}
-            </h1>
-            {isActivePro(user) && (
-              <span style={{ fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:999, background:"rgba(255,255,255,.2)", color:"#fff", letterSpacing:".05em", backdropFilter:"blur(4px)", border:"1px solid rgba(255,255,255,.2)" }}>
-                ⭐ PRO
-              </span>
-            )}
+          {/* Hero Character */}
+          <div style={{position:"absolute",right:0,bottom:0,top:0,width:"40%",zIndex:1,pointerEvents:"none",display:"flex",alignItems:"flex-end",justifyContent:"flex-end"}}>
+            <img src={heroImg} alt="Tutor" style={{height:"105%",width:"auto",objectFit:"contain",objectPosition:"bottom right",filter:"drop-shadow(-6px 0 20px rgba(0,0,0,.25))"}} />
           </div>
 
-        {/* Stats row */}
-        <div style={{ display:"flex", gap:8, marginBottom:14, position:"relative", zIndex:1 }}>
-          {[
-            { icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="rgba(255,215,0,.95)"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>, label:"Level", value:user.level },
-            { icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="rgba(255,200,0,.95)"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>, label:"XP", value:user.xp.toLocaleString() },
-            { icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="rgba(255,100,50,.95)"><path d="M12 23c4.97 0 9-4.03 9-9 0-4.17-5-11-7.5-14.5C11 3 6 9.83 6 14c0 4.97 4.03 9 6 9z"/></svg>, label:"Streak", value:`${user.streak}d` },
-          ].map(s => (
-            <div key={s.label} style={{
-              flex:1, background:"rgba(255,255,255,.15)", borderRadius:16,
-              padding:"10px 8px", textAlign:"center",
-              backdropFilter:"blur(8px)", border:"1px solid rgba(255,255,255,.15)",
-            }}>
-              <div style={{ marginBottom:4, display:"flex", justifyContent:"center" }}>{s.icon}</div>
-              <div style={{ fontFamily:"'Poppins',sans-serif", fontSize:16, fontWeight:700, color:"#fff", lineHeight:1.1 }}>{s.value}</div>
-              <div style={{ fontSize:9, color:"rgba(255,255,255,.7)", fontWeight:500, marginTop:2 }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
+          {/* Content */}
+          <div style={{padding:"24px 20px 22px",position:"relative",zIndex:2,maxWidth:"62%"}}>
 
-          {/* XP Progress */}
-          <div style={{ marginBottom:6 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
-              <span style={{ fontSize:11, color:"rgba(255,255,255,.8)", fontWeight:500 }}>XP Progress</span>
-              <span style={{ fontSize:11, color:"rgba(255,255,255,.9)", fontWeight:700 }}>{user.xp} / {Math.ceil((user.xp+1)/100)*100} XP</span>
-            </div>
-            <div style={{ height:7, background:"rgba(255,255,255,.15)", borderRadius:999, overflow:"hidden" }}>
-              <div style={{
-                height:"100%",
-                width:`${Math.min(100,user.xp%100||Math.min(100,user.xp))}%`,
-                background:"linear-gradient(90deg, rgba(255,255,255,.9), rgba(200,230,255,.95))",
-                borderRadius:999,
-                transition:"width 1.2s cubic-bezier(.4,0,.2,1)",
-                boxShadow:"0 0 10px rgba(255,255,255,.5)",
-              }} />
-            </div>
-          </div>
+            {/* Greeting */}
+            <p style={{fontSize:12,color:"rgba(255,255,255,.7)",fontWeight:500,marginBottom:2,fontFamily:"'Inter',sans-serif"}}>{greeting} 👋</p>
 
-          {/* Journey Milestone */}
-          <div style={{ background:"rgba(255,255,255,.1)", borderRadius:12, padding:"8px 12px", border:"1px solid rgba(255,255,255,.15)", backdropFilter:"blur(8px)", marginBottom:8 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
-              <span style={{ fontSize:10, color:"rgba(255,255,255,.75)", fontWeight:500 }}>📚 Learning Journey</span>
-              <span style={{ fontSize:10, color:"rgba(255,255,255,.6)" }}>🎯 Next: {nextMilestone} sessions</span>
+            {/* Name + PRO */}
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+              <h1 style={{fontFamily:"'Poppins',sans-serif",fontSize:26,fontWeight:700,color:"#fff",lineHeight:1,margin:0}}>
+                {user?.name||"Learner"}
+              </h1>
+              {isActivePro(user)&&(
+                <span style={{fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:999,background:"rgba(255,255,255,.18)",color:"#fff",backdropFilter:"blur(6px)",border:"1px solid rgba(255,255,255,.25)"}}>⭐ PRO</span>
+              )}
             </div>
-            <div style={{ height:4, background:"rgba(255,255,255,.15)", borderRadius:999, overflow:"hidden" }}>
-              <div style={{ height:"100%", width:`${milestoneProgress}%`, background:"linear-gradient(90deg,#22C55E,#4ADE80)", borderRadius:999, transition:"width 1s ease", boxShadow:"0 0 8px rgba(34,197,94,.5)" }} />
-            </div>
-            <div style={{ fontSize:9, color:"rgba(255,255,255,.6)", marginTop:4 }}>{totalSessions} / {nextMilestone} sessions • {milestoneProgress}% to next milestone</div>
-          </div>
 
-          <div style={{ fontSize:11, color:"rgba(255,255,255,.7)", fontStyle:"italic" }}>
-            ✨ Every lesson makes you a better communicator.
+            {/* Stat Cards — Level + XP only */}
+            <div style={{display:"flex",gap:8,marginBottom:14}}>
+              {[
+                {icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="rgba(255,215,0,.95)"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>, label:"Level", value:user.level},
+                {icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="rgba(255,220,80,.95)"><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></svg>, label:"XP", value:user.xp.toLocaleString()},
+              ].map(s=>(
+                <div key={s.label} style={{background:"rgba(255,255,255,.12)",borderRadius:16,padding:"10px 14px",backdropFilter:"blur(10px)",border:"1px solid rgba(255,255,255,.18)",minWidth:70}}>
+                  <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>{s.icon}<span style={{fontSize:10,color:"rgba(255,255,255,.65)",fontWeight:500}}>{s.label}</span></div>
+                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:20,fontWeight:700,color:"#fff",lineHeight:1}}>{s.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* XP Progress Bar */}
+            <div style={{marginBottom:12}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                <span style={{fontSize:10,color:"rgba(255,255,255,.7)",fontWeight:500}}>XP Progress</span>
+                <span style={{fontSize:10,color:"rgba(255,255,255,.85)",fontWeight:700}}>{user.xp} / {xpNext} XP</span>
+              </div>
+              <div style={{height:6,background:"rgba(255,255,255,.15)",borderRadius:999,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${xpPct}%`,background:"linear-gradient(90deg,rgba(255,255,255,.85),rgba(180,220,255,.9))",borderRadius:999,transition:"width 1.2s cubic-bezier(.4,0,.2,1)",boxShadow:"0 0 10px rgba(255,255,255,.4)"}}/>
+              </div>
+            </div>
+
+            {/* Learning Journey Card */}
+            <div style={{background:"rgba(0,0,0,.15)",borderRadius:16,padding:"11px 14px",border:"1px solid rgba(255,255,255,.12)",backdropFilter:"blur(10px)",marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:7}}>
+                <div>
+                  <div style={{fontSize:10,color:"rgba(255,255,255,.6)",fontWeight:500,marginBottom:2}}>📚 Learning Journey</div>
+                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:18,fontWeight:700,color:"#fff",lineHeight:1}}>{totalSessions} <span style={{fontSize:11,fontWeight:500,color:"rgba(255,255,255,.6)"}}>sessions</span></div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:9,color:"rgba(255,255,255,.5)",marginBottom:2}}>🎯 Next milestone</div>
+                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:15,fontWeight:700,color:"#4ADE80"}}>{nextMilestone}</div>
+                  <div style={{fontSize:9,color:"rgba(255,255,255,.45)"}}>+{remaining} to go</div>
+                </div>
+              </div>
+              <div style={{height:4,background:"rgba(255,255,255,.12)",borderRadius:999,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${milestoneProgress}%`,background:"linear-gradient(90deg,#22C55E,#4ADE80)",borderRadius:999,transition:"width 1.2s ease",boxShadow:"0 0 8px rgba(34,197,94,.5)"}}/>
+              </div>
+              <div style={{fontSize:9,color:"rgba(255,255,255,.45)",marginTop:4}}>{milestoneProgress}% towards {nextMilestone} sessions</div>
+            </div>
+
+            <div style={{fontSize:11,color:"rgba(255,255,255,.6)",fontStyle:"italic"}}>✨ Every lesson makes you a better communicator.</div>
           </div>
         </div>
-      </div>
         );
       })()}
 
