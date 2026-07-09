@@ -6235,100 +6235,82 @@ const Home = memo(function Home({ state, dispatch }) {
 
       {/* ── Premium Hero Card ── */}
       {(() => {
-        const heroImages = {
-          A1:"/images/hero-girl.webp", A2:"/images/hero-girl.webp",
-          B1:"/images/hero-girl.webp", B2:"/images/hero-girl.webp",
-          C1:"/images/hero-girl.webp", C2:"/images/hero-girl.webp",
-        };
-        const userLevel = user?.level?.slice(0,2) || "B1";
-        const heroImg = heroImages[userLevel] || "/images/hero-girl.webp";
+        const heroImages = {A1:"/images/hero-girl.webp",A2:"/images/hero-girl.webp",B1:"/images/hero-girl.webp",B2:"/images/hero-girl.webp",C1:"/images/hero-girl.webp",C2:"/images/hero-girl.webp"};
+        const heroImg = heroImages[user?.level?.slice(0,2)] || "/images/hero-girl.webp";
         const totalSessions = user?.xp || 0;
         const milestones = [10,25,50,100,150,200,300,500,750,1000,2000,5000];
-        const nextMilestone = milestones.find(m => m > totalSessions) || 5000;
-        const prevMilestone = milestones.filter(m => m <= totalSessions).pop() || 0;
-        const milestoneProgress = nextMilestone > prevMilestone
-          ? Math.round(((totalSessions - prevMilestone)/(nextMilestone - prevMilestone))*100)
-          : 100;
+        const nextMilestone = milestones.find(m=>m>totalSessions)||5000;
+        const prevMilestone = milestones.filter(m=>m<=totalSessions).pop()||0;
+        const milestoneProgress = nextMilestone>prevMilestone ? Math.round(((totalSessions-prevMilestone)/(nextMilestone-prevMilestone))*100) : 100;
         const remaining = nextMilestone - totalSessions;
-        const xpNext = Math.ceil((user.xp + 1) / 100) * 100;
-        const xpPct = Math.min(100, user.xp % 100 || Math.min(100, user.xp));
+        const xpNext = Math.ceil((user.xp+1)/100)*100;
+        const xpPct = Math.min(100, user.xp%100||Math.min(100,user.xp));
         return (
-        <div style={{
-          borderRadius:28,
-          background:"linear-gradient(135deg,#2563EB 0%,#4F46E5 50%,#7C3AED 100%)",
-          marginBottom:16, position:"relative", overflow:"hidden",
-          boxShadow:"0 20px 60px rgba(37,99,235,.5)",
-          minHeight:220,
-        }}>
-          {/* Ambient orbs */}
-          <div style={{position:"absolute",top:-50,left:-30,width:200,height:200,borderRadius:"50%",background:"rgba(255,255,255,.05)",pointerEvents:"none"}}/>
-          <div style={{position:"absolute",bottom:-40,left:40,width:150,height:150,borderRadius:"50%",background:"rgba(255,255,255,.04)",pointerEvents:"none"}}/>
+        <div style={{borderRadius:28,background:"linear-gradient(135deg,#1d4ed8 0%,#4f46e5 55%,#7c3aed 100%)",marginBottom:16,position:"relative",overflow:"hidden",boxShadow:"0 20px 60px rgba(29,78,216,.5)",minHeight:230}}>
+          <div style={{position:"absolute",top:-60,left:-40,width:220,height:220,borderRadius:"50%",background:"rgba(255,255,255,.05)",pointerEvents:"none"}}/>
+          <div style={{position:"absolute",bottom:-50,right:"38%",width:160,height:160,borderRadius:"50%",background:"rgba(255,255,255,.03)",pointerEvents:"none"}}/>
 
-          {/* Hero Character */}
-          <div style={{position:"absolute",right:0,bottom:0,top:0,width:"40%",zIndex:1,pointerEvents:"none",display:"flex",alignItems:"flex-end",justifyContent:"flex-end"}}>
-            <img src={heroImg} alt="Tutor" style={{height:"105%",width:"auto",objectFit:"contain",objectPosition:"bottom right",filter:"drop-shadow(-6px 0 20px rgba(0,0,0,.25))"}} />
+          {/* Hero Image */}
+          <div style={{position:"absolute",right:0,bottom:0,width:"42%",zIndex:1,pointerEvents:"none",display:"flex",alignItems:"flex-end",justifyContent:"flex-end",top:0}}>
+            <img src={heroImg} alt="" style={{height:"108%",width:"auto",objectFit:"contain",objectPosition:"bottom right",filter:"drop-shadow(-4px 0 16px rgba(0,0,0,.2))"}}/>
           </div>
 
-          {/* Content */}
-          <div style={{padding:"24px 20px 22px",position:"relative",zIndex:2,maxWidth:"62%"}}>
-
-            {/* Greeting */}
-            <p style={{fontSize:12,color:"rgba(255,255,255,.7)",fontWeight:500,marginBottom:2,fontFamily:"'Inter',sans-serif"}}>{greeting} 👋</p>
-
-            {/* Name + PRO */}
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
-              <h1 style={{fontFamily:"'Poppins',sans-serif",fontSize:26,fontWeight:700,color:"#fff",lineHeight:1,margin:0}}>
-                {user?.name||"Learner"}
-              </h1>
-              {isActivePro(user)&&(
-                <span style={{fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:999,background:"rgba(255,255,255,.18)",color:"#fff",backdropFilter:"blur(6px)",border:"1px solid rgba(255,255,255,.25)"}}>⭐ PRO</span>
-              )}
+          {/* Main Content */}
+          <div style={{padding:"22px 20px 20px",position:"relative",zIndex:2,maxWidth:"60%"}}>
+            <p style={{fontSize:13,color:"rgba(255,255,255,.65)",fontWeight:500,marginBottom:3,fontFamily:"'Inter',sans-serif"}}>{greeting} 👋</p>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:18}}>
+              <h1 style={{fontFamily:"'Poppins',sans-serif",fontSize:28,fontWeight:700,color:"#fff",lineHeight:1,margin:0}}>{user?.name||"Learner"}</h1>
+              {isActivePro(user)
+                ? <span style={{fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:999,background:"rgba(255,255,255,.18)",color:"#fff",border:"1px solid rgba(255,255,255,.25)"}}>⭐ PRO</span>
+                : <span style={{fontSize:10,fontWeight:600,padding:"3px 10px",borderRadius:999,background:"rgba(255,255,255,.1)",color:"rgba(255,255,255,.7)",border:"1px solid rgba(255,255,255,.15)"}}>FREE</span>
+              }
             </div>
 
-            {/* Stat Cards — Level + XP only */}
-            <div style={{display:"flex",gap:8,marginBottom:14}}>
-              {[
-                {icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="rgba(255,215,0,.95)"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>, label:"Level", value:user.level},
-                {icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="rgba(255,220,80,.95)"><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></svg>, label:"XP", value:user.xp.toLocaleString()},
-              ].map(s=>(
-                <div key={s.label} style={{background:"rgba(255,255,255,.12)",borderRadius:16,padding:"10px 14px",backdropFilter:"blur(10px)",border:"1px solid rgba(255,255,255,.18)",minWidth:70}}>
-                  <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>{s.icon}<span style={{fontSize:10,color:"rgba(255,255,255,.65)",fontWeight:500}}>{s.label}</span></div>
-                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:20,fontWeight:700,color:"#fff",lineHeight:1}}>{s.value}</div>
+            {/* 3 Stat Cards */}
+            <div style={{display:"flex",gap:7,marginBottom:14,flexWrap:"wrap"}}>
+              <div style={{background:"rgba(255,255,255,.12)",borderRadius:16,padding:"10px 12px",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,.2)",flex:"1 1 60px"}}>
+                <div style={{fontSize:9,color:"rgba(255,255,255,.6)",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="rgba(255,215,0,.9)"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
+                  Level
                 </div>
-              ))}
+                <div style={{fontFamily:"'Poppins',sans-serif",fontSize:20,fontWeight:700,color:"#fff",lineHeight:1}}>{user.level}</div>
+              </div>
+              <div style={{background:"rgba(255,255,255,.12)",borderRadius:16,padding:"10px 12px",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,.2)",flex:"1 1 60px"}}>
+                <div style={{fontSize:9,color:"rgba(255,255,255,.6)",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="rgba(255,220,80,.9)"><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></svg>
+                  XP
+                </div>
+                <div style={{fontFamily:"'Poppins',sans-serif",fontSize:20,fontWeight:700,color:"#fff",lineHeight:1}}>{user.xp.toLocaleString()}</div>
+              </div>
+              <div style={{background:"rgba(255,255,255,.12)",borderRadius:16,padding:"10px 12px",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,.2)",flex:"2 1 110px"}}>
+                <div style={{fontSize:9,color:"rgba(255,255,255,.6)",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
+                  <span style={{fontSize:11}}>📚</span> Learning Journey
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
+                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:18,fontWeight:700,color:"#fff",lineHeight:1}}>{totalSessions}<span style={{fontSize:10,fontWeight:400,color:"rgba(255,255,255,.55)",marginLeft:3}}>sessions</span></div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:9,color:"#4ADE80",fontWeight:600}}>🎯 {nextMilestone} next</div>
+                    <div style={{fontSize:8,color:"rgba(255,255,255,.4)"}}>+{remaining} to go</div>
+                  </div>
+                </div>
+                <div style={{height:3,background:"rgba(255,255,255,.12)",borderRadius:999,overflow:"hidden",marginTop:6}}>
+                  <div style={{height:"100%",width:`${milestoneProgress}%`,background:"linear-gradient(90deg,#22C55E,#4ADE80)",borderRadius:999,transition:"width 1.2s ease"}}/>
+                </div>
+              </div>
             </div>
 
-            {/* XP Progress Bar */}
-            <div style={{marginBottom:12}}>
+            {/* XP Progress */}
+            <div style={{marginBottom:10}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                <span style={{fontSize:10,color:"rgba(255,255,255,.7)",fontWeight:500}}>XP Progress</span>
-                <span style={{fontSize:10,color:"rgba(255,255,255,.85)",fontWeight:700}}>{user.xp} / {xpNext} XP</span>
+                <span style={{fontSize:10,color:"rgba(255,255,255,.65)",fontWeight:500}}>XP Progress</span>
+                <span style={{fontSize:10,color:"rgba(255,255,255,.8)",fontWeight:600}}>{user.xp} / {xpNext} XP</span>
               </div>
-              <div style={{height:6,background:"rgba(255,255,255,.15)",borderRadius:999,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${xpPct}%`,background:"linear-gradient(90deg,rgba(255,255,255,.85),rgba(180,220,255,.9))",borderRadius:999,transition:"width 1.2s cubic-bezier(.4,0,.2,1)",boxShadow:"0 0 10px rgba(255,255,255,.4)"}}/>
+              <div style={{height:6,background:"rgba(255,255,255,.12)",borderRadius:999,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${xpPct}%`,background:"linear-gradient(90deg,rgba(255,255,255,.8),rgba(196,220,255,.9))",borderRadius:999,transition:"width 1.2s cubic-bezier(.4,0,.2,1)",boxShadow:"0 0 8px rgba(255,255,255,.35)"}}/>
               </div>
             </div>
 
-            {/* Learning Journey Card */}
-            <div style={{background:"rgba(0,0,0,.15)",borderRadius:16,padding:"11px 14px",border:"1px solid rgba(255,255,255,.12)",backdropFilter:"blur(10px)",marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:7}}>
-                <div>
-                  <div style={{fontSize:10,color:"rgba(255,255,255,.6)",fontWeight:500,marginBottom:2}}>📚 Learning Journey</div>
-                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:18,fontWeight:700,color:"#fff",lineHeight:1}}>{totalSessions} <span style={{fontSize:11,fontWeight:500,color:"rgba(255,255,255,.6)"}}>sessions</span></div>
-                </div>
-                <div style={{textAlign:"right"}}>
-                  <div style={{fontSize:9,color:"rgba(255,255,255,.5)",marginBottom:2}}>🎯 Next milestone</div>
-                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:15,fontWeight:700,color:"#4ADE80"}}>{nextMilestone}</div>
-                  <div style={{fontSize:9,color:"rgba(255,255,255,.45)"}}>+{remaining} to go</div>
-                </div>
-              </div>
-              <div style={{height:4,background:"rgba(255,255,255,.12)",borderRadius:999,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${milestoneProgress}%`,background:"linear-gradient(90deg,#22C55E,#4ADE80)",borderRadius:999,transition:"width 1.2s ease",boxShadow:"0 0 8px rgba(34,197,94,.5)"}}/>
-              </div>
-              <div style={{fontSize:9,color:"rgba(255,255,255,.45)",marginTop:4}}>{milestoneProgress}% towards {nextMilestone} sessions</div>
-            </div>
-
-            <div style={{fontSize:11,color:"rgba(255,255,255,.6)",fontStyle:"italic"}}>✨ Every lesson makes you a better communicator.</div>
+            <p style={{fontSize:11,color:"rgba(255,255,255,.5)",fontStyle:"italic",margin:0}}>✨ Every lesson makes you a better communicator.</p>
           </div>
         </div>
         );
