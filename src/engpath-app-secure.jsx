@@ -6252,7 +6252,7 @@ const Home = memo(function Home({ state, dispatch }) {
 
           <div style={{display:"flex",alignItems:"stretch",flexWrap:"wrap"}}>
             {/* Left: Text + Stats */}
-            <div style={{padding:"24px 20px 20px 22px",position:"relative",zIndex:2,flex:"1 1 280px",minWidth:0}}>
+            <div style={{padding:"24px 20px 22px 22px",position:"relative",zIndex:2,flex:"1 1 280px",minWidth:0}}>
               <p style={{fontSize:13,color:"rgba(255,255,255,.7)",fontWeight:500,marginBottom:4,fontFamily:"'Inter',sans-serif"}}>{greeting} 👋</p>
               <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:18,flexWrap:"wrap"}}>
                 <h1 style={{fontFamily:"'Poppins',sans-serif",fontSize:27,fontWeight:700,color:"#fff",lineHeight:1,margin:0}}>{user?.name||"Learner"}</h1>
@@ -6315,18 +6315,19 @@ const Home = memo(function Home({ state, dispatch }) {
             </div>
 
             {/* Right: Illustration + decorative badges */}
-            <div style={{flex:"1 1 200px",position:"relative",display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:20,minHeight:220}}>
+            <div style={{flex:"1 1 220px",position:"relative",display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:24,paddingRight:14,minHeight:250,overflow:"visible"}}>
               {/* Speech-bubble badge */}
-              <div style={{position:"absolute",top:20,right:18,zIndex:4,display:"flex",alignItems:"center",gap:6,background:"rgba(255,255,255,.97)",padding:"8px 14px 8px 10px",borderRadius:18,borderBottomRightRadius:4,boxShadow:"0 6px 16px rgba(0,0,0,.18)"}}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
-                <span style={{fontSize:12.5,fontWeight:700,color:"#4338ca",fontFamily:"'Poppins',sans-serif",whiteSpace:"nowrap"}}>Let's learn English!</span>
+              <div style={{position:"absolute",top:16,right:16,zIndex:5,display:"flex",alignItems:"center",gap:7,background:"rgba(255,255,255,.98)",padding:"9px 16px 9px 12px",borderRadius:20,borderBottomRightRadius:4,boxShadow:"0 8px 18px rgba(0,0,0,.2)"}}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+                <span style={{fontSize:13.5,fontWeight:700,color:"#4338ca",fontFamily:"'Poppins',sans-serif",whiteSpace:"nowrap",letterSpacing:"-.1px"}}>Let's learn English!</span>
               </div>
 
-              {/* Floating letter badges */}
-              <div style={{position:"absolute",top:56,left:6,width:30,height:30,borderRadius:9,background:"linear-gradient(135deg,#22C55E,#16A34A)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:14,color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.2)",transform:"rotate(-8deg)",zIndex:3}}>C</div>
-              <div style={{position:"absolute",top:100,right:2,width:26,height:26,borderRadius:8,background:"linear-gradient(135deg,#F59E0B,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:12,color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.2)",transform:"rotate(10deg)",zIndex:3}}>B</div>
+              {/* Floating letter badges arranged around the illustration */}
+              <div style={{position:"absolute",top:78,left:-4,width:32,height:32,borderRadius:10,background:"linear-gradient(135deg,#F59E0B,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:15,color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(-10deg)",zIndex:3}}>A</div>
+              <div style={{position:"absolute",top:64,right:56,width:30,height:30,borderRadius:9,background:"linear-gradient(135deg,#22C55E,#16A34A)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:14,color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(9deg)",zIndex:3}}>B</div>
+              <div style={{position:"absolute",bottom:118,left:6,width:28,height:28,borderRadius:9,background:"linear-gradient(135deg,#EC4899,#DB2777)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:13,color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(-6deg)",zIndex:3}}>C</div>
 
-              <img src={heroImg} alt="" style={{width:"100%",maxWidth:190,height:"auto",objectFit:"contain",filter:"drop-shadow(-4px 6px 14px rgba(0,0,0,.22))",position:"relative",zIndex:2}}/>
+              <img src={heroImg} alt="" style={{width:"100%",maxWidth:210,height:"auto",objectFit:"contain",filter:"drop-shadow(-4px 6px 14px rgba(0,0,0,.22))",position:"relative",zIndex:2}}/>
             </div>
           </div>
         </div>
