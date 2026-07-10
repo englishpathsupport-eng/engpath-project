@@ -6250,72 +6250,85 @@ const Home = memo(function Home({ state, dispatch }) {
           <div style={{position:"absolute",top:-60,left:-40,width:220,height:220,borderRadius:"50%",background:"rgba(255,255,255,.06)",pointerEvents:"none"}}/>
           <div style={{position:"absolute",bottom:-60,right:20,width:180,height:180,borderRadius:"50%",background:"rgba(255,255,255,.04)",pointerEvents:"none"}}/>
 
-          <div style={{display:"flex",alignItems:"stretch"}}>
+          <div style={{display:"flex",alignItems:"stretch",flexWrap:"wrap"}}>
             {/* Left: Text + Stats */}
-            <div style={{padding:"22px 18px 22px 20px",position:"relative",zIndex:2,flex:"1 1 60%",minWidth:0}}>
-              <p style={{fontSize:13,color:"rgba(255,255,255,.7)",fontWeight:500,marginBottom:3,fontFamily:"'Inter',sans-serif"}}>{greeting} 👋</p>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-                <h1 style={{fontFamily:"'Poppins',sans-serif",fontSize:26,fontWeight:700,color:"#fff",lineHeight:1,margin:0}}>{user?.name||"Learner"}</h1>
+            <div style={{padding:"24px 20px 20px 22px",position:"relative",zIndex:2,flex:"1 1 280px",minWidth:0}}>
+              <p style={{fontSize:13,color:"rgba(255,255,255,.7)",fontWeight:500,marginBottom:4,fontFamily:"'Inter',sans-serif"}}>{greeting} 👋</p>
+              <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:18,flexWrap:"wrap"}}>
+                <h1 style={{fontFamily:"'Poppins',sans-serif",fontSize:27,fontWeight:700,color:"#fff",lineHeight:1,margin:0}}>{user?.name||"Learner"}</h1>
                 {isActivePro(user)
                   ? <span style={{fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:999,background:"rgba(255,255,255,.18)",color:"#fff",border:"1px solid rgba(255,255,255,.25)"}}>⭐ PRO</span>
                   : <span style={{fontSize:10,fontWeight:600,padding:"3px 10px",borderRadius:999,background:"rgba(255,255,255,.12)",color:"rgba(255,255,255,.75)",border:"1px solid rgba(255,255,255,.18)"}}>FREE</span>
                 }
               </div>
 
-              <div style={{display:"flex",gap:7,marginBottom:14,flexWrap:"wrap"}}>
-                <div style={{background:"rgba(255,255,255,.14)",borderRadius:16,padding:"10px 12px",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,.22)",flex:"1 1 60px"}}>
-                  <div style={{fontSize:9,color:"rgba(255,255,255,.65)",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="rgba(255,215,0,.9)"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
+              <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+                <div style={{background:"rgba(255,255,255,.14)",borderRadius:16,padding:"11px 14px",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,.22)",flex:"1 1 100px"}}>
+                  <div style={{fontSize:10,color:"rgba(255,255,255,.65)",marginBottom:5,display:"flex",alignItems:"center",gap:5}}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="rgba(255,215,0,.9)"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
                     Level
                   </div>
-                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:20,fontWeight:700,color:"#fff",lineHeight:1}}>{user.level}</div>
+                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:21,fontWeight:700,color:"#fff",lineHeight:1}}>{user.level}</div>
                 </div>
-                <div style={{background:"rgba(255,255,255,.14)",borderRadius:16,padding:"10px 12px",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,.22)",flex:"1 1 60px"}}>
-                  <div style={{fontSize:9,color:"rgba(255,255,255,.65)",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="rgba(255,220,80,.9)"><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></svg>
+                <div style={{background:"rgba(255,255,255,.14)",borderRadius:16,padding:"11px 14px",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,.22)",flex:"1 1 100px"}}>
+                  <div style={{fontSize:10,color:"rgba(255,255,255,.65)",marginBottom:5,display:"flex",alignItems:"center",gap:5}}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="rgba(255,220,80,.9)"><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></svg>
                     XP
                   </div>
-                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:20,fontWeight:700,color:"#fff",lineHeight:1}}>{user.xp.toLocaleString()}</div>
+                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:21,fontWeight:700,color:"#fff",lineHeight:1}}>{user.xp.toLocaleString()}</div>
+                </div>
+                <div style={{background:"rgba(255,255,255,.14)",borderRadius:16,padding:"11px 14px",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,.22)",flex:"1 1 100px"}}>
+                  <div style={{fontSize:10,color:"rgba(255,255,255,.65)",marginBottom:5,display:"flex",alignItems:"center",gap:5}}>
+                    <span style={{fontSize:12}}>🔥</span> Streak
+                  </div>
+                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:21,fontWeight:700,color:"#fff",lineHeight:1}}>{user?.streak||0}<span style={{fontSize:12,fontWeight:400,color:"rgba(255,255,255,.6)"}}>d</span></div>
                 </div>
               </div>
 
-              <div style={{background:"rgba(255,255,255,.14)",borderRadius:16,padding:"10px 12px",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,.22)",marginBottom:14}}>
-                <div style={{fontSize:9,color:"rgba(255,255,255,.65)",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
-                  <span style={{fontSize:11}}>📚</span> Learning Journey
+              <div style={{background:"rgba(255,255,255,.14)",borderRadius:16,padding:"11px 14px",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,.22)",marginBottom:14}}>
+                <div style={{fontSize:10,color:"rgba(255,255,255,.65)",marginBottom:5,display:"flex",alignItems:"center",gap:5}}>
+                  <span style={{fontSize:12}}>📚</span> Learning Journey
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
-                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:18,fontWeight:700,color:"#fff",lineHeight:1}}>{totalSessions}<span style={{fontSize:10,fontWeight:400,color:"rgba(255,255,255,.6)",marginLeft:3}}>sessions</span></div>
+                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:19,fontWeight:700,color:"#fff",lineHeight:1}}>{totalSessions}<span style={{fontSize:11,fontWeight:400,color:"rgba(255,255,255,.6)",marginLeft:4}}>sessions</span></div>
                   <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:9,color:"#4ADE80",fontWeight:600}}>🎯 {nextMilestone} next</div>
-                    <div style={{fontSize:8,color:"rgba(255,255,255,.45)"}}>+{remaining} to go</div>
+                    <div style={{fontSize:10,color:"#4ADE80",fontWeight:600}}>🎯 {nextMilestone} next</div>
+                    <div style={{fontSize:9,color:"rgba(255,255,255,.45)"}}>+{remaining} to go</div>
                   </div>
                 </div>
-                <div style={{height:3,background:"rgba(255,255,255,.14)",borderRadius:999,overflow:"hidden",marginTop:6}}>
+                <div style={{height:4,background:"rgba(255,255,255,.14)",borderRadius:999,overflow:"hidden",marginTop:7}}>
                   <div style={{height:"100%",width:`${milestoneProgress}%`,background:"linear-gradient(90deg,#22C55E,#4ADE80)",borderRadius:999,transition:"width 1.2s ease"}}/>
                 </div>
               </div>
 
-              <div style={{marginBottom:2}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                  <span style={{fontSize:10,color:"rgba(255,255,255,.7)",fontWeight:500}}>XP Progress</span>
-                  <span style={{fontSize:10,color:"rgba(255,255,255,.85)",fontWeight:600}}>{user.xp} / {xpNext} XP</span>
+              <div>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                  <span style={{fontSize:11,color:"rgba(255,255,255,.7)",fontWeight:500}}>XP Progress</span>
+                  <span style={{fontSize:11,color:"rgba(255,255,255,.85)",fontWeight:600}}>{user.xp} / {xpNext} XP</span>
                 </div>
-                <div style={{height:6,background:"rgba(255,255,255,.14)",borderRadius:999,overflow:"hidden"}}>
+                <div style={{height:7,background:"rgba(255,255,255,.14)",borderRadius:999,overflow:"hidden"}}>
                   <div style={{height:"100%",width:`${xpPct}%`,background:"linear-gradient(90deg,rgba(255,255,255,.85),rgba(196,220,255,.95))",borderRadius:999,transition:"width 1.2s cubic-bezier(.4,0,.2,1)",boxShadow:"0 0 8px rgba(255,255,255,.4)"}}/>
                 </div>
               </div>
+
+              <p style={{fontSize:11,color:"rgba(255,255,255,.5)",fontStyle:"italic",margin:"14px 0 0"}}>✨ Every lesson makes you a better communicator.</p>
             </div>
 
-            {/* Right: Illustration */}
-            <div style={{flex:"0 0 38%",position:"relative",display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:16}}>
-              <div style={{position:"absolute",top:14,right:10,background:"rgba(255,255,255,.95)",color:"#4f46e5",fontSize:10,fontWeight:700,padding:"5px 10px",borderRadius:14,borderBottomRightRadius:2,boxShadow:"0 4px 10px rgba(0,0,0,.15)",zIndex:3}}>
-                Let's learn English! 💬
+            {/* Right: Illustration + decorative badges */}
+            <div style={{flex:"1 1 200px",position:"relative",display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:20,minHeight:220}}>
+              {/* Speech-bubble badge */}
+              <div style={{position:"absolute",top:20,right:18,zIndex:4,display:"flex",alignItems:"center",gap:6,background:"rgba(255,255,255,.97)",padding:"8px 14px 8px 10px",borderRadius:18,borderBottomRightRadius:4,boxShadow:"0 6px 16px rgba(0,0,0,.18)"}}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+                <span style={{fontSize:12.5,fontWeight:700,color:"#4338ca",fontFamily:"'Poppins',sans-serif",whiteSpace:"nowrap"}}>Let's learn English!</span>
               </div>
-              <img src={heroImg} alt="" style={{width:"100%",maxWidth:170,height:"auto",objectFit:"contain",filter:"drop-shadow(-4px 6px 14px rgba(0,0,0,.22))"}}/>
+
+              {/* Floating letter badges */}
+              <div style={{position:"absolute",top:56,left:6,width:30,height:30,borderRadius:9,background:"linear-gradient(135deg,#22C55E,#16A34A)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:14,color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.2)",transform:"rotate(-8deg)",zIndex:3}}>C</div>
+              <div style={{position:"absolute",top:100,right:2,width:26,height:26,borderRadius:8,background:"linear-gradient(135deg,#F59E0B,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:12,color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.2)",transform:"rotate(10deg)",zIndex:3}}>B</div>
+
+              <img src={heroImg} alt="" style={{width:"100%",maxWidth:190,height:"auto",objectFit:"contain",filter:"drop-shadow(-4px 6px 14px rgba(0,0,0,.22))",position:"relative",zIndex:2}}/>
             </div>
           </div>
-
-          <p style={{fontSize:11,color:"rgba(255,255,255,.55)",fontStyle:"italic",margin:"0 20px 16px"}}>✨ Every lesson makes you a better communicator.</p>
         </div>
         );
       })()}
