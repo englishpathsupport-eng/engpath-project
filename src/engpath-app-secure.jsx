@@ -6246,16 +6246,16 @@ const Home = memo(function Home({ state, dispatch }) {
         const xpNext = Math.ceil((user.xp+1)/100)*100;
         const xpPct = Math.min(100, user.xp%100||Math.min(100,user.xp));
         return (
-        <div style={{borderRadius:28,background:"linear-gradient(135deg,#1d4ed8 0%,#5b3ce0 55%,#7c3aed 100%)",marginBottom:16,position:"relative",overflow:"hidden",boxShadow:"0 20px 60px rgba(76,49,220,.45)"}}>
+        <div style={{borderRadius:"clamp(20px,4vw,28px)",background:"linear-gradient(135deg,#1d4ed8 0%,#5b3ce0 55%,#7c3aed 100%)",marginBottom:16,position:"relative",overflow:"hidden",boxShadow:"0 20px 60px rgba(76,49,220,.45)"}}>
           <div style={{position:"absolute",top:-60,left:-40,width:220,height:220,borderRadius:"50%",background:"rgba(255,255,255,.06)",pointerEvents:"none"}}/>
           <div style={{position:"absolute",bottom:-60,right:20,width:180,height:180,borderRadius:"50%",background:"rgba(255,255,255,.04)",pointerEvents:"none"}}/>
 
           <div style={{display:"flex",alignItems:"stretch",flexWrap:"wrap"}}>
             {/* Left: Text + Stats */}
-            <div style={{padding:"24px 20px 22px 22px",position:"relative",zIndex:2,flex:"1 1 280px",minWidth:0}}>
+            <div style={{padding:"clamp(18px,4vw,26px) clamp(16px,4vw,22px) 22px",position:"relative",zIndex:2,flex:"1 1 280px",minWidth:0}}>
               <p style={{fontSize:13,color:"rgba(255,255,255,.7)",fontWeight:500,marginBottom:4,fontFamily:"'Inter',sans-serif"}}>{greeting} 👋</p>
               <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:18,flexWrap:"wrap"}}>
-                <h1 style={{fontFamily:"'Poppins',sans-serif",fontSize:27,fontWeight:700,color:"#fff",lineHeight:1,margin:0}}>{user?.name||"Learner"}</h1>
+                <h1 style={{fontFamily:"'Poppins',sans-serif",fontSize:"clamp(23px,5vw,28px)",fontWeight:700,color:"#fff",lineHeight:1,margin:0}}>{user?.name||"Learner"}</h1>
                 {isActivePro(user)
                   ? <span style={{fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:999,background:"rgba(255,255,255,.18)",color:"#fff",border:"1px solid rgba(255,255,255,.25)"}}>⭐ PRO</span>
                   : <span style={{fontSize:10,fontWeight:600,padding:"3px 10px",borderRadius:999,background:"rgba(255,255,255,.12)",color:"rgba(255,255,255,.75)",border:"1px solid rgba(255,255,255,.18)"}}>FREE</span>
@@ -6314,20 +6314,30 @@ const Home = memo(function Home({ state, dispatch }) {
               <p style={{fontSize:11,color:"rgba(255,255,255,.5)",fontStyle:"italic",margin:"14px 0 0"}}>✨ Every lesson makes you a better communicator.</p>
             </div>
 
-            {/* Right: Illustration + decorative badges */}
-            <div style={{flex:"1 1 220px",position:"relative",display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:24,paddingRight:14,minHeight:250,overflow:"visible"}}>
+            {/* Right: Illustration + stylish backdrop */}
+            <div style={{flex:"1 1 240px",position:"relative",display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:24,paddingRight:"clamp(8px,2vw,16px)",minHeight:"clamp(220px,32vw,300px)",overflow:"visible"}}>
+
+              {/* Glow backdrop behind girl */}
+              <div style={{position:"absolute",bottom:10,left:"50%",transform:"translateX(-50%)",width:"clamp(160px,26vw,230px)",height:"clamp(160px,26vw,230px)",borderRadius:"50%",background:"radial-gradient(circle,rgba(255,255,255,.16) 0%,rgba(255,255,255,0) 70%)",zIndex:1,pointerEvents:"none"}}/>
+              {/* Dashed ring accent */}
+              <div style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:"clamp(150px,22vw,200px)",height:"clamp(150px,22vw,200px)",borderRadius:"50%",border:"1.5px dashed rgba(255,255,255,.22)",zIndex:1,pointerEvents:"none"}}/>
+
+              {/* Sparkles */}
+              <svg style={{position:"absolute",top:100,left:14,zIndex:2}} width="14" height="14" viewBox="0 0 24 24" fill="rgba(255,255,255,.7)"><path d="M12 0l2 10 10 2-10 2-2 10-2-10L0 12l10-2z"/></svg>
+              <svg style={{position:"absolute",bottom:40,right:8,zIndex:2}} width="10" height="10" viewBox="0 0 24 24" fill="rgba(255,255,255,.55)"><path d="M12 0l2 10 10 2-10 2-2 10-2-10L0 12l10-2z"/></svg>
+
               {/* Speech-bubble badge */}
               <div style={{position:"absolute",top:16,right:16,zIndex:5,display:"flex",alignItems:"center",gap:7,background:"rgba(255,255,255,.98)",padding:"9px 16px 9px 12px",borderRadius:20,borderBottomRightRadius:4,boxShadow:"0 8px 18px rgba(0,0,0,.2)"}}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
-                <span style={{fontSize:13.5,fontWeight:700,color:"#4338ca",fontFamily:"'Poppins',sans-serif",whiteSpace:"nowrap",letterSpacing:"-.1px"}}>Let's learn English!</span>
+                <span style={{fontSize:"clamp(12px,2.4vw,13.5px)",fontWeight:700,color:"#4338ca",fontFamily:"'Poppins',sans-serif",whiteSpace:"nowrap",letterSpacing:"-.1px"}}>Let's learn English!</span>
               </div>
 
-              {/* Floating letter badges arranged around the illustration */}
+              {/* Floating letter badges */}
               <div style={{position:"absolute",top:78,left:-4,width:32,height:32,borderRadius:10,background:"linear-gradient(135deg,#F59E0B,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:15,color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(-10deg)",zIndex:3}}>A</div>
               <div style={{position:"absolute",top:64,right:56,width:30,height:30,borderRadius:9,background:"linear-gradient(135deg,#22C55E,#16A34A)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:14,color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(9deg)",zIndex:3}}>B</div>
               <div style={{position:"absolute",bottom:118,left:6,width:28,height:28,borderRadius:9,background:"linear-gradient(135deg,#EC4899,#DB2777)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:13,color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(-6deg)",zIndex:3}}>C</div>
 
-              <img src={heroImg} alt="" style={{width:"100%",maxWidth:210,height:"auto",objectFit:"contain",filter:"drop-shadow(-4px 6px 14px rgba(0,0,0,.22))",position:"relative",zIndex:2}}/>
+              <img src={heroImg} alt="" style={{width:"100%",maxWidth:"clamp(170px,26vw,220px)",height:"auto",objectFit:"contain",filter:"drop-shadow(-4px 6px 14px rgba(0,0,0,.25))",position:"relative",zIndex:2}}/>
             </div>
           </div>
         </div>
