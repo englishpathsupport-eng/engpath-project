@@ -6246,98 +6246,93 @@ const Home = memo(function Home({ state, dispatch }) {
         const xpNext = Math.ceil((user.xp+1)/100)*100;
         const xpPct = Math.min(100, user.xp%100||Math.min(100,user.xp));
         return (
-        <div style={{borderRadius:"clamp(20px,4vw,28px)",background:"linear-gradient(135deg,#1d4ed8 0%,#5b3ce0 55%,#7c3aed 100%)",marginBottom:16,position:"relative",overflow:"hidden",boxShadow:"0 20px 60px rgba(76,49,220,.45)"}}>
+        <div style={{borderRadius:"clamp(18px,4vw,28px)",background:"linear-gradient(135deg,#1d4ed8 0%,#5b3ce0 55%,#7c3aed 100%)",marginBottom:16,position:"relative",overflow:"hidden",boxShadow:"0 20px 60px rgba(76,49,220,.45)"}}>
           <div style={{position:"absolute",top:-60,left:-40,width:220,height:220,borderRadius:"50%",background:"rgba(255,255,255,.06)",pointerEvents:"none"}}/>
           <div style={{position:"absolute",bottom:-60,right:20,width:180,height:180,borderRadius:"50%",background:"rgba(255,255,255,.04)",pointerEvents:"none"}}/>
 
           <div style={{display:"flex",alignItems:"stretch",flexWrap:"wrap"}}>
             {/* Left: Text + Stats */}
-            <div style={{padding:"clamp(18px,4vw,26px) clamp(16px,4vw,22px) 22px",position:"relative",zIndex:2,flex:"1 1 280px",minWidth:0}}>
-              <p style={{fontSize:13,color:"rgba(255,255,255,.7)",fontWeight:500,marginBottom:4,fontFamily:"'Inter',sans-serif"}}>{greeting} 👋</p>
-              <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:18,flexWrap:"wrap"}}>
-                <h1 style={{fontFamily:"'Poppins',sans-serif",fontSize:"clamp(23px,5vw,28px)",fontWeight:700,color:"#fff",lineHeight:1,margin:0}}>{user?.name||"Learner"}</h1>
+            <div style={{padding:"clamp(14px,4vw,26px) clamp(14px,4vw,22px) clamp(14px,3vw,22px)",position:"relative",zIndex:2,flex:"1 1 260px",minWidth:0}}>
+              <p style={{fontSize:12,color:"rgba(255,255,255,.7)",fontWeight:500,marginBottom:3,fontFamily:"'Inter',sans-serif"}}>{greeting} 👋</p>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+                <h1 style={{fontFamily:"'Poppins',sans-serif",fontSize:"clamp(20px,5vw,27px)",fontWeight:700,color:"#fff",lineHeight:1,margin:0}}>{user?.name||"Learner"}</h1>
                 {isActivePro(user)
-                  ? <span style={{fontSize:10,fontWeight:700,padding:"3px 10px",borderRadius:999,background:"rgba(255,255,255,.18)",color:"#fff",border:"1px solid rgba(255,255,255,.25)"}}>⭐ PRO</span>
-                  : <span style={{fontSize:10,fontWeight:600,padding:"3px 10px",borderRadius:999,background:"rgba(255,255,255,.12)",color:"rgba(255,255,255,.75)",border:"1px solid rgba(255,255,255,.18)"}}>FREE</span>
+                  ? <span style={{fontSize:9,fontWeight:700,padding:"3px 9px",borderRadius:999,background:"rgba(255,255,255,.18)",color:"#fff",border:"1px solid rgba(255,255,255,.25)"}}>⭐ PRO</span>
+                  : <span style={{fontSize:9,fontWeight:600,padding:"3px 9px",borderRadius:999,background:"rgba(255,255,255,.12)",color:"rgba(255,255,255,.75)",border:"1px solid rgba(255,255,255,.18)"}}>FREE</span>
                 }
               </div>
 
-              <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-                <div style={{background:"rgba(255,255,255,.14)",borderRadius:16,padding:"11px 14px",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,.22)",flex:"1 1 100px"}}>
-                  <div style={{fontSize:10,color:"rgba(255,255,255,.65)",marginBottom:5,display:"flex",alignItems:"center",gap:5}}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="rgba(255,215,0,.9)"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
+              <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+                <div style={{background:"rgba(255,255,255,.14)",borderRadius:14,padding:"9px 12px",backdropFilter:"blur(14px)",border:"1px solid rgba(255,255,255,.2)",flex:"1 1 80px"}}>
+                  <div style={{fontSize:9,color:"rgba(255,255,255,.65)",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,215,0,.9)"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
                     Level
                   </div>
-                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:21,fontWeight:700,color:"#fff",lineHeight:1}}>{user.level}</div>
+                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:18,fontWeight:700,color:"#fff",lineHeight:1}}>{user.level}</div>
                 </div>
-                <div style={{background:"rgba(255,255,255,.14)",borderRadius:16,padding:"11px 14px",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,.22)",flex:"1 1 100px"}}>
-                  <div style={{fontSize:10,color:"rgba(255,255,255,.65)",marginBottom:5,display:"flex",alignItems:"center",gap:5}}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="rgba(255,220,80,.9)"><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></svg>
+                <div style={{background:"rgba(255,255,255,.14)",borderRadius:14,padding:"9px 12px",backdropFilter:"blur(14px)",border:"1px solid rgba(255,255,255,.2)",flex:"1 1 80px"}}>
+                  <div style={{fontSize:9,color:"rgba(255,255,255,.65)",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,220,80,.9)"><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></svg>
                     XP
                   </div>
-                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:21,fontWeight:700,color:"#fff",lineHeight:1}}>{user.xp.toLocaleString()}</div>
+                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:18,fontWeight:700,color:"#fff",lineHeight:1}}>{user.xp.toLocaleString()}</div>
                 </div>
-                <div style={{background:"rgba(255,255,255,.14)",borderRadius:16,padding:"11px 14px",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,.22)",flex:"1 1 100px"}}>
-                  <div style={{fontSize:10,color:"rgba(255,255,255,.65)",marginBottom:5,display:"flex",alignItems:"center",gap:5}}>
-                    <span style={{fontSize:12}}>🔥</span> Streak
+                <div style={{background:"rgba(255,255,255,.14)",borderRadius:14,padding:"9px 12px",backdropFilter:"blur(14px)",border:"1px solid rgba(255,255,255,.2)",flex:"1 1 80px"}}>
+                  <div style={{fontSize:9,color:"rgba(255,255,255,.65)",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
+                    <span style={{fontSize:10}}>🔥</span> Streak
                   </div>
-                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:21,fontWeight:700,color:"#fff",lineHeight:1}}>{user?.streak||0}<span style={{fontSize:12,fontWeight:400,color:"rgba(255,255,255,.6)"}}>d</span></div>
+                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:18,fontWeight:700,color:"#fff",lineHeight:1}}>{user?.streak||0}<span style={{fontSize:10,fontWeight:400,color:"rgba(255,255,255,.6)"}}>d</span></div>
                 </div>
               </div>
 
-              <div style={{background:"rgba(255,255,255,.14)",borderRadius:16,padding:"11px 14px",backdropFilter:"blur(12px)",border:"1px solid rgba(255,255,255,.22)",marginBottom:14}}>
-                <div style={{fontSize:10,color:"rgba(255,255,255,.65)",marginBottom:5,display:"flex",alignItems:"center",gap:5}}>
-                  <span style={{fontSize:12}}>📚</span> Learning Journey
+              <div style={{background:"rgba(255,255,255,.14)",borderRadius:14,padding:"9px 12px",backdropFilter:"blur(14px)",border:"1px solid rgba(255,255,255,.2)",marginBottom:10}}>
+                <div style={{fontSize:9,color:"rgba(255,255,255,.65)",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
+                  <span style={{fontSize:10}}>📚</span> Learning Journey
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
-                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:19,fontWeight:700,color:"#fff",lineHeight:1}}>{totalSessions}<span style={{fontSize:11,fontWeight:400,color:"rgba(255,255,255,.6)",marginLeft:4}}>sessions</span></div>
+                  <div style={{fontFamily:"'Poppins',sans-serif",fontSize:16,fontWeight:700,color:"#fff",lineHeight:1}}>{totalSessions}<span style={{fontSize:10,fontWeight:400,color:"rgba(255,255,255,.6)",marginLeft:3}}>sessions</span></div>
                   <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:10,color:"#4ADE80",fontWeight:600}}>🎯 {nextMilestone} next</div>
-                    <div style={{fontSize:9,color:"rgba(255,255,255,.45)"}}>+{remaining} to go</div>
+                    <div style={{fontSize:9,color:"#4ADE80",fontWeight:600}}>🎯 {nextMilestone} next</div>
+                    <div style={{fontSize:8,color:"rgba(255,255,255,.45)"}}>+{remaining} to go</div>
                   </div>
                 </div>
-                <div style={{height:4,background:"rgba(255,255,255,.14)",borderRadius:999,overflow:"hidden",marginTop:7}}>
+                <div style={{height:3,background:"rgba(255,255,255,.14)",borderRadius:999,overflow:"hidden",marginTop:6}}>
                   <div style={{height:"100%",width:`${milestoneProgress}%`,background:"linear-gradient(90deg,#22C55E,#4ADE80)",borderRadius:999,transition:"width 1.2s ease"}}/>
                 </div>
               </div>
 
               <div>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-                  <span style={{fontSize:11,color:"rgba(255,255,255,.7)",fontWeight:500}}>XP Progress</span>
-                  <span style={{fontSize:11,color:"rgba(255,255,255,.85)",fontWeight:600}}>{user.xp} / {xpNext} XP</span>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                  <span style={{fontSize:10,color:"rgba(255,255,255,.7)",fontWeight:500}}>XP Progress</span>
+                  <span style={{fontSize:10,color:"rgba(255,255,255,.85)",fontWeight:600}}>{user.xp} / {xpNext} XP</span>
                 </div>
-                <div style={{height:7,background:"rgba(255,255,255,.14)",borderRadius:999,overflow:"hidden"}}>
+                <div style={{height:6,background:"rgba(255,255,255,.14)",borderRadius:999,overflow:"hidden"}}>
                   <div style={{height:"100%",width:`${xpPct}%`,background:"linear-gradient(90deg,rgba(255,255,255,.85),rgba(196,220,255,.95))",borderRadius:999,transition:"width 1.2s cubic-bezier(.4,0,.2,1)",boxShadow:"0 0 8px rgba(255,255,255,.4)"}}/>
                 </div>
               </div>
 
-              <p style={{fontSize:11,color:"rgba(255,255,255,.5)",fontStyle:"italic",margin:"14px 0 0"}}>✨ Every lesson makes you a better communicator.</p>
+              <p style={{fontSize:10.5,color:"rgba(255,255,255,.5)",fontStyle:"italic",margin:"12px 0 0"}}>✨ Every lesson makes you a better communicator.</p>
             </div>
 
-            {/* Right: Illustration + stylish backdrop */}
-            <div style={{flex:"1 1 240px",position:"relative",display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:24,paddingRight:"clamp(8px,2vw,16px)",minHeight:"clamp(220px,32vw,300px)",overflow:"visible"}}>
+            {/* Right: Illustration + backdrop */}
+            <div style={{flex:"1 1 140px",position:"relative",display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"clamp(10px,3vw,24px)",paddingRight:"clamp(6px,2vw,16px)",minHeight:"clamp(140px,26vw,300px)",overflow:"visible"}}>
 
-              {/* Glow backdrop behind girl */}
-              <div style={{position:"absolute",bottom:10,left:"50%",transform:"translateX(-50%)",width:"clamp(160px,26vw,230px)",height:"clamp(160px,26vw,230px)",borderRadius:"50%",background:"radial-gradient(circle,rgba(255,255,255,.16) 0%,rgba(255,255,255,0) 70%)",zIndex:1,pointerEvents:"none"}}/>
-              {/* Dashed ring accent */}
-              <div style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:"clamp(150px,22vw,200px)",height:"clamp(150px,22vw,200px)",borderRadius:"50%",border:"1.5px dashed rgba(255,255,255,.22)",zIndex:1,pointerEvents:"none"}}/>
+              <div style={{position:"absolute",bottom:6,left:"50%",transform:"translateX(-50%)",width:"clamp(90px,20vw,230px)",height:"clamp(90px,20vw,230px)",borderRadius:"50%",background:"radial-gradient(circle,rgba(255,255,255,.16) 0%,rgba(255,255,255,0) 70%)",zIndex:1,pointerEvents:"none"}}/>
+              <div style={{position:"absolute",bottom:0,left:"50%",transform:"translateX(-50%)",width:"clamp(84px,17vw,200px)",height:"clamp(84px,17vw,200px)",borderRadius:"50%",border:"1.5px dashed rgba(255,255,255,.22)",zIndex:1,pointerEvents:"none"}}/>
 
-              {/* Sparkles */}
-              <svg style={{position:"absolute",top:100,left:14,zIndex:2}} width="14" height="14" viewBox="0 0 24 24" fill="rgba(255,255,255,.7)"><path d="M12 0l2 10 10 2-10 2-2 10-2-10L0 12l10-2z"/></svg>
-              <svg style={{position:"absolute",bottom:40,right:8,zIndex:2}} width="10" height="10" viewBox="0 0 24 24" fill="rgba(255,255,255,.55)"><path d="M12 0l2 10 10 2-10 2-2 10-2-10L0 12l10-2z"/></svg>
+              <svg style={{position:"absolute",top:"30%",left:8,zIndex:2}} width="10" height="10" viewBox="0 0 24 24" fill="rgba(255,255,255,.7)"><path d="M12 0l2 10 10 2-10 2-2 10-2-10L0 12l10-2z"/></svg>
+              <svg style={{position:"absolute",bottom:24,right:4,zIndex:2}} width="8" height="8" viewBox="0 0 24 24" fill="rgba(255,255,255,.55)"><path d="M12 0l2 10 10 2-10 2-2 10-2-10L0 12l10-2z"/></svg>
 
-              {/* Speech-bubble badge */}
-              <div style={{position:"absolute",top:16,right:16,zIndex:5,display:"flex",alignItems:"center",gap:7,background:"rgba(255,255,255,.98)",padding:"9px 16px 9px 12px",borderRadius:20,borderBottomRightRadius:4,boxShadow:"0 8px 18px rgba(0,0,0,.2)"}}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
-                <span style={{fontSize:"clamp(12px,2.4vw,13.5px)",fontWeight:700,color:"#4338ca",fontFamily:"'Poppins',sans-serif",whiteSpace:"nowrap",letterSpacing:"-.1px"}}>Let's learn English!</span>
+              <div style={{position:"absolute",top:8,right:8,zIndex:5,display:"flex",alignItems:"center",gap:5,background:"rgba(255,255,255,.98)",padding:"6px 11px 6px 9px",borderRadius:16,borderBottomRightRadius:3,boxShadow:"0 6px 14px rgba(0,0,0,.2)"}}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+                <span style={{fontSize:"clamp(9px,2vw,12px)",fontWeight:700,color:"#4338ca",fontFamily:"'Poppins',sans-serif",whiteSpace:"nowrap",letterSpacing:"-.1px"}}>Let's learn English!</span>
               </div>
 
-              {/* Floating letter badges */}
-              <div style={{position:"absolute",top:78,left:-4,width:32,height:32,borderRadius:10,background:"linear-gradient(135deg,#F59E0B,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:15,color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(-10deg)",zIndex:3}}>A</div>
-              <div style={{position:"absolute",top:64,right:56,width:30,height:30,borderRadius:9,background:"linear-gradient(135deg,#22C55E,#16A34A)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:14,color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(9deg)",zIndex:3}}>B</div>
-              <div style={{position:"absolute",bottom:118,left:6,width:28,height:28,borderRadius:9,background:"linear-gradient(135deg,#EC4899,#DB2777)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:13,color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(-6deg)",zIndex:3}}>C</div>
+              <div style={{position:"absolute",top:"34%",left:-2,width:"clamp(18px,4vw,32px)",height:"clamp(18px,4vw,32px)",borderRadius:8,background:"linear-gradient(135deg,#F59E0B,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(9px,2vw,15px)",color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(-10deg)",zIndex:3}}>A</div>
+              <div style={{position:"absolute",top:"28%",right:"26%",width:"clamp(16px,3.5vw,30px)",height:"clamp(16px,3.5vw,30px)",borderRadius:7,background:"linear-gradient(135deg,#22C55E,#16A34A)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(8px,1.8vw,14px)",color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(9deg)",zIndex:3}}>B</div>
+              <div style={{position:"absolute",bottom:"36%",left:2,width:"clamp(15px,3.2vw,28px)",height:"clamp(15px,3.2vw,28px)",borderRadius:7,background:"linear-gradient(135deg,#EC4899,#DB2777)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(8px,1.6vw,13px)",color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(-6deg)",zIndex:3}}>C</div>
 
-              <img src={heroImg} alt="" style={{width:"100%",maxWidth:"clamp(170px,26vw,220px)",height:"auto",objectFit:"contain",filter:"drop-shadow(-4px 6px 14px rgba(0,0,0,.25))",position:"relative",zIndex:2}}/>
+              <img src={heroImg} alt="" style={{width:"100%",maxWidth:"clamp(100px,20vw,220px)",maxHeight:"clamp(120px,24vw,260px)",height:"auto",objectFit:"contain",filter:"drop-shadow(-4px 6px 14px rgba(0,0,0,.25))",position:"relative",zIndex:2}}/>
             </div>
           </div>
         </div>
