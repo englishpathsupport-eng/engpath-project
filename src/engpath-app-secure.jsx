@@ -6314,25 +6314,25 @@ const Home = memo(function Home({ state, dispatch }) {
               <p style={{fontSize:10.5,color:"rgba(255,255,255,.5)",fontStyle:"italic",margin:"12px 0 0"}}>✨ Every lesson makes you a better communicator.</p>
             </div>
 
-            {/* Right: Illustration + backdrop */}
-            <div style={{flex:"1 1 140px",position:"relative",display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"clamp(10px,3vw,24px)",paddingRight:"clamp(6px,2vw,16px)",minHeight:"clamp(140px,26vw,300px)",overflow:"visible"}}>
+            {/* Right: Illustration — all children positioned by % of THIS container so mobile/desktop stay proportionally identical */}
+            <div style={{flex:"1 1 200px",position:"relative",display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"6%",paddingBottom:"4%",paddingLeft:"8%",paddingRight:"6%",minHeight:"clamp(160px,34vw,300px)",overflow:"hidden"}}>
 
-              <div style={{position:"absolute",bottom:6,left:"50%",transform:"translateX(-50%)",width:"clamp(90px,20vw,230px)",height:"clamp(90px,20vw,230px)",borderRadius:"50%",background:"radial-gradient(circle,rgba(255,255,255,.16) 0%,rgba(255,255,255,0) 70%)",zIndex:1,pointerEvents:"none"}}/>
-              <div style={{position:"absolute",bottom:0,left:"50%",transform:"translateX(-50%)",width:"clamp(84px,17vw,200px)",height:"clamp(84px,17vw,200px)",borderRadius:"50%",border:"1.5px dashed rgba(255,255,255,.22)",zIndex:1,pointerEvents:"none"}}/>
+              <div style={{position:"absolute",bottom:"4%",left:"50%",transform:"translateX(-50%)",width:"62%",aspectRatio:"1/1",borderRadius:"50%",background:"radial-gradient(circle,rgba(255,255,255,.16) 0%,rgba(255,255,255,0) 70%)",zIndex:1,pointerEvents:"none"}}/>
+              <div style={{position:"absolute",bottom:0,left:"50%",transform:"translateX(-50%)",width:"54%",aspectRatio:"1/1",borderRadius:"50%",border:"1.5px dashed rgba(255,255,255,.22)",zIndex:1,pointerEvents:"none"}}/>
 
-              <svg style={{position:"absolute",top:"30%",left:8,zIndex:2}} width="10" height="10" viewBox="0 0 24 24" fill="rgba(255,255,255,.7)"><path d="M12 0l2 10 10 2-10 2-2 10-2-10L0 12l10-2z"/></svg>
-              <svg style={{position:"absolute",bottom:24,right:4,zIndex:2}} width="8" height="8" viewBox="0 0 24 24" fill="rgba(255,255,255,.55)"><path d="M12 0l2 10 10 2-10 2-2 10-2-10L0 12l10-2z"/></svg>
+              <svg style={{position:"absolute",top:"28%",left:"4%",zIndex:2}} width="10" height="10" viewBox="0 0 24 24" fill="rgba(255,255,255,.7)"><path d="M12 0l2 10 10 2-10 2-2 10-2-10L0 12l10-2z"/></svg>
+              <svg style={{position:"absolute",bottom:"10%",right:"2%",zIndex:2}} width="8" height="8" viewBox="0 0 24 24" fill="rgba(255,255,255,.55)"><path d="M12 0l2 10 10 2-10 2-2 10-2-10L0 12l10-2z"/></svg>
 
-              <div style={{position:"absolute",top:8,right:8,zIndex:5,display:"flex",alignItems:"center",gap:5,background:"rgba(255,255,255,.98)",padding:"6px 11px 6px 9px",borderRadius:16,borderBottomRightRadius:3,boxShadow:"0 6px 14px rgba(0,0,0,.2)"}}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
-                <span style={{fontSize:"clamp(9px,2vw,12px)",fontWeight:700,color:"#4338ca",fontFamily:"'Poppins',sans-serif",whiteSpace:"nowrap",letterSpacing:"-.1px"}}>Let's learn English!</span>
+              <div style={{position:"absolute",top:"3%",right:"3%",zIndex:5,display:"flex",alignItems:"center",gap:"4%",background:"rgba(255,255,255,.98)",padding:"6px 11px 6px 9px",borderRadius:16,borderBottomRightRadius:3,boxShadow:"0 6px 14px rgba(0,0,0,.2)",maxWidth:"92%"}}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+                <span style={{fontSize:"clamp(9px,2.6vw,12px)",fontWeight:700,color:"#4338ca",fontFamily:"'Poppins',sans-serif",whiteSpace:"nowrap",letterSpacing:"-.1px"}}>Let's learn English!</span>
               </div>
 
-              <div style={{position:"absolute",top:"34%",left:-2,width:"clamp(18px,4vw,32px)",height:"clamp(18px,4vw,32px)",borderRadius:8,background:"linear-gradient(135deg,#F59E0B,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(9px,2vw,15px)",color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(-10deg)",zIndex:3}}>A</div>
-              <div style={{position:"absolute",top:"28%",right:"26%",width:"clamp(16px,3.5vw,30px)",height:"clamp(16px,3.5vw,30px)",borderRadius:7,background:"linear-gradient(135deg,#22C55E,#16A34A)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(8px,1.8vw,14px)",color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(9deg)",zIndex:3}}>B</div>
-              <div style={{position:"absolute",bottom:"36%",left:2,width:"clamp(15px,3.2vw,28px)",height:"clamp(15px,3.2vw,28px)",borderRadius:7,background:"linear-gradient(135deg,#EC4899,#DB2777)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(8px,1.6vw,13px)",color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(-6deg)",zIndex:3}}>C</div>
+              <div style={{position:"absolute",top:"32%",left:"2%",width:"16%",aspectRatio:"1/1",minWidth:20,maxWidth:32,borderRadius:8,background:"linear-gradient(135deg,#F59E0B,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(9px,2.4vw,15px)",color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(-10deg)",zIndex:3}}>A</div>
+              <div style={{position:"absolute",top:"26%",right:"22%",width:"15%",aspectRatio:"1/1",minWidth:18,maxWidth:30,borderRadius:7,background:"linear-gradient(135deg,#22C55E,#16A34A)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(8px,2.2vw,14px)",color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(9deg)",zIndex:3}}>B</div>
+              <div style={{position:"absolute",bottom:"34%",left:"1%",width:"14%",aspectRatio:"1/1",minWidth:17,maxWidth:28,borderRadius:7,background:"linear-gradient(135deg,#EC4899,#DB2777)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(8px,2vw,13px)",color:"#fff",boxShadow:"0 6px 14px rgba(0,0,0,.22)",transform:"rotate(-6deg)",zIndex:3}}>C</div>
 
-              <img src={heroImg} alt="" style={{width:"100%",maxWidth:"clamp(100px,20vw,220px)",maxHeight:"clamp(120px,24vw,260px)",height:"auto",objectFit:"contain",filter:"drop-shadow(-4px 6px 14px rgba(0,0,0,.25))",position:"relative",zIndex:2}}/>
+              <img src={heroImg} alt="" style={{width:"100%",maxWidth:220,height:"auto",objectFit:"contain",filter:"drop-shadow(-4px 6px 14px rgba(0,0,0,.25))",position:"relative",zIndex:2}}/>
             </div>
           </div>
         </div>
