@@ -6250,9 +6250,9 @@ const Home = memo(function Home({ state, dispatch }) {
           <div style={{position:"absolute",top:-60,left:-40,width:220,height:220,borderRadius:"50%",background:"rgba(255,255,255,.06)",pointerEvents:"none"}}/>
           <div style={{position:"absolute",bottom:-60,right:20,width:180,height:180,borderRadius:"50%",background:"rgba(255,255,255,.04)",pointerEvents:"none"}}/>
 
-          <div style={{display:"flex",alignItems:"stretch",flexWrap:"wrap"}}>
+          <div style={{display:"flex",alignItems:"stretch",flexWrap:"nowrap"}}>
             {/* Left: Text + Stats */}
-            <div style={{padding:"clamp(14px,4vw,26px) clamp(14px,4vw,22px) clamp(14px,3vw,22px)",position:"relative",zIndex:2,flex:"1 1 260px",minWidth:0}}>
+            <div style={{padding:"clamp(14px,4vw,26px) clamp(14px,4vw,22px) clamp(14px,3vw,22px)",position:"relative",zIndex:2,flex:"1 1 0",minWidth:0,maxWidth:"64%"}}>
               <p style={{fontSize:12,color:"rgba(255,255,255,.7)",fontWeight:500,marginBottom:3,fontFamily:"'Inter',sans-serif"}}>{greeting} 👋</p>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
                 <h1 style={{fontFamily:"'Poppins',sans-serif",fontSize:"clamp(20px,5vw,27px)",fontWeight:700,color:"#fff",lineHeight:1,margin:0}}>{user?.name||"Learner"}</h1>
@@ -6262,7 +6262,7 @@ const Home = memo(function Home({ state, dispatch }) {
                 }
               </div>
 
-              <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+              <div style={{display:"flex",gap:5,marginBottom:10,flexWrap:"nowrap"}}>
                 <div style={{background:"rgba(255,255,255,.14)",borderRadius:14,padding:"9px 12px",backdropFilter:"blur(14px)",border:"1px solid rgba(255,255,255,.2)",flex:"1 1 80px"}}>
                   <div style={{fontSize:9,color:"rgba(255,255,255,.65)",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,215,0,.9)"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
@@ -6315,7 +6315,7 @@ const Home = memo(function Home({ state, dispatch }) {
             </div>
 
             {/* Right: Illustration — all children positioned by % of THIS container so mobile/desktop stay proportionally identical */}
-            <div style={{flex:"1 1 200px",position:"relative",display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"6%",paddingBottom:"4%",paddingLeft:"8%",paddingRight:"6%",minHeight:"clamp(160px,34vw,300px)",overflow:"hidden"}}>
+            <div style={{flex:"0 1 36%",position:"relative",display:"flex",alignItems:"flex-end",justifyContent:"center",paddingTop:"6%",paddingBottom:"4%",paddingLeft:"4%",paddingRight:"4%",minHeight:"clamp(150px,34vw,300px)",overflow:"hidden"}}>
 
               <div style={{position:"absolute",bottom:"4%",left:"50%",transform:"translateX(-50%)",width:"62%",aspectRatio:"1/1",borderRadius:"50%",background:"radial-gradient(circle,rgba(255,255,255,.16) 0%,rgba(255,255,255,0) 70%)",zIndex:1,pointerEvents:"none"}}/>
               <div style={{position:"absolute",bottom:0,left:"50%",transform:"translateX(-50%)",width:"54%",aspectRatio:"1/1",borderRadius:"50%",border:"1.5px dashed rgba(255,255,255,.22)",zIndex:1,pointerEvents:"none"}}/>
