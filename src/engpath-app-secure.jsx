@@ -6390,7 +6390,7 @@ const Home = memo(function Home({ state, dispatch }) {
                   <div style={{position:"absolute",width:"78%",aspectRatio:"1/1",borderRadius:"50%",background:"radial-gradient(circle,rgba(255,255,255,.18) 0%,rgba(255,255,255,0) 70%)",zIndex:0,pointerEvents:"none"}}/>
 
                   <div
-                    onClick={()=>setShowConsistencyTip(v=>!v)}
+                    onClick={()=>{ setShowConsistencyTip(true); setTimeout(()=>setShowConsistencyTip(false), 2500); }}
                     role="button"
                     tabIndex={0}
                     aria-label={`Consistency progress: ${totalSessions} of ${nextMilestone} sessions completed`}
@@ -6401,7 +6401,7 @@ const Home = memo(function Home({ state, dispatch }) {
                   </div>
 
                   {showConsistencyTip && (
-                    <div style={{position:"absolute",top:"38%",left:"50%",transform:"translateX(-50%)",zIndex:8,background:"rgba(20,15,50,.97)",color:"#fff",fontSize:"clamp(8px,1.9vw,10px)",padding:"5px 9px",borderRadius:9,whiteSpace:"nowrap",boxShadow:"0 8px 20px rgba(0,0,0,.35)",lineHeight:1.3,textAlign:"center",pointerEvents:"none"}}>
+                    <div style={{position:"absolute",bottom:"-8%",left:"50%",transform:"translateX(-50%)",zIndex:8,background:"rgba(20,15,50,.97)",color:"#fff",fontSize:"clamp(8px,1.9vw,10px)",padding:"5px 9px",borderRadius:9,whiteSpace:"nowrap",boxShadow:"0 8px 20px rgba(0,0,0,.35)",lineHeight:1.3,textAlign:"center",pointerEvents:"none"}}>
                       {totalSessions}/{nextMilestone} — keep going!
                     </div>
                   )}
