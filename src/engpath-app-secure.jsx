@@ -6364,7 +6364,7 @@ const Home = memo(function Home({ state, dispatch }) {
             </div>
 
             {/* Right: Illustration column — fixed bottom-anchor, progress ring, badges, milestone glow */}
-            <div style={{flex:"0 1 40%",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",paddingRight:"3%",paddingTop:"42%",overflow:"visible"}}>
+            <div style={{flex:"0 1 40%",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",paddingRight:"3%",paddingTop:"clamp(36px,20vw,46px)",overflow:"visible"}}>
               <div style={{position:"relative",display:"inline-block",width:"100%",maxWidth:220}}>
 
                 <style>{`
