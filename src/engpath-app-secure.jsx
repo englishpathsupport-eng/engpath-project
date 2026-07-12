@@ -6367,7 +6367,7 @@ const Home = memo(function Home({ state, dispatch }) {
             </div>
 
             {/* Right: Illustration column — fixed bottom-anchor, progress ring, badges, milestone glow */}
-            <div style={{flex:"0 1 40%",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",paddingRight:"3%",overflow:"hidden"}}>
+            <div style={{flex:"0 1 40%",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",paddingRight:"3%",paddingTop:"14%",overflow:"visible"}}>
               <div style={{position:"relative",display:"inline-block",width:"100%",maxWidth:220}}>
 
                 <style>{`
@@ -6376,7 +6376,7 @@ const Home = memo(function Home({ state, dispatch }) {
                 `}</style>
 
                 {/* speech bubble — sits above the ring, centered, clear of badges */}
-                <div style={{position:"absolute",top:"-13%",left:"50%",transform:"translateX(-50%)",zIndex:6,display:"flex",alignItems:"center",gap:4,background:"rgba(255,255,255,.98)",padding:"6px 12px",borderRadius:999,boxShadow:"0 6px 14px rgba(0,0,0,.22)",whiteSpace:"nowrap"}}>
+                <div style={{position:"absolute",top:"-4%",left:"50%",transform:"translateX(-50%)",zIndex:6,display:"flex",alignItems:"center",gap:4,background:"rgba(255,255,255,.98)",padding:"6px 12px",borderRadius:999,boxShadow:"0 6px 14px rgba(0,0,0,.22)",whiteSpace:"nowrap"}}>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
                   <span style={{fontSize:"clamp(9px,2.2vw,12px)",fontWeight:700,color:"#4338ca",fontFamily:"'Poppins',sans-serif"}}>Let's learn English!</span>
                 </div>
@@ -6391,6 +6391,11 @@ const Home = memo(function Home({ state, dispatch }) {
                   </svg>
 
                   <div style={{position:"absolute",width:"78%",aspectRatio:"1/1",borderRadius:"50%",background:"radial-gradient(circle,rgba(255,255,255,.18) 0%,rgba(255,255,255,0) 70%)",zIndex:0,pointerEvents:"none"}}/>
+
+                  <div style={{position:"absolute",top:"6%",left:"50%",transform:"translateX(-50%)",textAlign:"center",zIndex:3,pointerEvents:"none"}}>
+                    <div style={{fontFamily:"'Poppins',sans-serif",fontSize:"clamp(11px,2.6vw,15px)",fontWeight:700,color:"#fff"}}>{milestoneProgress}%</div>
+                    <div style={{fontSize:"clamp(6px,1.4vw,8px)",color:"rgba(255,255,255,.65)",textTransform:"uppercase",letterSpacing:".3px"}}>consistency</div>
+                  </div>
 
                   <img src={heroImg} alt="" style={{width:"78%",height:"auto",objectFit:"contain",filter:"drop-shadow(-4px 6px 14px rgba(0,0,0,.25))",position:"relative",zIndex:2,display:"block"}}/>
                 </div>
