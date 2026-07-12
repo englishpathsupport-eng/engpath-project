@@ -6356,15 +6356,15 @@ const Home = memo(function Home({ state, dispatch }) {
                 </div>
 
                 {/* Progress ring wrapping the character — outer = milestone, inner = XP */}
-                <div style={{position:"relative",width:"100%",display:"flex",justifyContent:"center",animation:"epFloat 4s ease-in-out infinite"}}>
-                  <svg viewBox="0 0 100 100" style={{position:"absolute",top:"2%",width:"92%",height:"92%",zIndex:1,filter: isAlmostThere ? "drop-shadow(0 0 6px rgba(74,222,128,.8))" : "none",animation: isAlmostThere ? "epPulseGlow 1.6s ease-in-out infinite" : "none"}}>
+                <div style={{position:"relative",width:"100%",aspectRatio:"1/1",display:"flex",alignItems:"center",justifyContent:"center",animation:"epFloat 4s ease-in-out infinite"}}>
+                  <svg viewBox="0 0 100 100" style={{position:"absolute",inset:0,width:"100%",height:"100%",zIndex:1,filter: isAlmostThere ? "drop-shadow(0 0 6px rgba(74,222,128,.8))" : "none",animation: isAlmostThere ? "epPulseGlow 1.6s ease-in-out infinite" : "none"}}>
                     <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.32)" strokeWidth="6"/>
                     <circle cx="50" cy="50" r="44" fill="none" stroke="#4ADE80" strokeWidth="6" strokeLinecap="round" strokeDasharray={circOuter} strokeDashoffset={outerOffset} transform="rotate(-90 50 50)" style={{transition:"stroke-dashoffset 1.2s ease"}}/>
                     <circle cx="50" cy="50" r="33" fill="none" stroke="rgba(255,255,255,.28)" strokeWidth="5"/>
                     <circle cx="50" cy="50" r="33" fill="none" stroke="#FBBF24" strokeWidth="5" strokeLinecap="round" strokeDasharray={circInner} strokeDashoffset={innerOffset} transform="rotate(-90 50 50)" style={{transition:"stroke-dashoffset 1.2s ease"}}/>
                   </svg>
 
-                  <div style={{position:"absolute",bottom:"4%",left:"50%",transform:"translateX(-50%)",width:"78%",aspectRatio:"1/1",borderRadius:"50%",background:"radial-gradient(circle,rgba(255,255,255,.18) 0%,rgba(255,255,255,0) 70%)",zIndex:0,pointerEvents:"none"}}/>
+                  <div style={{position:"absolute",width:"78%",aspectRatio:"1/1",borderRadius:"50%",background:"radial-gradient(circle,rgba(255,255,255,.18) 0%,rgba(255,255,255,0) 70%)",zIndex:0,pointerEvents:"none"}}/>
 
                   <img src={heroImg} alt="" style={{width:"78%",height:"auto",objectFit:"contain",filter:"drop-shadow(-4px 6px 14px rgba(0,0,0,.25))",position:"relative",zIndex:2,display:"block"}}/>
                 </div>
