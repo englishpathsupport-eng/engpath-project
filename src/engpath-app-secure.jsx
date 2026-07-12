@@ -6269,7 +6269,7 @@ const Home = memo(function Home({ state, dispatch }) {
           <div style={{position:"absolute",top:-60,left:-40,width:220,height:220,borderRadius:"50%",background:"rgba(255,255,255,.07)",pointerEvents:"none"}}/>
           <div style={{position:"absolute",bottom:-60,right:20,width:180,height:180,borderRadius:"50%",background:"rgba(255,255,255,.05)",pointerEvents:"none"}}/>
 
-          <div style={{display:"flex",alignItems:"stretch",flexWrap:"nowrap"}}>
+          <div style={{display:"flex",alignItems:"center",flexWrap:"nowrap"}}>
             {/* Left: Text + Stats */}
             <div style={{padding:"clamp(12px,3.5vw,22px) clamp(14px,4vw,22px) clamp(12px,2.5vw,18px)",position:"relative",zIndex:2,flex:"1 1 0",minWidth:0,maxWidth:"60%"}}>
               <p style={{fontSize:12,color:"rgba(255,255,255,.7)",fontWeight:500,marginBottom:3,fontFamily:"'Inter',sans-serif"}}>{greeting} 👋</p>
@@ -6324,35 +6324,6 @@ const Home = memo(function Home({ state, dispatch }) {
                 </div>
               </div>
 
-              {(() => {
-                const AI_COACH_TIPS = [
-                  "Practice speaking for 5 minutes.",
-                  "Learn 3 new words today.",
-                  "Read one short paragraph aloud.",
-                  "Record yourself saying a sentence.",
-                  "Describe your day in 3 sentences.",
-                  "Ask a question using \'could you\'.",
-                  "Practice greetings with a friend.",
-                  "Write one sentence about your goals.",
-                  "Listen to a 2-minute English clip.",
-                  "Try explaining a word you learned.",
-                ];
-                const today = new Date();
-                const start = new Date(today.getFullYear(),0,0);
-                const diff = today - start;
-                const dayOfYear = Math.floor(diff/86400000);
-                const coachTip = AI_COACH_TIPS[(dayOfYear-1) % AI_COACH_TIPS.length];
-                return (
-                <div style={{display:"flex",alignItems:"flex-start",gap:6,background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.15)",borderRadius:12,padding:"6px 10px",marginBottom:8}}>
-                  <span style={{fontSize:13,flexShrink:0}}>🤖</span>
-                  <div style={{minWidth:0}}>
-                    <p style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.6)",margin:"0 0 2px",textTransform:"uppercase",letterSpacing:".3px"}}>AI Coach</p>
-                    <p style={{fontSize:10.5,color:"rgba(255,255,255,.85)",margin:0,lineHeight:1.35}}>Today's best exercise: {coachTip}</p>
-                  </div>
-                </div>
-                );
-              })()}
-
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
                   <span style={{fontSize:10,color:"rgba(255,255,255,.7)",fontWeight:500}}>XP Progress</span>
@@ -6396,7 +6367,7 @@ const Home = memo(function Home({ state, dispatch }) {
             </div>
 
             {/* Right: Illustration column — fixed bottom-anchor, progress ring, badges, milestone glow */}
-            <div style={{flex:"0 1 40%",position:"relative",display:"flex",alignItems:"flex-end",justifyContent:"center",paddingBottom:"2%",paddingRight:"3%",minHeight:"clamp(150px,30vw,260px)",overflow:"hidden"}}>
+            <div style={{flex:"0 1 40%",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",paddingRight:"3%",overflow:"hidden"}}>
               <div style={{position:"relative",display:"inline-block",width:"100%",maxWidth:220}}>
 
                 <style>{`
