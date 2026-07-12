@@ -6402,8 +6402,8 @@ const Home = memo(function Home({ state, dispatch }) {
                   </div>
 
                   {showConsistencyTip && (
-                    <div style={{position:"absolute",bottom:"-14%",left:"50%",transform:"translateX(-50%)",zIndex:8,background:"rgba(20,15,50,.97)",color:"#fff",fontSize:"clamp(8.5px,2vw,10px)",padding:"8px 12px",borderRadius:10,whiteSpace:"nowrap",boxShadow:"0 8px 20px rgba(0,0,0,.35)",lineHeight:1.4}}>
-                      You've completed {totalSessions} of {nextMilestone} sessions - keep going!
+                    <div style={{position:"absolute",top:"72%",left:"50%",transform:"translateX(-50%)",zIndex:8,background:"rgba(20,15,50,.97)",color:"#fff",fontSize:"clamp(7.5px,1.8vw,9.5px)",padding:"6px 10px",borderRadius:10,whiteSpace:"nowrap",boxShadow:"0 8px 20px rgba(0,0,0,.35)",lineHeight:1.3,maxWidth:"90%",textAlign:"center"}}>
+                      {totalSessions}/{nextMilestone} sessions — keep going!
                     </div>
                   )}
 
