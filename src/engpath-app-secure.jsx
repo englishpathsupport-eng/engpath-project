@@ -6358,9 +6358,9 @@ const Home = memo(function Home({ state, dispatch }) {
                 {/* Progress ring wrapping the character — outer = milestone, inner = XP */}
                 <div style={{position:"relative",width:"100%",display:"flex",justifyContent:"center",animation:"epFloat 4s ease-in-out infinite"}}>
                   <svg viewBox="0 0 100 100" style={{position:"absolute",top:"2%",width:"92%",height:"92%",zIndex:1,filter: isAlmostThere ? "drop-shadow(0 0 6px rgba(74,222,128,.8))" : "none",animation: isAlmostThere ? "epPulseGlow 1.6s ease-in-out infinite" : "none"}}>
-                    <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.15)" strokeWidth="6"/>
+                    <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.32)" strokeWidth="6"/>
                     <circle cx="50" cy="50" r="44" fill="none" stroke="#4ADE80" strokeWidth="6" strokeLinecap="round" strokeDasharray={circOuter} strokeDashoffset={outerOffset} transform="rotate(-90 50 50)" style={{transition:"stroke-dashoffset 1.2s ease"}}/>
-                    <circle cx="50" cy="50" r="33" fill="none" stroke="rgba(255,255,255,.12)" strokeWidth="5"/>
+                    <circle cx="50" cy="50" r="33" fill="none" stroke="rgba(255,255,255,.28)" strokeWidth="5"/>
                     <circle cx="50" cy="50" r="33" fill="none" stroke="#FBBF24" strokeWidth="5" strokeLinecap="round" strokeDasharray={circInner} strokeDashoffset={innerOffset} transform="rotate(-90 50 50)" style={{transition:"stroke-dashoffset 1.2s ease"}}/>
                   </svg>
 
