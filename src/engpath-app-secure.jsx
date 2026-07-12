@@ -6324,6 +6324,35 @@ const Home = memo(function Home({ state, dispatch }) {
                 </div>
               </div>
 
+              {(() => {
+                const AI_COACH_TIPS = [
+                  "Practice speaking for 5 minutes.",
+                  "Learn 3 new words today.",
+                  "Read one short paragraph aloud.",
+                  "Record yourself saying a sentence.",
+                  "Describe your day in 3 sentences.",
+                  "Ask a question using \'could you\'.",
+                  "Practice greetings with a friend.",
+                  "Write one sentence about your goals.",
+                  "Listen to a 2-minute English clip.",
+                  "Try explaining a word you learned.",
+                ];
+                const today = new Date();
+                const start = new Date(today.getFullYear(),0,0);
+                const diff = today - start;
+                const dayOfYear = Math.floor(diff/86400000);
+                const coachTip = AI_COACH_TIPS[(dayOfYear-1) % AI_COACH_TIPS.length];
+                return (
+                <div style={{display:"flex",alignItems:"flex-start",gap:6,marginBottom:12,background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.15)",borderRadius:12,padding:"8px 10px"}}>
+                  <span style={{fontSize:13,flexShrink:0}}>🤖</span>
+                  <div style={{minWidth:0}}>
+                    <p style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.6)",margin:"0 0 2px",textTransform:"uppercase",letterSpacing:".3px"}}>AI Coach</p>
+                    <p style={{fontSize:10.5,color:"rgba(255,255,255,.85)",margin:0,lineHeight:1.35}}>Today's best exercise: {coachTip}</p>
+                  </div>
+                </div>
+                );
+              })()}
+
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
                   <span style={{fontSize:10,color:"rgba(255,255,255,.7)",fontWeight:500}}>XP Progress</span>
@@ -6349,10 +6378,10 @@ const Home = memo(function Home({ state, dispatch }) {
                   @keyframes epPulseGlow { 0%,100%{opacity:.5} 50%{opacity:1} }
                 `}</style>
 
-                {/* speech bubble */}
-                <div style={{position:"absolute",top:"-8%",left:"50%",transform:"translateX(-50%)",zIndex:6,display:"flex",alignItems:"center",gap:4,background:"rgba(255,255,255,.98)",padding:"5px 10px",borderRadius:999,boxShadow:"0 6px 14px rgba(0,0,0,.2)",whiteSpace:"nowrap"}}>
-                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
-                  <span style={{fontSize:"clamp(8.5px,2.1vw,11px)",fontWeight:700,color:"#4338ca",fontFamily:"'Poppins',sans-serif"}}>Let's learn English!</span>
+                {/* speech bubble — sits above the ring, centered, clear of badges */}
+                <div style={{position:"absolute",top:"-13%",left:"50%",transform:"translateX(-50%)",zIndex:6,display:"flex",alignItems:"center",gap:4,background:"rgba(255,255,255,.98)",padding:"6px 12px",borderRadius:999,boxShadow:"0 6px 14px rgba(0,0,0,.22)",whiteSpace:"nowrap"}}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+                  <span style={{fontSize:"clamp(9px,2.2vw,12px)",fontWeight:700,color:"#4338ca",fontFamily:"'Poppins',sans-serif"}}>Let's learn English!</span>
                 </div>
 
                 {/* Progress ring wrapping the character — outer = milestone, inner = XP */}
@@ -6369,9 +6398,10 @@ const Home = memo(function Home({ state, dispatch }) {
                   <img src={heroImg} alt="" style={{width:"78%",height:"auto",objectFit:"contain",filter:"drop-shadow(-4px 6px 14px rgba(0,0,0,.25))",position:"relative",zIndex:2,display:"block"}}/>
                 </div>
 
-                {/* letter badges — clustered near top of ring, outside its circumference */}
-                <div style={{position:"absolute",top:"6%",left:"-4%",width:"15%",aspectRatio:"1/1",minWidth:16,maxWidth:26,borderRadius:8,background:"linear-gradient(135deg,#F59E0B,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(8px,2vw,12px)",color:"#fff",boxShadow:"0 5px 12px rgba(0,0,0,.22)",transform:"rotate(-10deg)",zIndex:4}}>A</div>
-                <div style={{position:"absolute",top:"2%",right:"-2%",width:"14%",aspectRatio:"1/1",minWidth:15,maxWidth:24,borderRadius:7,background:"linear-gradient(135deg,#22C55E,#16A34A)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(7px,1.8vw,11px)",color:"#fff",boxShadow:"0 5px 12px rgba(0,0,0,.22)",transform:"rotate(9deg)",zIndex:4}}>B</div>
+                {/* letter badges — tucked fully inside the ring's visible bounds, no clipping */}
+                <div style={{position:"absolute",top:"10%",left:"4%",width:"16%",aspectRatio:"1/1",minWidth:18,maxWidth:28,borderRadius:8,background:"linear-gradient(135deg,#F59E0B,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(9px,2.2vw,13px)",color:"#fff",boxShadow:"0 5px 12px rgba(0,0,0,.28)",transform:"rotate(-10deg)",zIndex:5}}>A</div>
+                <div style={{position:"absolute",top:"6%",right:"6%",width:"15%",aspectRatio:"1/1",minWidth:17,maxWidth:26,borderRadius:7,background:"linear-gradient(135deg,#22C55E,#16A34A)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(8px,2vw,12px)",color:"#fff",boxShadow:"0 5px 12px rgba(0,0,0,.28)",transform:"rotate(9deg)",zIndex:5}}>B</div>
+                <div style={{position:"absolute",bottom:"14%",left:"2%",width:"14%",aspectRatio:"1/1",minWidth:16,maxWidth:24,borderRadius:7,background:"linear-gradient(135deg,#EC4899,#DB2777)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(7px,1.8vw,11px)",color:"#fff",boxShadow:"0 5px 12px rgba(0,0,0,.28)",transform:"rotate(-6deg)",zIndex:5}}>C</div>
 
                 {/* milestone-almost-there badge */}
                 {isAlmostThere && (
