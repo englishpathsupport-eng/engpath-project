@@ -6237,6 +6237,17 @@ const Home = memo(function Home({ state, dispatch }) {
       {(() => {
         const heroImages = {A1:"/images/hero-girl.webp",A2:"/images/hero-girl.webp",B1:"/images/hero-girl.webp",B2:"/images/hero-girl.webp",C1:"/images/hero-girl.webp",C2:"/images/hero-girl.webp"};
         const heroImg = heroImages[user?.level?.slice(0,2)] || "/images/hero-girl.webp";
+
+        const levelIdentities = {
+          A1:{title:"Fresh Starter",emoji:"🌱"},
+          A2:{title:"Word Builder",emoji:"🗣️"},
+          B1:{title:"Confident Talker",emoji:"💬"},
+          B2:{title:"Fluent Thinker",emoji:"🎯"},
+          C1:{title:"Advanced Communicator",emoji:"🚀"},
+          C2:{title:"English Master",emoji:"👑"},
+        };
+        const identity = levelIdentities[user?.level] || levelIdentities.A1;
+
         const totalSessions = user?.xp || 0;
         const milestones = [10,25,50,100,150,200,300,500,750,1000,2000,5000];
         const nextMilestone = milestones.find(m=>m>totalSessions)||5000;
@@ -6245,6 +6256,14 @@ const Home = memo(function Home({ state, dispatch }) {
         const remaining = nextMilestone - totalSessions;
         const xpNext = Math.ceil((user.xp+1)/100)*100;
         const xpPct = Math.min(100, user.xp%100||Math.min(100,user.xp));
+        const isAlmostThere = milestoneProgress >= 80;
+
+        const RING_R_OUTER = 44, RING_R_INNER = 33;
+        const circOuter = 2*Math.PI*RING_R_OUTER;
+        const circInner = 2*Math.PI*RING_R_INNER;
+        const outerOffset = circOuter - (circOuter*milestoneProgress/100);
+        const innerOffset = circInner - (circInner*xpPct/100);
+
         return (
         <div style={{borderRadius:"clamp(18px,4vw,28px)",background:"linear-gradient(150deg,#1e3a8a 0%,#3730a3 30%,#6d28d9 65%,#9333ea 100%)",marginBottom:16,position:"relative",overflow:"hidden",boxShadow:"0 24px 70px rgba(88,28,235,.5)"}}>
           <div style={{position:"absolute",top:-60,left:-40,width:220,height:220,borderRadius:"50%",background:"rgba(255,255,255,.07)",pointerEvents:"none"}}/>
@@ -6252,14 +6271,18 @@ const Home = memo(function Home({ state, dispatch }) {
 
           <div style={{display:"flex",alignItems:"stretch",flexWrap:"nowrap"}}>
             {/* Left: Text + Stats */}
-            <div style={{padding:"clamp(14px,4vw,26px) clamp(14px,4vw,22px) clamp(14px,3vw,22px)",position:"relative",zIndex:2,flex:"1 1 0",minWidth:0,maxWidth:"62%"}}>
+            <div style={{padding:"clamp(14px,4vw,26px) clamp(14px,4vw,22px) clamp(14px,3vw,22px)",position:"relative",zIndex:2,flex:"1 1 0",minWidth:0,maxWidth:"60%"}}>
               <p style={{fontSize:12,color:"rgba(255,255,255,.7)",fontWeight:500,marginBottom:3,fontFamily:"'Inter',sans-serif"}}>{greeting} 👋</p>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
                 <h1 style={{fontFamily:"'Poppins',sans-serif",fontSize:"clamp(20px,5vw,27px)",fontWeight:700,color:"#fff",lineHeight:1,margin:0}}>{user?.name||"Learner"}</h1>
                 {isActivePro(user)
-                  ? <span style={{fontSize:9,fontWeight:700,padding:"4px 10px",borderRadius:999,background:"linear-gradient(135deg,#FFD700,#FFA500)",color:"#5b3a00",boxShadow:"0 2px 8px rgba(255,180,0,.5)",display:"inline-flex",alignItems:"center",gap:3}}>⭐ PRO</span>
+                  ? <span style={{fontSize:9,fontWeight:700,padding:"4px 10px",borderRadius:999,background:"linear-gradient(135deg,#FFD700,#FFA500)",color:"#5b3a00",boxShadow:"0 2px 8px rgba(255,180,0,.5)"}}>⭐ PRO</span>
                   : <span style={{fontSize:9,fontWeight:600,padding:"3px 9px",borderRadius:999,background:"rgba(255,255,255,.12)",color:"rgba(255,255,255,.75)",border:"1px solid rgba(255,255,255,.18)"}}>FREE</span>
                 }
+              </div>
+              <div style={{display:"inline-flex",alignItems:"center",gap:5,marginBottom:12,background:"rgba(255,255,255,.1)",padding:"3px 9px",borderRadius:999,border:"1px solid rgba(255,255,255,.15)"}}>
+                <span style={{fontSize:11}}>{identity.emoji}</span>
+                <span style={{fontSize:10.5,fontWeight:600,color:"rgba(255,255,255,.85)"}}>{identity.title}</span>
               </div>
 
               <div style={{display:"flex",gap:5,marginBottom:10,flexWrap:"nowrap"}}>
@@ -6306,7 +6329,7 @@ const Home = memo(function Home({ state, dispatch }) {
                   <span style={{fontSize:10,color:"rgba(255,255,255,.7)",fontWeight:500}}>XP Progress</span>
                   <span style={{fontSize:10,color:"rgba(255,255,255,.85)",fontWeight:600}}>{user.xp} / {xpNext} XP</span>
                 </div>
-                <div style={{height:6,background:"rgba(255,255,255,.14)",borderRadius:999,overflow:"hidden",position:"relative"}}>
+                <div style={{height:6,background:"rgba(255,255,255,.14)",borderRadius:999,overflow:"hidden"}}>
                   <div style={{height:"100%",width:`${xpPct}%`,background:"linear-gradient(90deg,rgba(255,255,255,.85),rgba(196,220,255,.95))",borderRadius:999,transition:"width 1.2s cubic-bezier(.4,0,.2,1)",boxShadow:"0 0 12px 2px rgba(196,220,255,.7)"}}/>
                 </div>
               </div>
@@ -6317,29 +6340,45 @@ const Home = memo(function Home({ state, dispatch }) {
               </div>
             </div>
 
-            {/* Right: Illustration column — badges anchored to the image itself, never to the card */}
-            <div style={{flex:"0 1 38%",position:"relative",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",paddingBottom:"4%",paddingRight:"4%",overflow:"hidden"}}>
+            {/* Right: Illustration column — fixed bottom-anchor, progress ring, badges, milestone glow */}
+            <div style={{flex:"0 1 40%",position:"relative",display:"flex",alignItems:"flex-end",justifyContent:"center",paddingBottom:"3%",paddingRight:"3%",minHeight:"clamp(190px,36vw,320px)",overflow:"hidden"}}>
               <div style={{position:"relative",display:"inline-block",width:"100%",maxWidth:220}}>
 
-                {/* glow + ring behind image */}
-                <div style={{position:"absolute",bottom:0,left:"50%",transform:"translateX(-50%)",width:"78%",aspectRatio:"1/1",borderRadius:"50%",background:"radial-gradient(circle,rgba(255,255,255,.18) 0%,rgba(255,255,255,0) 70%)",zIndex:0,pointerEvents:"none"}}/>
-                <div style={{position:"absolute",bottom:0,left:"50%",transform:"translateX(-50%)",width:"68%",aspectRatio:"1/1",borderRadius:"50%",border:"1.5px dashed rgba(255,255,255,.22)",zIndex:0,pointerEvents:"none"}}/>
+                <style>{`
+                  @keyframes epFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+                  @keyframes epPulseGlow { 0%,100%{opacity:.5} 50%{opacity:1} }
+                `}</style>
 
-                {/* speech bubble — small, sits just above her head */}
-                <div style={{position:"absolute",top:"-9%",left:"50%",transform:"translateX(-50%)",zIndex:5,display:"flex",alignItems:"center",gap:4,background:"rgba(255,255,255,.98)",padding:"5px 10px",borderRadius:999,boxShadow:"0 6px 14px rgba(0,0,0,.2)",whiteSpace:"nowrap"}}>
+                {/* speech bubble */}
+                <div style={{position:"absolute",top:"-8%",left:"50%",transform:"translateX(-50%)",zIndex:6,display:"flex",alignItems:"center",gap:4,background:"rgba(255,255,255,.98)",padding:"5px 10px",borderRadius:999,boxShadow:"0 6px 14px rgba(0,0,0,.2)",whiteSpace:"nowrap"}}>
                   <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
                   <span style={{fontSize:"clamp(8.5px,2.1vw,11px)",fontWeight:700,color:"#4338ca",fontFamily:"'Poppins',sans-serif"}}>Let's learn English!</span>
                 </div>
 
-                {/* letter badges — clustered tight around the top/sides of the image, never near the stat cards */}
-                <div style={{position:"absolute",top:"6%",left:"-6%",width:"15%",aspectRatio:"1/1",minWidth:16,maxWidth:26,borderRadius:8,background:"linear-gradient(135deg,#F59E0B,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(8px,2vw,12px)",color:"#fff",boxShadow:"0 5px 12px rgba(0,0,0,.22)",transform:"rotate(-10deg)",zIndex:4}}>A</div>
-                <div style={{position:"absolute",top:"2%",right:"-4%",width:"14%",aspectRatio:"1/1",minWidth:15,maxWidth:24,borderRadius:7,background:"linear-gradient(135deg,#22C55E,#16A34A)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(7px,1.8vw,11px)",color:"#fff",boxShadow:"0 5px 12px rgba(0,0,0,.22)",transform:"rotate(9deg)",zIndex:4}}>B</div>
-                <div style={{position:"absolute",top:"24%",left:"-9%",width:"13%",aspectRatio:"1/1",minWidth:14,maxWidth:22,borderRadius:7,background:"linear-gradient(135deg,#EC4899,#DB2777)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(7px,1.7vw,10px)",color:"#fff",boxShadow:"0 5px 12px rgba(0,0,0,.22)",transform:"rotate(-6deg)",zIndex:4}}>C</div>
-                <div style={{position:"absolute",top:"20%",right:"-8%",width:"13%",aspectRatio:"1/1",minWidth:14,maxWidth:22,borderRadius:7,background:"linear-gradient(135deg,#0EA5E9,#0284C7)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(7px,1.7vw,10px)",color:"#fff",boxShadow:"0 5px 12px rgba(0,0,0,.22)",transform:"rotate(7deg)",zIndex:4}}>D</div>
+                {/* Progress ring wrapping the character — outer = milestone, inner = XP */}
+                <div style={{position:"relative",width:"100%",display:"flex",justifyContent:"center",animation:"epFloat 4s ease-in-out infinite"}}>
+                  <svg viewBox="0 0 100 100" style={{position:"absolute",top:"6%",width:"88%",height:"88%",zIndex:1,filter: isAlmostThere ? "drop-shadow(0 0 6px rgba(74,222,128,.8))" : "none",animation: isAlmostThere ? "epPulseGlow 1.6s ease-in-out infinite" : "none"}}>
+                    <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.15)" strokeWidth="6"/>
+                    <circle cx="50" cy="50" r="44" fill="none" stroke="#4ADE80" strokeWidth="6" strokeLinecap="round" strokeDasharray={circOuter} strokeDashoffset={outerOffset} transform="rotate(-90 50 50)" style={{transition:"stroke-dashoffset 1.2s ease"}}/>
+                    <circle cx="50" cy="50" r="33" fill="none" stroke="rgba(255,255,255,.12)" strokeWidth="5"/>
+                    <circle cx="50" cy="50" r="33" fill="none" stroke="#FBBF24" strokeWidth="5" strokeLinecap="round" strokeDasharray={circInner} strokeDashoffset={innerOffset} transform="rotate(-90 50 50)" style={{transition:"stroke-dashoffset 1.2s ease"}}/>
+                  </svg>
 
-                <svg style={{position:"absolute",top:"-2%",left:"6%",zIndex:3}} width="9" height="9" viewBox="0 0 24 24" fill="rgba(255,255,255,.7)"><path d="M12 0l2 10 10 2-10 2-2 10-2-10L0 12l10-2z"/></svg>
+                  <div style={{position:"absolute",bottom:"4%",left:"50%",transform:"translateX(-50%)",width:"78%",aspectRatio:"1/1",borderRadius:"50%",background:"radial-gradient(circle,rgba(255,255,255,.18) 0%,rgba(255,255,255,0) 70%)",zIndex:0,pointerEvents:"none"}}/>
 
-                <img src={heroImg} alt="" style={{width:"100%",height:"auto",objectFit:"contain",filter:"drop-shadow(-4px 6px 14px rgba(0,0,0,.25))",position:"relative",zIndex:2,display:"block"}}/>
+                  <img src={heroImg} alt="" style={{width:"78%",height:"auto",objectFit:"contain",filter:"drop-shadow(-4px 6px 14px rgba(0,0,0,.25))",position:"relative",zIndex:2,display:"block"}}/>
+                </div>
+
+                {/* letter badges — clustered near top of ring, outside its circumference */}
+                <div style={{position:"absolute",top:"6%",left:"-4%",width:"15%",aspectRatio:"1/1",minWidth:16,maxWidth:26,borderRadius:8,background:"linear-gradient(135deg,#F59E0B,#D97706)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(8px,2vw,12px)",color:"#fff",boxShadow:"0 5px 12px rgba(0,0,0,.22)",transform:"rotate(-10deg)",zIndex:4}}>A</div>
+                <div style={{position:"absolute",top:"2%",right:"-2%",width:"14%",aspectRatio:"1/1",minWidth:15,maxWidth:24,borderRadius:7,background:"linear-gradient(135deg,#22C55E,#16A34A)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif",fontWeight:700,fontSize:"clamp(7px,1.8vw,11px)",color:"#fff",boxShadow:"0 5px 12px rgba(0,0,0,.22)",transform:"rotate(9deg)",zIndex:4}}>B</div>
+
+                {/* milestone-almost-there badge */}
+                {isAlmostThere && (
+                  <div style={{position:"absolute",bottom:"2%",right:"-2%",zIndex:6,background:"#4ADE80",color:"#0a3d1f",fontSize:"clamp(7px,1.7vw,10px)",fontWeight:700,padding:"4px 8px",borderRadius:999,boxShadow:"0 4px 10px rgba(0,0,0,.25)",whiteSpace:"nowrap",animation:"epPulseGlow 1.6s ease-in-out infinite"}}>
+                    Almost there! 🎉
+                  </div>
+                )}
               </div>
             </div>
           </div>
