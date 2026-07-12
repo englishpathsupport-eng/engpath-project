@@ -6269,7 +6269,7 @@ const Home = memo(function Home({ state, dispatch }) {
           <div style={{position:"absolute",top:-60,left:-40,width:220,height:220,borderRadius:"50%",background:"rgba(255,255,255,.07)",pointerEvents:"none"}}/>
           <div style={{position:"absolute",bottom:-60,right:20,width:180,height:180,borderRadius:"50%",background:"rgba(255,255,255,.05)",pointerEvents:"none"}}/>
 
-          <div style={{display:"flex",alignItems:"center",flexWrap:"nowrap"}}>
+          <div style={{display:"flex",alignItems:"center",flexWrap:"nowrap",paddingTop:14}}>
             {/* Left: Text + Stats */}
             <div style={{padding:"clamp(12px,3.5vw,22px) clamp(14px,4vw,22px) clamp(12px,2.5vw,18px)",position:"relative",zIndex:2,flex:"1 1 0",minWidth:0,maxWidth:"60%"}}>
               <p style={{fontSize:12,color:"rgba(255,255,255,.7)",fontWeight:500,marginBottom:3,fontFamily:"'Inter',sans-serif"}}>{greeting} 👋</p>
