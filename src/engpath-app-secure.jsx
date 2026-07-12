@@ -6272,13 +6272,13 @@ const Home = memo(function Home({ state, dispatch }) {
 
           <div style={{display:"flex",alignItems:"center",flexWrap:"nowrap",paddingTop:14}}>
             {/* Left: Text + Stats */}
-            <div style={{padding:"clamp(12px,3.5vw,22px) clamp(14px,4vw,22px) clamp(12px,2.5vw,18px)",position:"relative",zIndex:2,flex:"1 1 0",minWidth:0,maxWidth:"60%"}}>
+            <div style={{padding:"clamp(12px,3.5vw,22px) clamp(14px,4vw,22px) clamp(12px,2.5vw,18px)",position:"relative",zIndex:2,flex:"1 1 0",minWidth:0,maxWidth:"68%"}}>
               <p style={{fontSize:12,color:"rgba(255,255,255,.7)",fontWeight:500,marginBottom:3,fontFamily:"'Inter',sans-serif"}}>{greeting} 👋</p>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-                <h1 style={{fontFamily:"'Poppins',sans-serif",fontSize:"clamp(20px,5vw,27px)",fontWeight:700,color:"#fff",lineHeight:1,margin:0}}>{user?.name||"Learner"}</h1>
-                <div style={{display:"inline-flex",alignItems:"center",gap:5,background:"rgba(255,255,255,.1)",padding:"3px 9px",borderRadius:999,border:"1px solid rgba(255,255,255,.15)"}}>
+                <h1 style={{fontFamily:"'Poppins',sans-serif",fontSize:"clamp(17px,4.6vw,27px)",fontWeight:700,color:"#fff",lineHeight:1,margin:0}}>{user?.name||"Learner"}</h1>
+                <div style={{display:"inline-flex",alignItems:"center",gap:3,background:"rgba(255,255,255,.1)",padding:"2px 7px",borderRadius:999,border:"1px solid rgba(255,255,255,.15)",flexShrink:0}}>
                   <span style={{fontSize:10}}>{identity.emoji}</span>
-                  <span style={{fontSize:9.5,fontWeight:600,color:"rgba(255,255,255,.85)",whiteSpace:"nowrap"}}>{identity.title}</span>
+                  <span style={{fontSize:"clamp(8px,2vw,9.5px)",fontWeight:600,color:"rgba(255,255,255,.85)",whiteSpace:"nowrap"}}>{identity.title}</span>
                 </div>
               </div>
 
@@ -6401,7 +6401,7 @@ const Home = memo(function Home({ state, dispatch }) {
                   </div>
 
                   {showConsistencyTip && (
-                    <div style={{position:"absolute",bottom:"-8%",left:"50%",transform:"translateX(-50%)",zIndex:8,background:"rgba(20,15,50,.97)",color:"#fff",fontSize:"clamp(8px,1.9vw,10px)",padding:"5px 9px",borderRadius:9,whiteSpace:"nowrap",boxShadow:"0 8px 20px rgba(0,0,0,.35)",lineHeight:1.3,textAlign:"center",pointerEvents:"none"}}>
+                    <div style={{position:"absolute",bottom:"3%",left:"50%",transform:"translateX(-50%)",zIndex:8,background:"rgba(20,15,50,.97)",color:"#fff",fontSize:"clamp(8px,1.9vw,10px)",padding:"5px 9px",borderRadius:9,whiteSpace:"nowrap",boxShadow:"0 8px 20px rgba(0,0,0,.35)",lineHeight:1.3,textAlign:"center",pointerEvents:"none"}}>
                       {totalSessions}/{nextMilestone} — keep going!
                     </div>
                   )}
