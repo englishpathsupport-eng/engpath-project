@@ -6286,23 +6286,23 @@ const Home = memo(function Home({ state, dispatch }) {
               </div>
 
               <div style={{display:"flex",gap:5,marginBottom:10,flexWrap:"nowrap"}}>
-                <div style={{background:"rgba(255,255,255,.14)",borderRadius:14,padding:"9px 10px",backdropFilter:"blur(14px)",border:"1px solid rgba(255,255,255,.2)",flex:"1 1 0",minWidth:0}}>
-                  <div style={{fontSize:9,color:"rgba(255,255,255,.65)",marginBottom:4,display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap",overflow:"hidden"}}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,215,0,.9)" style={{flexShrink:0}}><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
+                <div style={{background:"rgba(255,255,255,.14)",borderRadius:14,padding:"8px 8px",backdropFilter:"blur(14px)",border:"1px solid rgba(255,255,255,.2)",flex:"1 1 0",minWidth:0}}>
+                  <div style={{fontSize:8,color:"rgba(255,255,255,.65)",marginBottom:4,display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap"}}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="rgba(255,215,0,.9)" style={{flexShrink:0}}><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
                     Level
                   </div>
                   <div style={{fontFamily:"'Poppins',sans-serif",fontSize:18,fontWeight:700,color:"#fff",lineHeight:1}}>{user.level}</div>
                 </div>
-                <div style={{background:"rgba(255,255,255,.14)",borderRadius:14,padding:"9px 10px",backdropFilter:"blur(14px)",border:"1px solid rgba(255,255,255,.2)",flex:"1 1 0",minWidth:0}}>
-                  <div style={{fontSize:9,color:"rgba(255,255,255,.65)",marginBottom:4,display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap",overflow:"hidden"}}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,220,80,.9)" style={{flexShrink:0}}><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></svg>
+                <div style={{background:"rgba(255,255,255,.14)",borderRadius:14,padding:"8px 8px",backdropFilter:"blur(14px)",border:"1px solid rgba(255,255,255,.2)",flex:"1 1 0",minWidth:0}}>
+                  <div style={{fontSize:8,color:"rgba(255,255,255,.65)",marginBottom:4,display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap"}}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="rgba(255,220,80,.9)" style={{flexShrink:0}}><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></svg>
                     XP
                   </div>
                   <div style={{fontFamily:"'Poppins',sans-serif",fontSize:18,fontWeight:700,color:"#fff",lineHeight:1}}>{user.xp.toLocaleString()}</div>
                 </div>
-                <div style={{background:"rgba(255,255,255,.14)",borderRadius:14,padding:"9px 10px",backdropFilter:"blur(14px)",border:"1px solid rgba(255,255,255,.2)",flex:"1 1 0",minWidth:0}}>
-                  <div style={{fontSize:9,color:"rgba(255,255,255,.65)",marginBottom:4,display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap",overflow:"hidden"}}>
-                    <span style={{fontSize:10}}>🔥</span> Streak
+                <div style={{background:"rgba(255,255,255,.14)",borderRadius:14,padding:"8px 8px",backdropFilter:"blur(14px)",border:"1px solid rgba(255,255,255,.2)",flex:"1 1 0",minWidth:0}}>
+                  <div style={{fontSize:8,color:"rgba(255,255,255,.65)",marginBottom:4,display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap"}}>
+                    <span style={{fontSize:9}}>🔥</span> Streak
                   </div>
                   <div style={{fontFamily:"'Poppins',sans-serif",fontSize:18,fontWeight:700,color:"#fff",lineHeight:1}}>{user?.streak||0}<span style={{fontSize:10,fontWeight:400,color:"rgba(255,255,255,.6)"}}>d</span></div>
                 </div>
@@ -6341,7 +6341,7 @@ const Home = memo(function Home({ state, dispatch }) {
             </div>
 
             {/* Right: Illustration column — fixed bottom-anchor, progress ring, badges, milestone glow */}
-            <div style={{flex:"0 1 40%",position:"relative",display:"flex",alignItems:"flex-end",justifyContent:"center",paddingBottom:"3%",paddingRight:"3%",minHeight:"clamp(190px,36vw,320px)",overflow:"hidden"}}>
+            <div style={{flex:"0 1 40%",position:"relative",display:"flex",alignItems:"flex-end",justifyContent:"center",paddingBottom:"2%",paddingRight:"3%",minHeight:"clamp(150px,30vw,260px)",overflow:"hidden"}}>
               <div style={{position:"relative",display:"inline-block",width:"100%",maxWidth:220}}>
 
                 <style>{`
@@ -6357,7 +6357,7 @@ const Home = memo(function Home({ state, dispatch }) {
 
                 {/* Progress ring wrapping the character — outer = milestone, inner = XP */}
                 <div style={{position:"relative",width:"100%",display:"flex",justifyContent:"center",animation:"epFloat 4s ease-in-out infinite"}}>
-                  <svg viewBox="0 0 100 100" style={{position:"absolute",top:"6%",width:"88%",height:"88%",zIndex:1,filter: isAlmostThere ? "drop-shadow(0 0 6px rgba(74,222,128,.8))" : "none",animation: isAlmostThere ? "epPulseGlow 1.6s ease-in-out infinite" : "none"}}>
+                  <svg viewBox="0 0 100 100" style={{position:"absolute",top:"2%",width:"92%",height:"92%",zIndex:1,filter: isAlmostThere ? "drop-shadow(0 0 6px rgba(74,222,128,.8))" : "none",animation: isAlmostThere ? "epPulseGlow 1.6s ease-in-out infinite" : "none"}}>
                     <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.15)" strokeWidth="6"/>
                     <circle cx="50" cy="50" r="44" fill="none" stroke="#4ADE80" strokeWidth="6" strokeLinecap="round" strokeDasharray={circOuter} strokeDashoffset={outerOffset} transform="rotate(-90 50 50)" style={{transition:"stroke-dashoffset 1.2s ease"}}/>
                     <circle cx="50" cy="50" r="33" fill="none" stroke="rgba(255,255,255,.12)" strokeWidth="5"/>
