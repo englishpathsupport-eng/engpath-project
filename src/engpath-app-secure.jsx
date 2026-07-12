@@ -6275,10 +6275,7 @@ const Home = memo(function Home({ state, dispatch }) {
               <p style={{fontSize:12,color:"rgba(255,255,255,.7)",fontWeight:500,marginBottom:3,fontFamily:"'Inter',sans-serif"}}>{greeting} 👋</p>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
                 <h1 style={{fontFamily:"'Poppins',sans-serif",fontSize:"clamp(20px,5vw,27px)",fontWeight:700,color:"#fff",lineHeight:1,margin:0}}>{user?.name||"Learner"}</h1>
-                {isActivePro(user)
-                  ? <span style={{fontSize:9,fontWeight:700,padding:"4px 10px",borderRadius:999,background:"linear-gradient(135deg,#FFD700,#FFA500)",color:"#5b3a00",boxShadow:"0 2px 8px rgba(255,180,0,.5)"}}>⭐ PRO</span>
-                  : <span style={{fontSize:9,fontWeight:600,padding:"3px 9px",borderRadius:999,background:"rgba(255,255,255,.12)",color:"rgba(255,255,255,.75)",border:"1px solid rgba(255,255,255,.18)"}}>FREE</span>
-                }
+
               </div>
               <div style={{display:"inline-flex",alignItems:"center",gap:5,marginBottom:12,background:"rgba(255,255,255,.1)",padding:"3px 9px",borderRadius:999,border:"1px solid rgba(255,255,255,.15)"}}>
                 <span style={{fontSize:11}}>{identity.emoji}</span>
