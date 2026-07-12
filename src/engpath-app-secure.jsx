@@ -6207,6 +6207,7 @@ const WotdCard = memo(function WotdCard({ settings = {}, dispatch }) {
 const FREE_LIMITS = { pronunciation: 5, conversations: 3, aiChat: 10 };
 
 const Home = memo(function Home({ state, dispatch }) {
+  const [showConsistencyTip, setShowConsistencyTip] = useState(false);
   const { user, progress, dailyUsage } = state;
   if (!user) return (
     <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"60vh", color:"var(--text-3)", flexDirection:"column", gap:12 }}>
@@ -6389,10 +6390,22 @@ const Home = memo(function Home({ state, dispatch }) {
 
                   <div style={{position:"absolute",width:"78%",aspectRatio:"1/1",borderRadius:"50%",background:"radial-gradient(circle,rgba(255,255,255,.18) 0%,rgba(255,255,255,0) 70%)",zIndex:0,pointerEvents:"none"}}/>
 
-                  <div style={{position:"absolute",top:"6%",left:"50%",transform:"translateX(-50%)",textAlign:"center",zIndex:3,pointerEvents:"none"}}>
+                  <div
+                    onClick={()=>setShowConsistencyTip(v=>!v)}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Consistency progress: ${totalSessions} of ${nextMilestone} sessions completed`}
+                    style={{position:"absolute",top:"6%",left:"50%",transform:"translateX(-50%)",textAlign:"center",zIndex:3,cursor:"pointer"}}>
                     <div style={{fontFamily:"'Poppins',sans-serif",fontSize:"clamp(11px,2.6vw,15px)",fontWeight:700,color:"#fff"}}>{milestoneProgress}%</div>
                     <div style={{fontSize:"clamp(6px,1.4vw,8px)",color:"rgba(255,255,255,.65)",textTransform:"uppercase",letterSpacing:".3px"}}>consistency</div>
+                    <div style={{fontSize:"clamp(6px,1.3vw,7.5px)",color:"rgba(255,255,255,.5)",marginTop:1}}>{totalSessions}/{nextMilestone}</div>
                   </div>
+
+                  {showConsistencyTip && (
+                    <div style={{position:"absolute",bottom:"-14%",left:"50%",transform:"translateX(-50%)",zIndex:8,background:"rgba(20,15,50,.97)",color:"#fff",fontSize:"clamp(8.5px,2vw,10px)",padding:"8px 12px",borderRadius:10,whiteSpace:"nowrap",boxShadow:"0 8px 20px rgba(0,0,0,.35)",lineHeight:1.4}}>
+                      You've completed {totalSessions} of {nextMilestone} sessions - keep going!
+                    </div>
+                  )}
 
                   <img src={heroImg} alt="" style={{width:"78%",height:"auto",objectFit:"contain",filter:"drop-shadow(-4px 6px 14px rgba(0,0,0,.25))",position:"relative",zIndex:2,display:"block"}}/>
                 </div>
