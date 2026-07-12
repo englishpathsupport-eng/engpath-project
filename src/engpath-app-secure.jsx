@@ -6271,7 +6271,7 @@ const Home = memo(function Home({ state, dispatch }) {
 
           <div style={{display:"flex",alignItems:"stretch",flexWrap:"nowrap"}}>
             {/* Left: Text + Stats */}
-            <div style={{padding:"clamp(14px,4vw,26px) clamp(14px,4vw,22px) clamp(14px,3vw,22px)",position:"relative",zIndex:2,flex:"1 1 0",minWidth:0,maxWidth:"60%"}}>
+            <div style={{padding:"clamp(12px,3.5vw,22px) clamp(14px,4vw,22px) clamp(12px,2.5vw,18px)",position:"relative",zIndex:2,flex:"1 1 0",minWidth:0,maxWidth:"60%"}}>
               <p style={{fontSize:12,color:"rgba(255,255,255,.7)",fontWeight:500,marginBottom:3,fontFamily:"'Inter',sans-serif"}}>{greeting} 👋</p>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
                 <h1 style={{fontFamily:"'Poppins',sans-serif",fontSize:"clamp(20px,5vw,27px)",fontWeight:700,color:"#fff",lineHeight:1,margin:0}}>{user?.name||"Learner"}</h1>
@@ -6285,8 +6285,8 @@ const Home = memo(function Home({ state, dispatch }) {
                 <span style={{fontSize:10.5,fontWeight:600,color:"rgba(255,255,255,.85)"}}>{identity.title}</span>
               </div>
 
-              <div style={{display:"flex",gap:5,marginBottom:10,flexWrap:"nowrap"}}>
-                <div style={{background:"rgba(255,255,255,.14)",borderRadius:14,padding:"8px 8px",backdropFilter:"blur(14px)",border:"1px solid rgba(255,255,255,.2)",flex:"1 1 0",minWidth:0}}>
+              <div style={{display:"flex",gap:5,marginBottom:8,flexWrap:"nowrap"}}>
+                <div style={{background:"rgba(255,255,255,.14)",borderRadius:14,padding:"7px 8px",backdropFilter:"blur(14px)",border:"1px solid rgba(255,255,255,.2)",flex:"1 1 0",minWidth:0}}>
                   <div style={{fontSize:8,color:"rgba(255,255,255,.65)",marginBottom:4,display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap"}}>
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="rgba(255,215,0,.9)" style={{flexShrink:0}}><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
                     Level
@@ -6308,7 +6308,7 @@ const Home = memo(function Home({ state, dispatch }) {
                 </div>
               </div>
 
-              <div style={{background:"rgba(255,255,255,.14)",borderRadius:14,padding:"9px 12px",backdropFilter:"blur(14px)",border:"1px solid rgba(255,255,255,.2)",marginBottom:10}}>
+              <div style={{background:"rgba(255,255,255,.14)",borderRadius:14,padding:"9px 12px",backdropFilter:"blur(14px)",border:"1px solid rgba(255,255,255,.2)",marginBottom:8}}>
                 <div style={{fontSize:9,color:"rgba(255,255,255,.65)",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
                   <span style={{fontSize:10}}>📚</span> Learning Journey
                 </div>
@@ -6343,7 +6343,7 @@ const Home = memo(function Home({ state, dispatch }) {
                 const dayOfYear = Math.floor(diff/86400000);
                 const coachTip = AI_COACH_TIPS[(dayOfYear-1) % AI_COACH_TIPS.length];
                 return (
-                <div style={{display:"flex",alignItems:"flex-start",gap:6,marginBottom:12,background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.15)",borderRadius:12,padding:"8px 10px"}}>
+                <div style={{display:"flex",alignItems:"flex-start",gap:6,background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.15)",borderRadius:12,padding:"6px 10px",marginBottom:8}}>
                   <span style={{fontSize:13,flexShrink:0}}>🤖</span>
                   <div style={{minWidth:0}}>
                     <p style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.6)",margin:"0 0 2px",textTransform:"uppercase",letterSpacing:".3px"}}>AI Coach</p>
@@ -6363,10 +6363,36 @@ const Home = memo(function Home({ state, dispatch }) {
                 </div>
               </div>
 
-              <div style={{marginTop:13}}>
-                <p style={{fontSize:10,color:"rgba(255,255,255,.55)",fontWeight:600,margin:"0 0 2px",textTransform:"uppercase",letterSpacing:".4px"}}>✨ Today's Inspiration</p>
-                <p style={{fontSize:11,color:"rgba(255,255,255,.75)",margin:0,lineHeight:1.4}}>Every lesson makes you a better communicator.</p>
-              </div>
+              {(() => {
+                const DAILY_QUOTES = [
+                  "Every lesson builds a brighter future.",
+                  "Every conversation opens another door.",
+                  "Your voice deserves to be heard.",
+                  "Small lessons create big confidence.",
+                  "Your future begins with today's practice.",
+                  "Curiosity is the first step to fluency.",
+                  "Every word learned is a door opened.",
+                  "Confidence grows one sentence at a time.",
+                  "Speaking bravely today shapes tomorrow.",
+                  "Growth happens in small daily steps.",
+                  "Your effort today is tomorrow's fluency.",
+                  "Every mistake is a lesson in disguise.",
+                  "Practice today, speak freely tomorrow.",
+                  "New words open new worlds.",
+                  "Consistency turns effort into mastery.",
+                ];
+                const today = new Date();
+                const start = new Date(today.getFullYear(),0,0);
+                const diff = today - start;
+                const dayOfYear = Math.floor(diff/86400000);
+                const todaysQuote = DAILY_QUOTES[(dayOfYear-1) % DAILY_QUOTES.length];
+                return (
+                <div style={{marginTop:8}}>
+                  <p style={{fontSize:10,color:"rgba(255,255,255,.55)",fontWeight:600,margin:"0 0 2px",textTransform:"uppercase",letterSpacing:".4px"}}>✨ Today's Inspiration</p>
+                  <p style={{fontSize:11,color:"rgba(255,255,255,.75)",margin:0,lineHeight:1.4}}>{todaysQuote}</p>
+                </div>
+                );
+              })()}
             </div>
 
             {/* Right: Illustration column — fixed bottom-anchor, progress ring, badges, milestone glow */}
